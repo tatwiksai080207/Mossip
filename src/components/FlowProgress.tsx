@@ -46,7 +46,7 @@ export default function FlowProgress() {
                 step.status === 'done' && step.payload ? 'cursor-pointer hover:bg-slate-800/30' : ''
               } ${step.status === 'running' ? 'bg-slate-800/20' : ''}`}
             >
-              <span className={`font-mono text-base ${statusColor(step.status)}`}>
+              <span className={`font-mono text-base ${statusColor(step.status)} ${step.status === 'running' ? 'step-running' : ''}`}>
                 {statusIcon(step.status)}
               </span>
               <span className={
