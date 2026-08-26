@@ -1,6 +1,33 @@
 import { useState } from 'react'
 import { issuers, wallets, verifiers } from './config'
-import type { IssuerConfig, WalletConfig, VerifierConfig, CredentialType } from './types'
+import type { IssuerConfig, WalletConfig, VerifierConfig, CredentialType, FlowStepInfo, StepStatus } from './types'
+
+const FLOW_STEPS: { id: FlowStepInfo['id']; label: string }[] = [
+  { id: 'credential-offer', label: 'Credential Offer' },
+  { id: 'token-exchange', label: 'Token Exchange' },
+  { id: 'credential-issuance', label: 'Credential Issuance' },
+  { id: 'vp-request', label: 'VP Authorization Request' },
+  { id: 'vp-response', label: 'VP Token Response' },
+  { id: 'verification', label: 'Verification Result' },
+]
+
+function stepStatusLabel(status: StepStatus) {
+  switch (status) {
+    case 'pending': return '○'
+    case 'running': return '◌'
+    case 'done': return '✓'
+    case 'error': return '✗'
+  }
+}
+
+function stepStatusColor(status: StepStatus) {
+  switch (status) {
+    case 'pending': return 'text-slate-600'
+    case 'running': return 'text-blue-400'
+    case 'done': return 'text-green-400'
+    case 'error': return 'text-red-400'
+  }
+}
 
 function App() {
   const [selectedIssuer, setSelectedIssuer] = useState<IssuerConfig | null>(null)
@@ -8,12 +35,45 @@ function App() {
   const [selectedVerifier, setSelectedVerifier] = useState<VerifierConfig | null>(null)
   const [selectedCredType, setSelectedCredType] = useState<CredentialType | null>(null)
 
-  const canRun = selectedIssuer && selectedWallet && selectedVerifier && selectedCredType
+  const [steps, setSteps] = useState<FlowStepInfo[]>([])
+  const [isRunning, setIsRunning] = useState(false)
+
+  const canRun = selectedIssuer && selectedWallet && selectedVerifier && selectedCredType && !isRunning
 
   function handleIssuerSelect(issuer: IssuerConfig) {
     setSelectedIssuer(issuer)
-    // auto-select first credential type
     setSelectedCredType(issuer.credentialTypes[0] || null)
+  }
+
+  async function runFlow() {
+    if (!selectedIssuer || !selectedWallet || !selectedVerifier || !selectedCredType) return
+
+    setIsRunning(true)
+
+    // initialize all steps as pending
+    const initial: FlowStepInfo[] = FLOW_STEPS.map(s => ({
+      ...s,
+      status: 'pending' as StepStatus,
+    }))
+    setSteps(initial)
+
+    // walk through each step with a delay
+    for (let i = 0; i < FLOW_STEPS.length; i++) {
+      // mark current step as running
+      setSteps(prev => prev.map((s, idx) =>
+        idx === i ? { ...s, status: 'running' } : s
+      ))
+
+      // simulate work
+      await new Promise(r => setTimeout(r, 800 + Math.random() * 400))
+
+      // mark as done
+      setSteps(prev => prev.map((s, idx) =>
+        idx === i ? { ...s, status: 'done' } : s
+      ))
+    }
+
+    setIsRunning(false)
   }
 
   return (
@@ -67,7 +127,6 @@ function App() {
               ))}
             </div>
 
-            {/* Credential format sub-selector */}
             {selectedIssuer && selectedIssuer.credentialTypes.length > 1 && (
               <div className="mt-3 pt-3 border-t border-slate-800">
                 <p className="text-xs text-slate-500 mb-2">Credential Format</p>
@@ -134,7 +193,7 @@ function App() {
         </div>
 
         {/* Summary + run button */}
-        <div className="flex items-center justify-between border border-slate-800 rounded-lg px-4 py-3">
+        <div className="flex items-center justify-between border border-slate-800 rounded-lg px-4 py-3 mb-8">
           <div className="text-sm text-slate-400">
             {selectedIssuer?.name || '—'} → {selectedWallet?.name || '—'} → {selectedVerifier?.name || '—'}
             {selectedCredType && (
@@ -143,15 +202,54 @@ function App() {
           </div>
           <button
             disabled={!canRun}
+            onClick={runFlow}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               canRun
                 ? 'bg-blue-600 text-white hover:bg-blue-500'
                 : 'bg-slate-800 text-slate-500 cursor-not-allowed'
             }`}
           >
-            Run Test
+            {isRunning ? 'Running...' : 'Run Test'}
           </button>
         </div>
+
+        {/* Flow steps */}
+        {steps.length > 0 && (
+          <div className="border border-slate-800 rounded-lg p-4">
+            <h3 className="text-sm font-medium text-slate-300 mb-4">Flow Progress</h3>
+            <div className="space-y-2">
+              {steps.map((step) => (
+                <div
+                  key={step.id}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm ${
+                    step.status === 'running' ? 'bg-slate-800/50' : ''
+                  }`}
+                >
+                  <span className={`font-mono text-base ${stepStatusColor(step.status)}`}>
+                    {stepStatusLabel(step.status)}
+                  </span>
+                  <span className={
+                    step.status === 'done' ? 'text-slate-300' :
+                    step.status === 'running' ? 'text-white' :
+                    'text-slate-500'
+                  }>
+                    {step.label}
+                  </span>
+                  {step.status === 'running' && (
+                    <span className="text-xs text-blue-400 ml-auto">in progress</span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Done message */}
+            {!isRunning && steps.length > 0 && steps.every(s => s.status === 'done') && (
+              <div className="mt-4 pt-3 border-t border-slate-800 text-sm text-green-400">
+                All steps completed successfully
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   )
