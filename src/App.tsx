@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Header from './components/Header'
 import RoleSelector from './components/RoleSelector'
 import FlowProgress from './components/FlowProgress'
+import TestReport from './components/TestReport'
 import * as mock from './mock-payloads'
 import type { IssuerConfig, WalletConfig, VerifierConfig, CredentialType, FlowStepInfo, StepStatus } from './types'
 
@@ -111,6 +112,19 @@ function App() {
         </div>
 
         <FlowProgress steps={steps} isRunning={isRunning} />
+
+        {!isRunning && steps.length > 0 && steps.every(s => s.status === 'done') &&
+          selectedIssuer && selectedWallet && selectedVerifier && selectedCredType && (
+          <div className="mt-6">
+            <TestReport
+              issuer={selectedIssuer}
+              wallet={selectedWallet}
+              verifier={selectedVerifier}
+              credentialType={selectedCredType}
+              steps={steps}
+            />
+          </div>
+        )}
       </main>
     </div>
   )
