@@ -53,3 +53,12 @@ export interface FlowStepInfo {
   status: StepStatus
   payload?: unknown
 }
+
+// A completed test run saved to history
+export interface TestRun {
+  id: string
+  config: TestRunConfig
+  steps: FlowStepInfo[]
+  result: 'pass' | 'fail'
+  timestamp: number
+}

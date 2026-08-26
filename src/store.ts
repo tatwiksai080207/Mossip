@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import * as mock from './mock-payloads'
-import type { IssuerConfig, WalletConfig, VerifierConfig, CredentialType, FlowStepInfo, StepStatus } from './types'
+import type { IssuerConfig, WalletConfig, VerifierConfig, CredentialType, FlowStepInfo, StepStatus, TestRun } from './types'
 
 const FLOW_STEPS: { id: FlowStepInfo['id']; label: string }[] = [
   { id: 'credential-offer', label: 'Credential Offer' },
@@ -22,12 +22,16 @@ interface PlaygroundStore {
   steps: FlowStepInfo[]
   isRunning: boolean
 
+  // history
+  history: TestRun[]
+
   // actions
   selectIssuer: (issuer: IssuerConfig) => void
   selectWallet: (wallet: WalletConfig) => void
   selectVerifier: (verifier: VerifierConfig) => void
   selectCredType: (ct: CredentialType) => void
   runFlow: () => Promise<void>
+  clearHistory: () => void
 }
 
 export const useStore = create<PlaygroundStore>((set, get) => ({
@@ -37,6 +41,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
   selectedCredType: null,
   steps: [],
   isRunning: false,
+  history: [],
 
   selectIssuer: (issuer) => {
     set({
@@ -48,10 +53,11 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
   selectWallet: (wallet) => set({ selectedWallet: wallet }),
   selectVerifier: (verifier) => set({ selectedVerifier: verifier }),
   selectCredType: (ct) => set({ selectedCredType: ct }),
+  clearHistory: () => set({ history: [] }),
 
   runFlow: async () => {
-    const { selectedIssuer, selectedCredType } = get()
-    if (!selectedIssuer || !selectedCredType) return
+    const { selectedIssuer, selectedWallet, selectedVerifier, selectedCredType } = get()
+    if (!selectedIssuer || !selectedWallet || !selectedVerifier || !selectedCredType) return
 
     set({ isRunning: true })
 
@@ -83,6 +89,22 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       )})
     }
 
-    set({ isRunning: false })
+    // save to history
+    const finalSteps = get().steps
+    const allPassed = finalSteps.every(s => s.status === 'done')
+    const run: TestRun = {
+      id: `run-${Date.now()}`,
+      config: {
+        issuer: selectedIssuer,
+        wallet: selectedWallet,
+        verifier: selectedVerifier,
+        credentialType: selectedCredType,
+      },
+      steps: finalSteps,
+      result: allPassed ? 'pass' : 'fail',
+      timestamp: Date.now(),
+    }
+
+    set({ isRunning: false, history: [run, ...get().history] })
   },
 }))

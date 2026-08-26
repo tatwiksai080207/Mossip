@@ -2,6 +2,7 @@ import Header from './components/Header'
 import RoleSelector from './components/RoleSelector'
 import FlowProgress from './components/FlowProgress'
 import TestReport from './components/TestReport'
+import RunHistory from './components/RunHistory'
 import { useStore } from './store'
 
 function App() {
@@ -63,6 +64,10 @@ function App() {
             />
           </div>
         )}
+
+        <div className="mt-6">
+          <RunHistory />
+        </div>
       </main>
     </div>
   )
