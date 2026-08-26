@@ -1,21 +1,12 @@
 import { issuers, wallets, verifiers } from '../config'
-import type { IssuerConfig, WalletConfig, VerifierConfig, CredentialType } from '../types'
+import { useStore } from '../store'
 
-interface Props {
-  selectedIssuer: IssuerConfig | null
-  selectedWallet: WalletConfig | null
-  selectedVerifier: VerifierConfig | null
-  selectedCredType: CredentialType | null
-  onIssuerSelect: (issuer: IssuerConfig) => void
-  onWalletSelect: (wallet: WalletConfig) => void
-  onVerifierSelect: (verifier: VerifierConfig) => void
-  onCredTypeSelect: (ct: CredentialType) => void
-}
+export default function RoleSelector() {
+  const {
+    selectedIssuer, selectedWallet, selectedVerifier, selectedCredType,
+    selectIssuer, selectWallet, selectVerifier, selectCredType,
+  } = useStore()
 
-export default function RoleSelector({
-  selectedIssuer, selectedWallet, selectedVerifier, selectedCredType,
-  onIssuerSelect, onWalletSelect, onVerifierSelect, onCredTypeSelect,
-}: Props) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {/* Issuer */}
@@ -25,7 +16,7 @@ export default function RoleSelector({
           {issuers.map((issuer) => (
             <button
               key={issuer.id}
-              onClick={() => onIssuerSelect(issuer)}
+              onClick={() => selectIssuer(issuer)}
               className={`w-full text-left px-3 py-2.5 rounded-md text-sm border transition-colors ${
                 selectedIssuer?.id === issuer.id
                   ? 'border-blue-500 bg-blue-500/10 text-white'
@@ -44,7 +35,7 @@ export default function RoleSelector({
               {selectedIssuer.credentialTypes.map((ct) => (
                 <button
                   key={ct.id}
-                  onClick={() => onCredTypeSelect(ct)}
+                  onClick={() => selectCredType(ct)}
                   className={`w-full text-left px-3 py-2 rounded-md text-xs border transition-colors ${
                     selectedCredType?.id === ct.id
                       ? 'border-blue-500 bg-blue-500/10 text-white'
@@ -66,7 +57,7 @@ export default function RoleSelector({
           {wallets.map((wallet) => (
             <button
               key={wallet.id}
-              onClick={() => onWalletSelect(wallet)}
+              onClick={() => selectWallet(wallet)}
               className={`w-full text-left px-3 py-2.5 rounded-md text-sm border transition-colors ${
                 selectedWallet?.id === wallet.id
                   ? 'border-blue-500 bg-blue-500/10 text-white'
@@ -87,7 +78,7 @@ export default function RoleSelector({
           {verifiers.map((verifier) => (
             <button
               key={verifier.id}
-              onClick={() => onVerifierSelect(verifier)}
+              onClick={() => selectVerifier(verifier)}
               className={`w-full text-left px-3 py-2.5 rounded-md text-sm border transition-colors ${
                 selectedVerifier?.id === verifier.id
                   ? 'border-blue-500 bg-blue-500/10 text-white'

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import type { FlowStepInfo, StepStatus } from '../types'
+import { useStore } from '../store'
+import type { StepStatus } from '../types'
 
 function statusIcon(status: StepStatus) {
   switch (status) {
@@ -19,12 +20,8 @@ function statusColor(status: StepStatus) {
   }
 }
 
-interface Props {
-  steps: FlowStepInfo[]
-  isRunning: boolean
-}
-
-export default function FlowProgress({ steps, isRunning }: Props) {
+export default function FlowProgress() {
+  const { steps, isRunning } = useStore()
   const [expandedStep, setExpandedStep] = useState<string | null>(null)
 
   if (steps.length === 0) return null

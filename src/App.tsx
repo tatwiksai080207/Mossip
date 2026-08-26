@@ -1,69 +1,17 @@
-import { useState } from 'react'
 import Header from './components/Header'
 import RoleSelector from './components/RoleSelector'
 import FlowProgress from './components/FlowProgress'
 import TestReport from './components/TestReport'
-import * as mock from './mock-payloads'
-import type { IssuerConfig, WalletConfig, VerifierConfig, CredentialType, FlowStepInfo, StepStatus } from './types'
-
-const FLOW_STEPS: { id: FlowStepInfo['id']; label: string }[] = [
-  { id: 'credential-offer', label: 'Credential Offer' },
-  { id: 'token-exchange', label: 'Token Exchange' },
-  { id: 'credential-issuance', label: 'Credential Issuance' },
-  { id: 'vp-request', label: 'VP Authorization Request' },
-  { id: 'vp-response', label: 'VP Token Response' },
-  { id: 'verification', label: 'Verification Result' },
-]
+import { useStore } from './store'
 
 function App() {
-  const [selectedIssuer, setSelectedIssuer] = useState<IssuerConfig | null>(null)
-  const [selectedWallet, setSelectedWallet] = useState<WalletConfig | null>(null)
-  const [selectedVerifier, setSelectedVerifier] = useState<VerifierConfig | null>(null)
-  const [selectedCredType, setSelectedCredType] = useState<CredentialType | null>(null)
-  const [steps, setSteps] = useState<FlowStepInfo[]>([])
-  const [isRunning, setIsRunning] = useState(false)
+  const {
+    selectedIssuer, selectedWallet, selectedVerifier, selectedCredType,
+    steps, isRunning, runFlow,
+  } = useStore()
 
   const canRun = selectedIssuer && selectedWallet && selectedVerifier && selectedCredType && !isRunning
-
-  function handleIssuerSelect(issuer: IssuerConfig) {
-    setSelectedIssuer(issuer)
-    setSelectedCredType(issuer.credentialTypes[0] || null)
-  }
-
-  function getPayload(stepId: string) {
-    if (!selectedCredType || !selectedIssuer) return null
-    switch (stepId) {
-      case 'credential-offer': return mock.credentialOffer(selectedIssuer, selectedCredType)
-      case 'token-exchange': return mock.tokenResponse()
-      case 'credential-issuance': return mock.issuedCredential(selectedCredType)
-      case 'vp-request': return mock.vpAuthorizationRequest(selectedCredType)
-      case 'vp-response': return mock.vpTokenResponse(selectedCredType)
-      case 'verification': return mock.verificationResult()
-      default: return null
-    }
-  }
-
-  async function runFlow() {
-    if (!canRun) return
-    setIsRunning(true)
-
-    const initial: FlowStepInfo[] = FLOW_STEPS.map(s => ({
-      ...s, status: 'pending' as StepStatus,
-    }))
-    setSteps(initial)
-
-    for (let i = 0; i < FLOW_STEPS.length; i++) {
-      setSteps(prev => prev.map((s, idx) =>
-        idx === i ? { ...s, status: 'running' } : s
-      ))
-      await new Promise(r => setTimeout(r, 800 + Math.random() * 400))
-      setSteps(prev => prev.map((s, idx) =>
-        idx === i ? { ...s, status: 'done', payload: getPayload(FLOW_STEPS[i].id) } : s
-      ))
-    }
-
-    setIsRunning(false)
-  }
+  const flowDone = !isRunning && steps.length > 0 && steps.every(s => s.status === 'done')
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -78,16 +26,7 @@ function App() {
         </div>
 
         <div className="mb-8">
-          <RoleSelector
-            selectedIssuer={selectedIssuer}
-            selectedWallet={selectedWallet}
-            selectedVerifier={selectedVerifier}
-            selectedCredType={selectedCredType}
-            onIssuerSelect={handleIssuerSelect}
-            onWalletSelect={setSelectedWallet}
-            onVerifierSelect={setSelectedVerifier}
-            onCredTypeSelect={setSelectedCredType}
-          />
+          <RoleSelector />
         </div>
 
         {/* Summary + run */}
@@ -111,10 +50,9 @@ function App() {
           </button>
         </div>
 
-        <FlowProgress steps={steps} isRunning={isRunning} />
+        <FlowProgress />
 
-        {!isRunning && steps.length > 0 && steps.every(s => s.status === 'done') &&
-          selectedIssuer && selectedWallet && selectedVerifier && selectedCredType && (
+        {flowDone && selectedIssuer && selectedWallet && selectedVerifier && selectedCredType && (
           <div className="mt-6">
             <TestReport
               issuer={selectedIssuer}
