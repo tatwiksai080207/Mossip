@@ -3,6 +3,7 @@ import RoleSelector from './components/RoleSelector'
 import FlowProgress from './components/FlowProgress'
 import TestReport from './components/TestReport'
 import RunHistory from './components/RunHistory'
+import SequenceDiagram from './components/SequenceDiagram'
 import { useStore } from './store'
 
 function App() {
@@ -51,7 +52,14 @@ function App() {
           </button>
         </div>
 
-        <FlowProgress />
+        {steps.length > 0 ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <FlowProgress />
+            <SequenceDiagram />
+          </div>
+        ) : (
+          <FlowProgress />
+        )}
 
         {flowDone && selectedIssuer && selectedWallet && selectedVerifier && selectedCredType && (
           <div className="mt-6">
