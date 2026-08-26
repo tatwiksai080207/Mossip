@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { issuers, wallets, verifiers } from './config'
+import Header from './components/Header'
+import RoleSelector from './components/RoleSelector'
+import FlowProgress from './components/FlowProgress'
 import * as mock from './mock-payloads'
 import type { IssuerConfig, WalletConfig, VerifierConfig, CredentialType, FlowStepInfo, StepStatus } from './types'
 
@@ -12,33 +14,13 @@ const FLOW_STEPS: { id: FlowStepInfo['id']; label: string }[] = [
   { id: 'verification', label: 'Verification Result' },
 ]
 
-function statusIcon(status: StepStatus) {
-  switch (status) {
-    case 'pending': return '○'
-    case 'running': return '◌'
-    case 'done': return '✓'
-    case 'error': return '✗'
-  }
-}
-
-function statusColor(status: StepStatus) {
-  switch (status) {
-    case 'pending': return 'text-slate-600'
-    case 'running': return 'text-blue-400'
-    case 'done': return 'text-green-400'
-    case 'error': return 'text-red-400'
-  }
-}
-
 function App() {
   const [selectedIssuer, setSelectedIssuer] = useState<IssuerConfig | null>(null)
   const [selectedWallet, setSelectedWallet] = useState<WalletConfig | null>(null)
   const [selectedVerifier, setSelectedVerifier] = useState<VerifierConfig | null>(null)
   const [selectedCredType, setSelectedCredType] = useState<CredentialType | null>(null)
-
   const [steps, setSteps] = useState<FlowStepInfo[]>([])
   const [isRunning, setIsRunning] = useState(false)
-  const [expandedStep, setExpandedStep] = useState<string | null>(null)
 
   const canRun = selectedIssuer && selectedWallet && selectedVerifier && selectedCredType && !isRunning
 
@@ -47,34 +29,25 @@ function App() {
     setSelectedCredType(issuer.credentialTypes[0] || null)
   }
 
-  function getPayloadForStep(stepId: string, credType: CredentialType, issuer: IssuerConfig) {
+  function getPayload(stepId: string) {
+    if (!selectedCredType || !selectedIssuer) return null
     switch (stepId) {
-      case 'credential-offer':
-        return mock.credentialOffer(issuer, credType)
-      case 'token-exchange':
-        return mock.tokenResponse()
-      case 'credential-issuance':
-        return mock.issuedCredential(credType)
-      case 'vp-request':
-        return mock.vpAuthorizationRequest(credType)
-      case 'vp-response':
-        return mock.vpTokenResponse(credType)
-      case 'verification':
-        return mock.verificationResult()
-      default:
-        return null
+      case 'credential-offer': return mock.credentialOffer(selectedIssuer, selectedCredType)
+      case 'token-exchange': return mock.tokenResponse()
+      case 'credential-issuance': return mock.issuedCredential(selectedCredType)
+      case 'vp-request': return mock.vpAuthorizationRequest(selectedCredType)
+      case 'vp-response': return mock.vpTokenResponse(selectedCredType)
+      case 'verification': return mock.verificationResult()
+      default: return null
     }
   }
 
   async function runFlow() {
-    if (!selectedIssuer || !selectedWallet || !selectedVerifier || !selectedCredType) return
-
+    if (!canRun) return
     setIsRunning(true)
-    setExpandedStep(null)
 
     const initial: FlowStepInfo[] = FLOW_STEPS.map(s => ({
-      ...s,
-      status: 'pending' as StepStatus,
+      ...s, status: 'pending' as StepStatus,
     }))
     setSteps(initial)
 
@@ -82,13 +55,9 @@ function App() {
       setSteps(prev => prev.map((s, idx) =>
         idx === i ? { ...s, status: 'running' } : s
       ))
-
       await new Promise(r => setTimeout(r, 800 + Math.random() * 400))
-
-      const payload = getPayloadForStep(FLOW_STEPS[i].id, selectedCredType, selectedIssuer)
-
       setSteps(prev => prev.map((s, idx) =>
-        idx === i ? { ...s, status: 'done', payload } : s
+        idx === i ? { ...s, status: 'done', payload: getPayload(FLOW_STEPS[i].id) } : s
       ))
     }
 
@@ -97,22 +66,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      <header className="border-b border-slate-800 px-6 py-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold">Inji Interoperability Playground</h1>
-            <p className="text-sm text-slate-400">Verifiable Credential Lifecycle Testing</p>
-          </div>
-          <a
-            href="https://docs.inji.io/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-slate-400 hover:text-slate-200"
-          >
-            Docs ↗
-          </a>
-        </div>
-      </header>
+      <Header />
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         <div className="mb-6">
@@ -122,90 +76,17 @@ function App() {
           </p>
         </div>
 
-        {/* 3 column selector */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          {/* Issuer */}
-          <div className="border border-slate-800 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-slate-300 mb-3">Issuer</h3>
-            <div className="space-y-2">
-              {issuers.map((issuer) => (
-                <button
-                  key={issuer.id}
-                  onClick={() => handleIssuerSelect(issuer)}
-                  className={`w-full text-left px-3 py-2.5 rounded-md text-sm border transition-colors ${
-                    selectedIssuer?.id === issuer.id
-                      ? 'border-blue-500 bg-blue-500/10 text-white'
-                      : 'border-slate-700 hover:border-slate-600 text-slate-300'
-                  }`}
-                >
-                  <div className="font-medium">{issuer.name}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{issuer.description}</div>
-                </button>
-              ))}
-            </div>
-            {selectedIssuer && selectedIssuer.credentialTypes.length > 1 && (
-              <div className="mt-3 pt-3 border-t border-slate-800">
-                <p className="text-xs text-slate-500 mb-2">Credential Format</p>
-                <div className="space-y-1.5">
-                  {selectedIssuer.credentialTypes.map((ct) => (
-                    <button
-                      key={ct.id}
-                      onClick={() => setSelectedCredType(ct)}
-                      className={`w-full text-left px-3 py-2 rounded-md text-xs border transition-colors ${
-                        selectedCredType?.id === ct.id
-                          ? 'border-blue-500 bg-blue-500/10 text-white'
-                          : 'border-slate-700 hover:border-slate-600 text-slate-400'
-                      }`}
-                    >
-                      {ct.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Wallet */}
-          <div className="border border-slate-800 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-slate-300 mb-3">Wallet</h3>
-            <div className="space-y-2">
-              {wallets.map((wallet) => (
-                <button
-                  key={wallet.id}
-                  onClick={() => setSelectedWallet(wallet)}
-                  className={`w-full text-left px-3 py-2.5 rounded-md text-sm border transition-colors ${
-                    selectedWallet?.id === wallet.id
-                      ? 'border-blue-500 bg-blue-500/10 text-white'
-                      : 'border-slate-700 hover:border-slate-600 text-slate-300'
-                  }`}
-                >
-                  <div className="font-medium">{wallet.name}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{wallet.description}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Verifier */}
-          <div className="border border-slate-800 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-slate-300 mb-3">Verifier</h3>
-            <div className="space-y-2">
-              {verifiers.map((verifier) => (
-                <button
-                  key={verifier.id}
-                  onClick={() => setSelectedVerifier(verifier)}
-                  className={`w-full text-left px-3 py-2.5 rounded-md text-sm border transition-colors ${
-                    selectedVerifier?.id === verifier.id
-                      ? 'border-blue-500 bg-blue-500/10 text-white'
-                      : 'border-slate-700 hover:border-slate-600 text-slate-300'
-                  }`}
-                >
-                  <div className="font-medium">{verifier.name}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{verifier.description}</div>
-                </button>
-              ))}
-            </div>
-          </div>
+        <div className="mb-8">
+          <RoleSelector
+            selectedIssuer={selectedIssuer}
+            selectedWallet={selectedWallet}
+            selectedVerifier={selectedVerifier}
+            selectedCredType={selectedCredType}
+            onIssuerSelect={handleIssuerSelect}
+            onWalletSelect={setSelectedWallet}
+            onVerifierSelect={setSelectedVerifier}
+            onCredTypeSelect={setSelectedCredType}
+          />
         </div>
 
         {/* Summary + run */}
@@ -229,66 +110,7 @@ function App() {
           </button>
         </div>
 
-        {/* Flow steps with payload inspection */}
-        {steps.length > 0 && (
-          <div className="border border-slate-800 rounded-lg">
-            <div className="px-4 py-3 border-b border-slate-800">
-              <h3 className="text-sm font-medium text-slate-300">Flow Progress</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Click a completed step to inspect its payload</p>
-            </div>
-
-            <div className="divide-y divide-slate-800/50">
-              {steps.map((step) => (
-                <div key={step.id}>
-                  <button
-                    onClick={() => {
-                      if (step.status === 'done' && step.payload) {
-                        setExpandedStep(expandedStep === step.id ? null : step.id)
-                      }
-                    }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-left ${
-                      step.status === 'done' && step.payload ? 'cursor-pointer hover:bg-slate-800/30' : ''
-                    } ${step.status === 'running' ? 'bg-slate-800/20' : ''}`}
-                  >
-                    <span className={`font-mono text-base ${statusColor(step.status)}`}>
-                      {statusIcon(step.status)}
-                    </span>
-                    <span className={
-                      step.status === 'done' ? 'text-slate-300' :
-                      step.status === 'running' ? 'text-white' :
-                      'text-slate-500'
-                    }>
-                      {step.label}
-                    </span>
-                    {step.status === 'running' && (
-                      <span className="text-xs text-blue-400 ml-auto">in progress</span>
-                    )}
-                    {step.status === 'done' && step.payload && (
-                      <span className="text-xs text-slate-600 ml-auto">
-                        {expandedStep === step.id ? '▾' : '▸'} payload
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Payload viewer */}
-                  {expandedStep === step.id && step.payload && (
-                    <div className="px-4 pb-3">
-                      <pre className="bg-slate-900 border border-slate-800 rounded-md p-3 text-xs text-slate-400 overflow-x-auto font-mono leading-relaxed">
-                        {JSON.stringify(step.payload, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {!isRunning && steps.every(s => s.status === 'done') && (
-              <div className="px-4 py-3 border-t border-slate-800 text-sm text-green-400">
-                All steps completed successfully
-              </div>
-            )}
-          </div>
-        )}
+        <FlowProgress steps={steps} isRunning={isRunning} />
       </main>
     </div>
   )

@@ -1,0 +1,90 @@
+import { useState } from 'react'
+import type { FlowStepInfo, StepStatus } from '../types'
+
+function statusIcon(status: StepStatus) {
+  switch (status) {
+    case 'pending': return '○'
+    case 'running': return '◌'
+    case 'done': return '✓'
+    case 'error': return '✗'
+  }
+}
+
+function statusColor(status: StepStatus) {
+  switch (status) {
+    case 'pending': return 'text-slate-600'
+    case 'running': return 'text-blue-400'
+    case 'done': return 'text-green-400'
+    case 'error': return 'text-red-400'
+  }
+}
+
+interface Props {
+  steps: FlowStepInfo[]
+  isRunning: boolean
+}
+
+export default function FlowProgress({ steps, isRunning }: Props) {
+  const [expandedStep, setExpandedStep] = useState<string | null>(null)
+
+  if (steps.length === 0) return null
+
+  return (
+    <div className="border border-slate-800 rounded-lg">
+      <div className="px-4 py-3 border-b border-slate-800">
+        <h3 className="text-sm font-medium text-slate-300">Flow Progress</h3>
+        <p className="text-xs text-slate-500 mt-0.5">Click a completed step to inspect its payload</p>
+      </div>
+
+      <div className="divide-y divide-slate-800/50">
+        {steps.map((step) => (
+          <div key={step.id}>
+            <button
+              onClick={() => {
+                if (step.status === 'done' && step.payload) {
+                  setExpandedStep(expandedStep === step.id ? null : step.id)
+                }
+              }}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-left ${
+                step.status === 'done' && step.payload ? 'cursor-pointer hover:bg-slate-800/30' : ''
+              } ${step.status === 'running' ? 'bg-slate-800/20' : ''}`}
+            >
+              <span className={`font-mono text-base ${statusColor(step.status)}`}>
+                {statusIcon(step.status)}
+              </span>
+              <span className={
+                step.status === 'done' ? 'text-slate-300' :
+                step.status === 'running' ? 'text-white' :
+                'text-slate-500'
+              }>
+                {step.label}
+              </span>
+              {step.status === 'running' && (
+                <span className="text-xs text-blue-400 ml-auto">in progress</span>
+              )}
+              {step.status === 'done' && step.payload && (
+                <span className="text-xs text-slate-600 ml-auto">
+                  {expandedStep === step.id ? '▾' : '▸'} payload
+                </span>
+              )}
+            </button>
+
+            {expandedStep === step.id && step.payload && (
+              <div className="px-4 pb-3">
+                <pre className="bg-slate-900 border border-slate-800 rounded-md p-3 text-xs text-slate-400 overflow-x-auto font-mono leading-relaxed">
+                  {JSON.stringify(step.payload, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {!isRunning && steps.every(s => s.status === 'done') && (
+        <div className="px-4 py-3 border-t border-slate-800 text-sm text-green-400">
+          All steps completed successfully
+        </div>
+      )}
+    </div>
+  )
+}
