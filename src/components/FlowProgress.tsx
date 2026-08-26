@@ -59,10 +59,26 @@ export default function FlowProgress() {
               {step.status === 'running' && (
                 <span className="text-xs text-blue-400 ml-auto">in progress</span>
               )}
-              {step.status === 'done' && step.payload && (
-                <span className="text-xs text-slate-600 ml-auto">
-                  {expandedStep === step.id ? '▾' : '▸'} payload
+              {step.status === 'done' && (
+                <span className="flex items-center gap-2 ml-auto">
+                  {step.source && (
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                      step.source === 'live'
+                        ? 'bg-green-500/10 text-green-400'
+                        : 'bg-slate-700/50 text-slate-500'
+                    }`}>
+                      {step.source}
+                    </span>
+                  )}
+                  {step.payload && (
+                    <span className="text-xs text-slate-600">
+                      {expandedStep === step.id ? '▾' : '▸'}
+                    </span>
+                  )}
                 </span>
+              )}
+              {step.status === 'error' && (
+                <span className="text-xs text-red-400 ml-auto">failed</span>
               )}
             </button>
 

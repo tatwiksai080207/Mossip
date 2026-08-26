@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import * as mock from './mock-payloads'
+import * as api from './api'
 import type { IssuerConfig, WalletConfig, VerifierConfig, CredentialType, FlowStepInfo, StepStatus, TestRun } from './types'
 
 const FLOW_STEPS: { id: FlowStepInfo['id']; label: string }[] = [
@@ -12,20 +12,14 @@ const FLOW_STEPS: { id: FlowStepInfo['id']; label: string }[] = [
 ]
 
 interface PlaygroundStore {
-  // selections
   selectedIssuer: IssuerConfig | null
   selectedWallet: WalletConfig | null
   selectedVerifier: VerifierConfig | null
   selectedCredType: CredentialType | null
-
-  // flow state
   steps: FlowStepInfo[]
   isRunning: boolean
-
-  // history
   history: TestRun[]
 
-  // actions
   selectIssuer: (issuer: IssuerConfig) => void
   selectWallet: (wallet: WalletConfig) => void
   selectVerifier: (verifier: VerifierConfig) => void
@@ -66,27 +60,35 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
     }))
     set({ steps: initial })
 
+    // map step IDs to API calls
+    const stepActions: Record<string, () => Promise<{ payload: unknown; source: 'live' | 'mock' }>> = {
+      'credential-offer': () => api.createCredentialOffer(selectedIssuer, selectedCredType),
+      'token-exchange': () => api.exchangeToken(),
+      'credential-issuance': () => api.requestCredential(selectedCredType),
+      'vp-request': () => api.createVPRequest(selectedCredType),
+      'vp-response': () => api.submitVPResponse(selectedCredType),
+      'verification': () => api.verifyPresentation(),
+    }
+
     for (let i = 0; i < FLOW_STEPS.length; i++) {
+      const stepId = FLOW_STEPS[i].id
+
+      // mark as running
       set({ steps: get().steps.map((s, idx) =>
         idx === i ? { ...s, status: 'running' } : s
       )})
 
-      await new Promise(r => setTimeout(r, 800 + Math.random() * 400))
-
-      const stepId = FLOW_STEPS[i].id
-      let payload: unknown = null
-      switch (stepId) {
-        case 'credential-offer': payload = mock.credentialOffer(selectedIssuer, selectedCredType); break
-        case 'token-exchange': payload = mock.tokenResponse(); break
-        case 'credential-issuance': payload = mock.issuedCredential(selectedCredType); break
-        case 'vp-request': payload = mock.vpAuthorizationRequest(selectedCredType); break
-        case 'vp-response': payload = mock.vpTokenResponse(selectedCredType); break
-        case 'verification': payload = mock.verificationResult(); break
+      try {
+        const result = await stepActions[stepId]()
+        set({ steps: get().steps.map((s, idx) =>
+          idx === i ? { ...s, status: 'done', payload: result.payload, source: result.source } : s
+        )})
+      } catch (err) {
+        set({ steps: get().steps.map((s, idx) =>
+          idx === i ? { ...s, status: 'error', payload: { error: String(err) }, source: 'mock' } : s
+        )})
+        break // stop on error
       }
-
-      set({ steps: get().steps.map((s, idx) =>
-        idx === i ? { ...s, status: 'done', payload } : s
-      )})
     }
 
     // save to history

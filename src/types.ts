@@ -52,6 +52,7 @@ export interface FlowStepInfo {
   label: string
   status: StepStatus
   payload?: unknown
+  source?: 'live' | 'mock'
 }
 
 // A completed test run saved to history
