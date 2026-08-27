@@ -3,6 +3,7 @@ import type { StepStatus } from '../types'
 
 // Each step maps to a message between two participants
 const STEP_MESSAGES: { id: string; from: number; to: number; label: string }[] = [
+  { id: 'issuer-metadata', from: 1, to: 0, label: 'Fetch .well-known Metadata' },
   { id: 'credential-offer', from: 0, to: 1, label: 'Credential Offer' },
   { id: 'token-exchange', from: 1, to: 0, label: 'Token Request → Response' },
   { id: 'credential-issuance', from: 0, to: 1, label: 'Issue Credential' },
@@ -112,8 +113,8 @@ export default function SequenceDiagram() {
       {/* Legend */}
       {!isRunning && steps.some(s => s.status === 'done') && (
         <div className="mt-3 pt-3 border-t border-slate-800 flex gap-4 text-[10px] text-slate-500">
-          <span>OpenID4VCI: steps 1–3</span>
-          <span>OpenID4VP: steps 4–6</span>
+          <span>OpenID4VCI: steps 1–4</span>
+          <span>OpenID4VP: steps 5–7</span>
         </div>
       )}
     </div>

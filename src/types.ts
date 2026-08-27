@@ -38,6 +38,7 @@ export interface TestRunConfig {
 
 // Steps in the flow
 export type FlowStep =
+  | 'issuer-metadata'
   | 'credential-offer'
   | 'token-exchange'
   | 'credential-issuance'

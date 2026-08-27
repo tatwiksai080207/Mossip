@@ -3,6 +3,7 @@ import * as api from './api'
 import type { IssuerConfig, WalletConfig, VerifierConfig, CredentialType, FlowStepInfo, StepStatus, TestRun } from './types'
 
 const FLOW_STEPS: { id: FlowStepInfo['id']; label: string }[] = [
+  { id: 'issuer-metadata', label: 'Issuer Metadata Discovery' },
   { id: 'credential-offer', label: 'Credential Offer' },
   { id: 'token-exchange', label: 'Token Exchange' },
   { id: 'credential-issuance', label: 'Credential Issuance' },
@@ -62,6 +63,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
 
     // map step IDs to API calls
     const stepActions: Record<string, () => Promise<{ payload: unknown; source: 'live' | 'mock' }>> = {
+      'issuer-metadata': () => api.fetchIssuerMetadata(selectedIssuer),
       'credential-offer': () => api.createCredentialOffer(selectedIssuer, selectedCredType),
       'token-exchange': () => api.exchangeToken(),
       'credential-issuance': () => api.requestCredential(selectedCredType),

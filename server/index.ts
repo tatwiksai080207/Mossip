@@ -8,6 +8,7 @@ const PORT = 3001
 const ENDPOINTS = {
   issuer: 'https://injicertify-mock.collab.mosip.net',
   esignet: 'https://esignet.collab.mosip.net',
+  esignetMock: 'https://esignet-mock.collab.mosip.net',
   verifier: 'https://api.collab.mosip.net',
 }
 
