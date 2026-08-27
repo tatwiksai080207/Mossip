@@ -4,6 +4,8 @@ import FlowProgress from './components/FlowProgress'
 import TestReport from './components/TestReport'
 import RunHistory from './components/RunHistory'
 import SequenceDiagram from './components/SequenceDiagram'
+import InjiVerifyPanel from './components/InjiVerifyPanel'
+import InteropMatrix from './components/InteropMatrix'
 import { useStore } from './store'
 
 function App() {
@@ -61,6 +63,13 @@ function App() {
           <FlowProgress />
         )}
 
+        {/* Inji Verify SDK - OpenID4VP QR verification */}
+        {flowDone && (
+          <div className="mt-6">
+            <InjiVerifyPanel />
+          </div>
+        )}
+
         {flowDone && selectedIssuer && selectedWallet && selectedVerifier && selectedCredType && (
           <div className="mt-6">
             <TestReport
@@ -75,6 +84,10 @@ function App() {
 
         <div className="mt-6">
           <RunHistory />
+        </div>
+
+        <div className="mt-6">
+          <InteropMatrix />
         </div>
       </main>
     </div>
