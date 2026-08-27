@@ -6,9 +6,9 @@ const FORMAT_LABELS: Record<string, string> = {
 }
 
 export default function InteropMatrix() {
-  const { runs } = useStore()
+  const { history: runs } = useStore()
 
-  if (runs.length === 0) return null
+  if (!runs || runs.length === 0) return null
 
   // Build matrix: unique combos of issuer × wallet × verifier × format → results
   const matrix: Record<string, { pass: number; fail: number; total: number; runs: typeof runs }> = {}

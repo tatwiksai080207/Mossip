@@ -1,13 +1,6 @@
 import { useState, useCallback } from 'react'
 
-// Dynamically import to avoid SSR issues
-let OpenID4VPVerification: React.FC<any> | null = null
-try {
-  const sdk = require('@mosip/react-inji-verify-sdk')
-  OpenID4VPVerification = sdk.OpenID4VPVerification
-} catch {
-  // SDK not available
-}
+import { OpenID4VPVerification } from '@mosip/react-inji-verify-sdk'
 
 interface VerifyResult {
   vc: Record<string, unknown>
@@ -38,19 +31,6 @@ export default function InjiVerifyPanel({ onResult }: Props) {
     setStatus('idle')
   }, [])
 
-  if (!OpenID4VPVerification) {
-    return (
-      <div className="border border-slate-800 rounded-lg p-4">
-        <h3 className="text-sm font-medium text-slate-300 mb-2">Inji Verify SDK</h3>
-        <p className="text-xs text-slate-500">
-          @mosip/react-inji-verify-sdk is not available. Install it with:
-        </p>
-        <code className="text-xs text-blue-400 block mt-1">
-          npm install @mosip/react-inji-verify-sdk
-        </code>
-      </div>
-    )
-  }
 
   return (
     <div className="border border-slate-800 rounded-lg p-4">
