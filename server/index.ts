@@ -110,6 +110,102 @@ app.all('/api/verifier/*splat', async (req, res) => {
   }
 })
 
+import * as jose from 'jose'
+
+// ── Orchestrated issuance flow ──────────────────────────────────
+// This endpoint performs the full OpenID4VCI credential issuance
+// server-side: generate keypair → get nonce → build JWT proof → request credential
+app.post('/api/flow/issue', async (req, res) => {
+  const { credentialType = 'MockVerifiableCredential', format = 'ldp_vc' } = req.body || {}
+  const steps: { step: string; status: string; data: unknown }[] = []
+
+  try {
+    // Step 1: Generate an Ed25519 keypair for the holder
+    console.log('[flow] Generating holder keypair...')
+    const { publicKey, privateKey } = await jose.generateKeyPair('EdDSA')
+    const publicJwk = await jose.exportJWK(publicKey)
+    const holderDid = `did:jwk:${Buffer.from(JSON.stringify(publicJwk)).toString('base64url')}`
+    steps.push({ step: 'keypair', status: 'ok', data: { holderDid, algorithm: 'EdDSA' } })
+
+    // Step 2: Fetch issuer metadata
+    console.log('[flow] Fetching issuer metadata...')
+    const metadataRes = await fetch(`${ENDPOINTS.issuer}/.well-known/openid-credential-issuer`)
+    const metadata = await metadataRes.json() as Record<string, unknown>
+    const credEndpoint = metadata.credential_endpoint as string
+    const nonceEndpoint = metadata.nonce_endpoint as string
+    steps.push({ step: 'metadata', status: 'ok', data: { credEndpoint, nonceEndpoint, credential_issuer: metadata.credential_issuer } })
+
+    // Step 3: Get a c_nonce from the issuer
+    console.log('[flow] Getting nonce...')
+    const nonceRes = await fetch(nonceEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    })
+    const nonceData = await nonceRes.json() as Record<string, unknown>
+    const cNonce = nonceData.c_nonce as string
+    steps.push({ step: 'nonce', status: 'ok', data: nonceData })
+
+    // Step 4: Build a JWT proof-of-possession
+    console.log('[flow] Building JWT proof...')
+    const now = Math.floor(Date.now() / 1000)
+    const proofJwt = await new jose.SignJWT({
+      iss: holderDid,
+      aud: metadata.credential_issuer as string,
+      iat: now,
+      nonce: cNonce,
+    })
+      .setProtectedHeader({
+        alg: 'EdDSA',
+        typ: 'openid4vci-proof+jwt',
+        jwk: publicJwk,
+      })
+      .sign(privateKey)
+    steps.push({ step: 'proof', status: 'ok', data: { jwt_length: proofJwt.length, iss: holderDid, nonce: cNonce } })
+
+    // Step 5: Request the credential
+    console.log('[flow] Requesting credential...')
+    const credBody = {
+      format,
+      credential_definition: {
+        type: ['VerifiableCredential', credentialType],
+      },
+      proof: {
+        proof_type: 'jwt',
+        jwt: proofJwt,
+      },
+    }
+
+    const credRes = await fetch(credEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credBody),
+    })
+
+    const credResponseBody = await credRes.json()
+    steps.push({
+      step: 'credential',
+      status: credRes.ok ? 'ok' : `error_${credRes.status}`,
+      data: credResponseBody,
+    })
+
+    console.log(`[flow] Credential response: ${credRes.status}`)
+    res.json({
+      success: credRes.ok,
+      httpStatus: credRes.status,
+      steps,
+      credential: credRes.ok ? credResponseBody : null,
+    })
+  } catch (err) {
+    console.error('[flow] issuance error:', err)
+    res.status(500).json({
+      success: false,
+      error: String(err),
+      steps,
+    })
+  }
+})
+
 app.listen(PORT, () => {
   console.log(`[bff] Playground BFF running on http://localhost:${PORT}`)
   console.log(`[bff] Proxying to:`)
@@ -117,3 +213,4 @@ app.listen(PORT, () => {
   console.log(`  eSignet:  ${ENDPOINTS.esignet}`)
   console.log(`  Verifier: ${ENDPOINTS.verifier}`)
 })
+

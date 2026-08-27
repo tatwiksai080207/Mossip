@@ -65,7 +65,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
     const stepActions: Record<string, () => Promise<{ payload: unknown; source: 'live' | 'mock' }>> = {
       'issuer-metadata': () => api.fetchIssuerMetadata(selectedIssuer),
       'credential-offer': () => api.createCredentialOffer(selectedIssuer, selectedCredType),
-      'token-exchange': () => api.exchangeToken(),
+      'token-exchange': () => api.exchangeToken(selectedCredType),
       'credential-issuance': () => api.requestCredential(selectedCredType),
       'vp-request': () => api.createVPRequest(selectedCredType),
       'vp-response': () => api.submitVPResponse(selectedCredType),
