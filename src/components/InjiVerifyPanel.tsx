@@ -47,8 +47,8 @@ export default function InjiVerifyPanel({ onResult }: Props) {
             Scan the QR code with Inji Wallet to share your credential via OpenID4VP.
           </p>
           <OpenID4VPVerification
-            verifyServiceUrl="https://api.collab.mosip.net/v1/verify"
-            clientId="inji-playground"
+            verifyServiceUrl="http://localhost:3001/api/verifier/v1/verify"
+            clientId="did:web:inji-verify.collab.mosip.net"
             presentationDefinition={{
               purpose: 'Verify credential via Inji Playground',
               input_descriptors: [{
