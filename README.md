@@ -139,7 +139,7 @@ inji-playground/
 
 | Component | Technology |
 |-----------|-----------|
-| Frontend | React 19 + TypeScript |
+| Frontend | React 18 + TypeScript |
 | Build Tool | Vite 8 |
 | Styling | Tailwind CSS 4 |
 | State Management | Zustand |

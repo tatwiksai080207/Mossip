@@ -85,11 +85,14 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
         set({ steps: get().steps.map((s, idx) =>
           idx === i ? { ...s, status: 'done', payload: result.payload, source: result.source } : s
         )})
-      } catch (err) {
+      } catch (err: unknown) {
+        // Extract diagnostic payload if the error carries one (e.g. 403 from credential issuance)
+        const errObj = err as { stepPayload?: unknown; message?: string }
+        const payload = errObj.stepPayload || { error: String(err) }
         set({ steps: get().steps.map((s, idx) =>
-          idx === i ? { ...s, status: 'error', payload: { error: String(err) }, source: 'mock' } : s
+          idx === i ? { ...s, status: 'error', payload, source: 'live' } : s
         )})
-        break // stop on error
+        // Don't break — continue to verification steps so the full flow is visible
       }
     }
 

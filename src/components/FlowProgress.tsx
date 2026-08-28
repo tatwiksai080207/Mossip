@@ -38,12 +38,12 @@ export default function FlowProgress() {
           <div key={step.id}>
             <button
               onClick={() => {
-                if (step.status === 'done' && step.payload) {
+                if ((step.status === 'done' || step.status === 'error') && step.payload) {
                   setExpandedStep(expandedStep === step.id ? null : step.id)
                 }
               }}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-left ${
-                step.status === 'done' && step.payload ? 'cursor-pointer hover:bg-slate-800/30' : ''
+                (step.status === 'done' || step.status === 'error') && step.payload ? 'cursor-pointer hover:bg-slate-800/30' : ''
               } ${step.status === 'running' ? 'bg-slate-800/20' : ''}`}
             >
               <span className={`font-mono text-base ${statusColor(step.status)} ${step.status === 'running' ? 'step-running' : ''}`}>
@@ -52,6 +52,7 @@ export default function FlowProgress() {
               <span className={
                 step.status === 'done' ? 'text-slate-300' :
                 step.status === 'running' ? 'text-white' :
+                step.status === 'error' ? 'text-red-300' :
                 'text-slate-500'
               }>
                 {step.label}
@@ -78,7 +79,19 @@ export default function FlowProgress() {
                 </span>
               )}
               {step.status === 'error' && (
-                <span className="text-xs text-red-400 ml-auto">failed</span>
+                <span className="flex items-center gap-2 ml-auto">
+                  {step.source && (
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">
+                      {step.source}
+                    </span>
+                  )}
+                  <span className="text-xs text-red-400">failed</span>
+                  {step.payload && (
+                    <span className="text-xs text-slate-600">
+                      {expandedStep === step.id ? '▾' : '▸'}
+                    </span>
+                  )}
+                </span>
               )}
             </button>
 
@@ -93,9 +106,14 @@ export default function FlowProgress() {
         ))}
       </div>
 
-      {!isRunning && steps.every(s => s.status === 'done') && (
-        <div className="px-4 py-3 border-t border-slate-800 text-sm text-green-400">
-          All steps completed successfully
+      {!isRunning && steps.some(s => s.status === 'done' || s.status === 'error') && (
+        <div className={`px-4 py-3 border-t border-slate-800 text-sm ${
+          steps.every(s => s.status === 'done') ? 'text-green-400' : 'text-yellow-400'
+        }`}>
+          {steps.every(s => s.status === 'done')
+            ? 'All steps completed successfully'
+            : `${steps.filter(s => s.status === 'done').length}/${steps.length} steps passed, ${steps.filter(s => s.status === 'error').length} failed`
+          }
         </div>
       )}
     </div>
