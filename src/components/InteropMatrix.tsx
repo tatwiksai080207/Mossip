@@ -61,7 +61,7 @@ export default function InteropMatrix() {
           </thead>
           <tbody>
             {entries.map(([key, data]) => {
-              const [issuerId, walletId, verifierId, format] = key.split('|')
+              const [,,,format] = key.split('|')
               const run = data.runs[0]
               const rate = Math.round((data.pass / data.total) * 100)
               return (
@@ -98,7 +98,7 @@ export default function InteropMatrix() {
               totalRuns: runs.length,
               liveSteps: totalLiveSteps,
               mockSteps: totalMockSteps,
-              matrix: entries.map(([key, data]) => {
+              matrix: entries.map(([, data]) => {
                 const run = data.runs[0]
                 return {
                   issuer: run.config.issuer.name,

@@ -7,3 +7,5 @@ dist/
 npm-debug.log*
 .DS_Store
 *.tsbuildinfo
+AGENT_HANDOFF.md
+scratch_log_dump.md

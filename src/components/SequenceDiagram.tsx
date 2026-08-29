@@ -24,13 +24,20 @@ function getColor(status: StepStatus) {
 }
 
 export default function SequenceDiagram() {
-  const { steps, isRunning } = useStore()
+  const { steps, isRunning, selectedCredType } = useStore()
 
   if (steps.length === 0) return null
 
   return (
     <div className="border border-slate-800 rounded-lg p-4">
-      <h3 className="text-sm font-medium text-slate-300 mb-4">Protocol Sequence</h3>
+      <div className="flex items-center gap-2 mb-4">
+        <h3 className="text-sm font-medium text-slate-300">Protocol Sequence</h3>
+        {selectedCredType && (
+          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 border border-slate-600">
+            {selectedCredType.format}
+          </span>
+        )}
+      </div>
 
       {/* Participant headers */}
       <div className="grid grid-cols-3 mb-3">

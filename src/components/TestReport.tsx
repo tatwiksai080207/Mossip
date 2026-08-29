@@ -45,7 +45,15 @@ export default function TestReport({ issuer, wallet, verifier, credentialType, s
               </tr>
               <tr>
                 <td className="py-1.5 text-slate-500">Format</td>
-                <td className="py-1.5 text-slate-300">{credentialType.name}</td>
+                <td className="py-1.5">
+                  <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+                    credentialType.format === 'vc+sd-jwt'
+                      ? 'bg-purple-500/10 text-purple-400'
+                      : 'bg-green-500/10 text-green-400'
+                  }`}>
+                    {credentialType.name}
+                  </span>
+                </td>
               </tr>
               <tr>
                 <td className="py-1.5 text-slate-500">Proof Type</td>
@@ -79,11 +87,15 @@ export default function TestReport({ issuer, wallet, verifier, credentialType, s
 
         {/* Failure details */}
         {failedSteps.length > 0 && (
-          <div className="border border-red-500/20 rounded-md p-3 bg-red-500/5">
-            <p className="text-xs text-red-400 font-medium mb-1">Failed Steps</p>
+          <div className="border border-amber-500/20 rounded-md p-3 bg-amber-500/5">
+            <p className="text-xs text-amber-400 font-medium mb-1">Failed Steps (Interoperability Gaps)</p>
             {failedSteps.map(s => (
-              <p key={s.id} className="text-xs text-red-300">{s.label}</p>
+              <p key={s.id} className="text-xs text-amber-300">✗ {s.label}</p>
             ))}
+            <p className="text-xs text-slate-500 mt-2">
+              These failures represent real interoperability gaps discovered during testing against the
+              MOSIP Collab sandbox. See <span className="font-mono">INTEROPERABILITY_REPORT.md</span> for details.
+            </p>
           </div>
         )}
       </div>

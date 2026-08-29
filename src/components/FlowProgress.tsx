@@ -38,12 +38,12 @@ export default function FlowProgress() {
           <div key={step.id}>
             <button
               onClick={() => {
-                if ((step.status === 'done' || step.status === 'error') && step.payload) {
+                if ((step.status === 'done' || step.status === 'error') && !!step.payload) {
                   setExpandedStep(expandedStep === step.id ? null : step.id)
                 }
               }}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-left ${
-                (step.status === 'done' || step.status === 'error') && step.payload ? 'cursor-pointer hover:bg-slate-800/30' : ''
+                (step.status === 'done' || step.status === 'error') && !!step.payload ? 'cursor-pointer hover:bg-slate-800/30' : ''
               } ${step.status === 'running' ? 'bg-slate-800/20' : ''}`}
             >
               <span className={`font-mono text-base ${statusColor(step.status)} ${step.status === 'running' ? 'step-running' : ''}`}>
@@ -68,10 +68,10 @@ export default function FlowProgress() {
                         ? 'bg-green-500/10 text-green-400'
                         : 'bg-slate-700/50 text-slate-500'
                     }`}>
-                      {step.source}
+                      {step.source as string}
                     </span>
                   )}
-                  {step.payload && (
+                  {!!step.payload && (
                     <span className="text-xs text-slate-600">
                       {expandedStep === step.id ? '▾' : '▸'}
                     </span>
@@ -82,11 +82,11 @@ export default function FlowProgress() {
                 <span className="flex items-center gap-2 ml-auto">
                   {step.source && (
                     <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">
-                      {step.source}
+                      {step.source as string}
                     </span>
                   )}
                   <span className="text-xs text-red-400">failed</span>
-                  {step.payload && (
+                  {!!step.payload && (
                     <span className="text-xs text-slate-600">
                       {expandedStep === step.id ? '▾' : '▸'}
                     </span>
@@ -95,25 +95,34 @@ export default function FlowProgress() {
               )}
             </button>
 
-            {expandedStep === step.id && step.payload && (
-              <div className="px-4 pb-3">
-                <pre className="bg-slate-900 border border-slate-800 rounded-md p-3 text-xs text-slate-400 overflow-x-auto font-mono leading-relaxed">
-                  {JSON.stringify(step.payload, null, 2)}
-                </pre>
-              </div>
-            )}
+            {expandedStep === step.id && !!step.payload && (() => {
+              const p = step.payload as Record<string, unknown>
+              return (
+                <div className="px-4 pb-3">
+                  <pre className="bg-slate-900 border border-slate-800 rounded-md p-3 text-xs text-slate-400 overflow-x-auto font-mono leading-relaxed">
+                    {JSON.stringify(p, null, 2)}
+                  </pre>
+                </div>
+              )
+            })()}
           </div>
         ))}
       </div>
 
       {!isRunning && steps.some(s => s.status === 'done' || s.status === 'error') && (
-        <div className={`px-4 py-3 border-t border-slate-800 text-sm ${
-          steps.every(s => s.status === 'done') ? 'text-green-400' : 'text-yellow-400'
-        }`}>
-          {steps.every(s => s.status === 'done')
-            ? 'All steps completed successfully'
-            : `${steps.filter(s => s.status === 'done').length}/${steps.length} steps passed, ${steps.filter(s => s.status === 'error').length} failed`
-          }
+        <div className="px-4 py-3 border-t border-slate-800">
+          <div className={`text-sm ${
+            steps.every(s => s.status === 'done') ? 'text-green-400' : 'text-yellow-400'
+          }`}>
+            {steps.every(s => s.status === 'done')
+              ? 'All steps completed successfully'
+              : `${steps.filter(s => s.status === 'done').length}/${steps.length} steps passed, ${steps.filter(s => s.status === 'error').length} failed`
+            }
+          </div>
+          <div className="flex gap-3 mt-1">
+            <span className="text-xs text-green-500">{steps.filter(s => s.source === 'live').length} live</span>
+            <span className="text-xs text-slate-500">{steps.filter(s => s.source === 'mock').length} mock</span>
+          </div>
         </div>
       )}
     </div>
