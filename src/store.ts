@@ -55,6 +55,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
     if (!selectedIssuer || !selectedWallet || !selectedVerifier || !selectedCredType) return
 
     set({ isRunning: true })
+    api.resetVpSession()
 
     const initial: FlowStepInfo[] = FLOW_STEPS.map(s => ({
       ...s, status: 'pending' as StepStatus,
@@ -65,10 +66,10 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
     const stepActions: Record<string, () => Promise<{ payload: unknown; source: 'live' | 'mock' }>> = {
       'issuer-metadata': () => api.fetchIssuerMetadata(selectedIssuer),
       'credential-offer': () => api.createCredentialOffer(selectedIssuer, selectedCredType),
-      'token-exchange': () => api.exchangeToken(selectedCredType),
-      'credential-issuance': () => api.requestCredential(selectedCredType),
+      'token-exchange': () => api.exchangeToken(selectedIssuer, selectedCredType),
+      'credential-issuance': () => api.requestCredential(selectedIssuer, selectedCredType),
       'vp-request': () => api.createVPRequest(selectedCredType),
-      'vp-response': () => api.submitVPResponse(selectedCredType),
+      'vp-response': () => api.submitVPResponse(),
       'verification': () => api.verifyPresentation(),
     }
 
@@ -86,13 +87,15 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
           idx === i ? { ...s, status: 'done', payload: result.payload, source: result.source } : s
         )})
       } catch (err: unknown) {
-        // Extract diagnostic payload if the error carries one (e.g. 403 from credential issuance)
-        const errObj = err as { stepPayload?: unknown; message?: string }
-        const payload = errObj.stepPayload || { error: String(err) }
+        // StepError carries a diagnostic payload; anything else is unexpected.
+        const errObj = err as { stepPayload?: Record<string, unknown>; message?: string }
+        const payload = errObj.stepPayload
+          ? { _error: errObj.message, ...errObj.stepPayload }
+          : { _error: String(err) }
         set({ steps: get().steps.map((s, idx) =>
           idx === i ? { ...s, status: 'error', payload, source: 'live' } : s
         )})
-        // Don't break — continue to verification steps so the full flow is visible
+        // Keep going so the rest of the protocol is still visible.
       }
     }
 

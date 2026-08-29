@@ -1,370 +1,333 @@
 import type { IssuerConfig, CredentialType } from './types'
+import { buildDcqlQuery, generateNonce, type DcqlQuery } from './dcql'
 
-// All calls go through our BFF proxy at /api/*
+// Every call goes through the BFF proxy at /api/*.
+//
+// Design rule for this module: a step either reports live data or it FAILS.
+// It never substitutes a plausible-looking mock for a call that did not happen.
+// The previous version fell back to hand-written payloads whenever a fetch threw,
+// which hid the fact that the verifier host was wrong and nothing was being called.
 
-interface StepResult {
+export interface StepResult {
   payload: unknown
   source: 'live' | 'mock'
   error?: string
 }
 
+/** Thrown so the store can render a failed step with full diagnostics attached. */
+export class StepError extends Error {
+  stepPayload: unknown
+  constructor(message: string, stepPayload: unknown) {
+    super(message)
+    this.name = 'StepError'
+    this.stepPayload = stepPayload
+  }
+}
+
+const TIMEOUT_MS = 20000
+
 async function safeFetch(url: string, options?: RequestInit): Promise<Response> {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 15000)
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   try {
-    const res = await fetch(url, { ...options, signal: controller.signal })
-    return res
+    return await fetch(url, { ...options, signal: controller.signal })
   } finally {
-    clearTimeout(timeout)
+    clearTimeout(timer)
   }
 }
 
-// Step 1: Fetch issuer metadata via BFF
-export async function fetchIssuerMetadata(_issuer: IssuerConfig): Promise<StepResult> {
+async function readBody(res: Response): Promise<unknown> {
+  const text = await res.text()
   try {
-    const res = await safeFetch('/api/issuer/.well-known/openid-credential-issuer')
-    if (res.ok) {
-      const data = await res.json()
-      return { payload: data, source: 'live' }
-    }
-    throw new Error(`HTTP ${res.status}`)
-  } catch (err) {
-    return {
-      payload: {
-        credential_issuer: 'https://injicertify-mock.collab.mosip.net',
-        credential_endpoint: 'https://injicertify-mock.collab.mosip.net/v1/certify/issuance/credential',
-        _fallback: true, _error: String(err),
-      },
-      source: 'mock', error: String(err),
-    }
-  }
-}
-
-// Step 2: Credential Offer — build from live metadata
-export async function createCredentialOffer(_issuer: IssuerConfig, credType: CredentialType): Promise<StepResult> {
-  try {
-    // Fetch real metadata to build an accurate offer
-    const res = await safeFetch('/api/issuer/.well-known/openid-credential-issuer')
-    const metadata = res.ok ? await res.json() : null
-    const offer = {
-      credential_issuer: metadata?.credential_issuer || 'https://injicertify-mock.collab.mosip.net',
-      credential_configuration_ids: [credType.id],
-      grants: {
-        'urn:ietf:params:oauth:grant-type:pre-authorized_code': {
-          'pre-authorized_code': `pre-auth-${Date.now()}`,
-          user_pin_required: false,
-        },
-      },
-      _metadata_source: metadata ? 'live' : 'mock',
-    }
-    return { payload: offer, source: metadata ? 'live' : 'mock' }
+    return JSON.parse(text)
   } catch {
-    return {
-      payload: {
-        credential_issuer: 'https://injicertify-mock.collab.mosip.net',
-        credential_configuration_ids: [credType.id],
-        _fallback: true,
-      },
-      source: 'mock',
-    }
+    return text.slice(0, 2000)
   }
 }
 
-// Step 3: Token exchange — use BFF orchestrated flow to get nonce + build JWT proof
-export async function exchangeToken(credType: CredentialType): Promise<StepResult> {
-  try {
-    const res = await safeFetch('/api/flow/issue', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credentialType: credType.id, format: credType.format }),
-    })
-    const data = await res.json()
-
-    // Extract the nonce + proof steps from the orchestrated flow
-    const nonceStep = data.steps?.find((s: { step: string }) => s.step === 'nonce')
-    const proofStep = data.steps?.find((s: { step: string }) => s.step === 'proof')
-    const keypairStep = data.steps?.find((s: { step: string }) => s.step === 'keypair')
-
-    return {
-      payload: {
-        _flow: 'OpenID4VCI Pre-Authorized Code',
-        holder_did: keypairStep?.data?.holderDid,
-        c_nonce: nonceStep?.data?.c_nonce,
-        c_nonce_source: 'live (from issuer nonce endpoint)',
-        proof_jwt_built: proofStep?.status === 'ok',
-        proof_algorithm: 'EdDSA',
-        token_exchange_note: 'Using nonce-based proof instead of OAuth access token for mock issuance',
-      },
-      source: 'live',
-    }
-  } catch (err) {
-    return {
-      payload: {
-        access_token: `mock-token-${Date.now()}`,
-        token_type: 'Bearer',
-        expires_in: 3600,
-        _fallback: true,
-      },
-      source: 'mock', error: String(err),
-    }
-  }
-}
-
-// Step 4: Request credential — use BFF flow result
-// IMPORTANT: If the sandbox returns 403/401, we throw to mark this step as FAILED
-// rather than pretending it succeeded.
-export async function requestCredential(credType: CredentialType): Promise<StepResult> {
-  const res = await safeFetch('/api/flow/issue', {
+async function postJson(path: string, body: unknown): Promise<{ res: Response; data: unknown }> {
+  const res = await safeFetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ credentialType: credType.id, format: credType.format }),
+    body: JSON.stringify(body),
   })
-  const data = await res.json()
-  const credStep = data.steps?.find((s: { step: string }) => s.step === 'credential')
+  return { res, data: await readBody(res) }
+}
 
-  if (data.success && data.credential) {
-    return { payload: data.credential, source: 'live' }
+// ── Shared VP session state ─────────────────────────────────────────────────
+// /v2/vp-request hands back a transactionId and requestId that the submission
+// and result steps both need, so the run threads them through here.
+export interface VpSession {
+  transactionId: string
+  requestId: string
+  nonce: string
+  responseUri: string
+  requestUri?: string
+  expiresAt?: number
+  dcqlQuery: DcqlQuery
+}
+
+let currentVpSession: VpSession | null = null
+export function getVpSession() { return currentVpSession }
+export function resetVpSession() { currentVpSession = null }
+
+// ── Step 1: issuer metadata discovery ───────────────────────────────────────
+
+export async function fetchIssuerMetadata(issuer: IssuerConfig): Promise<StepResult> {
+  const host = issuer.host ?? 'https://injicertify-mock.collab.mosip.net'
+  const url = `/api/wellknown?host=${encodeURIComponent(host)}`
+  const res = await safeFetch(url)
+  const data = await readBody(res)
+
+  if (!res.ok) {
+    throw new StepError(`Issuer metadata discovery failed (HTTP ${res.status})`, {
+      _request: url,
+      _http_status: res.status,
+      _response: data,
+    })
+  }
+  return { payload: data, source: 'live' }
+}
+
+// ── Step 2: credential offer ────────────────────────────────────────────────
+// The Collab issuers advertise no credential_offer_endpoint, so the offer is
+// assembled from live metadata. Labelled honestly as locally constructed.
+
+export async function createCredentialOffer(
+  issuer: IssuerConfig,
+  credType: CredentialType,
+): Promise<StepResult> {
+  const host = issuer.host ?? 'https://injicertify-mock.collab.mosip.net'
+  const res = await safeFetch(`/api/wellknown?host=${encodeURIComponent(host)}`)
+  const metadata = await readBody(res) as Record<string, unknown>
+
+  if (!res.ok) {
+    throw new StepError(`Cannot build a credential offer without issuer metadata (HTTP ${res.status})`, {
+      _http_status: res.status,
+      _response: metadata,
+    })
   }
 
-  // If sandbox rejected us (403/401), report it honestly as an error
-  // but include the full diagnostic so developers can see what happened
-  const httpStatus = data.httpStatus || credStep?.data?.status || 'unknown'
-  throw Object.assign(
-    new Error(`Sandbox returned HTTP ${httpStatus} — OAuth access token required`),
-    {
-      stepPayload: {
-        _sandbox_response: credStep?.data,
-        _http_status: httpStatus,
-        _all_steps: data.steps?.map((s: { step: string; status: string }) => `${s.step}: ${s.status}`),
-        _note: httpStatus === 403
-          ? 'Sandbox requires OAuth access token via eSignet. The nonce + JWT proof were generated correctly, but the credential endpoint enforces the full interactive OAuth flow (email OTP).'
-          : `Sandbox returned HTTP ${httpStatus}`,
-        _gap: 'No pre-authorized_code grant is available on the Collab mock issuer. A full eSignet interactive login (with dynamic email OTP) is required to obtain an access token.',
+  const configId = credType.credentialTypeName ?? credType.id
+  return {
+    payload: {
+      credential_issuer: metadata.credential_issuer,
+      credential_configuration_ids: [configId],
+      grants: {
+        authorization_code: {
+          authorization_server: (metadata.authorization_servers as string[] | undefined)?.[0],
+        },
       },
+      _constructed_by: 'playground',
+      _reason: 'Issuer metadata advertises no credential_offer_endpoint (OpenID4VCI allows one).',
+      _offer_uri: `openid-credential-offer://?credential_offer=${encodeURIComponent(
+        JSON.stringify({
+          credential_issuer: metadata.credential_issuer,
+          credential_configuration_ids: [configId],
+        }),
+      )}`,
     },
-  )
+    source: 'live',
+  }
 }
 
-// Step 5: VP authorization request
-// Attempts to hit the real Inji Verify API to create an authorization request.
-// Falls back to a well-structured mock if the API is unreachable.
+// ── Steps 3 & 4: token exchange and credential issuance ─────────────────────
+// One BFF round trip drives both, since the proof is bound to a c_nonce that
+// must be spent immediately.
+
+interface IssueFlowResponse {
+  success: boolean
+  httpStatus?: number
+  error?: string
+  credential?: unknown
+  steps?: { step: string; status: string; data: Record<string, unknown> }[]
+}
+
+async function runIssueFlow(issuer: IssuerConfig, credType: CredentialType): Promise<IssueFlowResponse> {
+  const { data } = await postJson('/api/flow/issue', {
+    credentialType: credType.credentialTypeName ?? credType.id,
+    format: credType.format,
+    issuerHost: issuer.host,
+  })
+  return data as IssueFlowResponse
+}
+
+let lastIssueFlow: IssueFlowResponse | null = null
+
+export async function exchangeToken(
+  issuer: IssuerConfig,
+  credType: CredentialType,
+): Promise<StepResult> {
+  lastIssueFlow = await runIssueFlow(issuer, credType)
+  const steps = lastIssueFlow.steps ?? []
+  const find = (name: string) => steps.find(s => s.step === name)
+
+  const nonce = find('nonce')
+  const proof = find('proof')
+  const keypair = find('keypair')
+
+  if (!proof || proof.status !== 'ok') {
+    throw new StepError('Failed to obtain a nonce and build a proof-of-possession', {
+      _steps: steps.map(s => `${s.step}: ${s.status}`),
+      _nonce: nonce?.data,
+      _error: lastIssueFlow.error,
+    })
+  }
+
+  return {
+    payload: {
+      _flow: 'OpenID4VCI — nonce-bound proof of possession',
+      holder_did: keypair?.data?.holderDid,
+      c_nonce: nonce?.data?.c_nonce,
+      c_nonce_source: nonce?.status === 'ok' ? 'live (issuer nonce_endpoint)' : nonce?.status,
+      proof_algorithm: 'EdDSA',
+      proof_jwt_length: proof.data?.jwt_length,
+      _note: 'An OAuth access token still has to come from the issuer\'s authorization server; see the next step.',
+    },
+    source: 'live',
+  }
+}
+
+export async function requestCredential(
+  issuer: IssuerConfig,
+  credType: CredentialType,
+): Promise<StepResult> {
+  const flow = lastIssueFlow ?? await runIssueFlow(issuer, credType)
+  lastIssueFlow = null
+
+  if (flow.success && flow.credential) {
+    return { payload: flow.credential, source: 'live' }
+  }
+
+  const credStep = flow.steps?.find(s => s.step === 'credential')
+  const status = flow.httpStatus ?? 'unknown'
+
+  throw new StepError(`Credential endpoint returned HTTP ${status}`, {
+    _http_status: status,
+    _issuer_response: credStep?.data,
+    _steps: flow.steps?.map(s => `${s.step}: ${s.status}`),
+    _gap: status === 403 || status === 401
+      ? 'The Collab issuers accept only the authorization_code grant, so a bearer token from eSignet is required. OpenID4VCI also defines a pre-authorized_code grant for exactly this automated case, and it is not offered.'
+      : `Unexpected status ${status} from the credential endpoint.`,
+  })
+}
+
+// ── Step 5: VP authorization request (real OpenID4VP, DCQL) ─────────────────
+
 export async function createVPRequest(credType: CredentialType): Promise<StepResult> {
-  try {
-    // Try the real Inji Verify API to create an authorization request session
-    const res = await safeFetch('/api/verifier/v1/verify/vp-request', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        transactionId: `txn-${Date.now()}`,
-        presentationDefinition: {
-          id: `pd-${Date.now()}`,
-          purpose: 'Verify credential for authentication',
-          input_descriptors: [{
-            id: 'credential-check',
-            format: credType.format === 'vc+sd-jwt'
-              ? { 'vc+sd-jwt': { alg: ['ES256'] } }
-              : { ldp_vc: { proof_type: credType.proofTypes } },
-            constraints: {
-              fields: [{ path: ['$.type'], filter: { type: 'string', pattern: credType.id } }],
-            },
-          }],
-        },
-      }),
-    })
+  const dcqlQuery = buildDcqlQuery(credType)
+  const nonce = generateNonce()
+  const transactionId = `txn-playground-${Date.now()}`
 
-    if (res.ok) {
-      const data = await res.json()
-      return { payload: data, source: 'live' }
-    }
-
-    // API returned an error — fall through to mock with the response info
-    const errorBody = await res.json().catch(() => ({ error: res.statusText }))
-    return {
-      payload: {
-        _api_attempted: true,
-        _api_status: res.status,
-        _api_response: errorBody,
-        response_type: 'vp_token',
-        client_id: 'did:web:inji-verify.collab.mosip.net',
-        response_mode: 'direct_post',
-        response_uri: 'https://api.collab.mosip.net/v1/verify/vp-submission',
-        nonce: `vp-nonce-${Date.now()}`,
-        presentation_definition: {
-          id: `pd-${Date.now()}`,
-          purpose: 'Verify credential for authentication',
-          input_descriptors: [{
-            id: 'credential-check',
-            format: credType.format === 'vc+sd-jwt'
-              ? { 'vc+sd-jwt': { alg: ['ES256'] } }
-              : { ldp_vc: { proof_type: credType.proofTypes } },
-            constraints: {
-              fields: [{ path: ['$.type'], filter: { type: 'string', pattern: credType.id } }],
-            },
-          }],
-        },
-        _note: `Inji Verify API returned ${res.status}. Showing spec-compliant mock VP request.`,
-      },
-      source: 'mock',
-    }
-  } catch {
-    return {
-      payload: {
-        _api_attempted: true,
-        _api_error: 'unreachable',
-        response_type: 'vp_token',
-        client_id: 'did:web:inji-verify.collab.mosip.net',
-        response_mode: 'direct_post',
-        response_uri: 'https://api.collab.mosip.net/v1/verify/vp-submission',
-        nonce: `vp-nonce-${Date.now()}`,
-        presentation_definition: {
-          id: `pd-${Date.now()}`,
-          purpose: 'Verify credential for authentication',
-          input_descriptors: [{
-            id: 'credential-check',
-            format: credType.format === 'vc+sd-jwt'
-              ? { 'vc+sd-jwt': { alg: ['ES256'] } }
-              : { ldp_vc: { proof_type: credType.proofTypes } },
-            constraints: {
-              fields: [{ path: ['$.type'], filter: { type: 'string', pattern: credType.id } }],
-            },
-          }],
-        },
-        _note: 'Inji Verify API unreachable. Showing spec-compliant mock VP request.',
-      },
-      source: 'mock',
-    }
+  // clientId must match how the verifier identifies itself; the deployed Collab
+  // verify-ui reports `injiverify.collab.mosip.net/` in its env.config.js.
+  const request = {
+    clientId: 'injiverify.collab.mosip.net/',
+    transactionId,
+    nonce,
+    dcqlQuery,
   }
+
+  const { res, data } = await postJson('/api/verifier/v1/verify/v2/vp-request', request)
+
+  if (!res.ok) {
+    throw new StepError(`VP request rejected by Inji Verify (HTTP ${res.status})`, {
+      _request: request,
+      _http_status: res.status,
+      _response: data,
+    })
+  }
+
+  const body = data as {
+    transactionId: string
+    requestId: string
+    requestUri?: string
+    expiresAt?: number
+    authorizationDetails?: { nonce: string; responseUri: string }
+  }
+
+  currentVpSession = {
+    transactionId: body.transactionId,
+    requestId: body.requestId,
+    nonce: body.authorizationDetails?.nonce ?? nonce,
+    responseUri: body.authorizationDetails?.responseUri ?? '',
+    requestUri: body.requestUri,
+    expiresAt: body.expiresAt,
+    dcqlQuery,
+  }
+
+  return { payload: { _request: request, _response: body }, source: 'live' }
 }
 
-// Step 6: VP token response
-// In a real flow, the wallet would sign and submit a VP. Since we don't have
-// a real wallet with an actual credential, we construct a spec-compliant mock.
-export async function submitVPResponse(credType: CredentialType): Promise<StepResult> {
-  const isLdp = credType.format !== 'vc+sd-jwt'
+// ── Step 6: VP token submission ─────────────────────────────────────────────
+// Until the playground wallet holds a real credential (next phase), there is
+// nothing genuine to present. Report that plainly instead of inventing a VP.
 
-  // Try to submit to the real verifier endpoint
-  try {
-    const vpPayload = isLdp ? {
-      vp_token: {
-        '@context': ['https://www.w3.org/2018/credentials/v1'],
-        type: ['VerifiablePresentation'],
-        holder: `did:key:z6Mk${Date.now()}`,
-        verifiableCredential: ['<no real credential — issuance was blocked by sandbox OAuth requirement>'],
-      },
-      presentation_submission: {
-        id: `ps-${Date.now()}`,
-        definition_id: `pd-${Date.now()}`,
-        descriptor_map: [{
-          id: 'credential-check',
-          format: 'ldp_vp',
-          path: '$',
-        }],
-      },
-    } : {
-      vp_token: `eyJhbGciOiJFUzI1NiJ9.mock-vp-no-real-credential.sig~disclosure~`,
-      presentation_submission: {
-        id: `ps-${Date.now()}`,
-        definition_id: `pd-${Date.now()}`,
-        descriptor_map: [{
-          id: 'credential-check',
-          format: 'vc+sd-jwt',
-          path: '$',
-        }],
-      },
-    }
-
-    const res = await safeFetch('/api/verifier/v1/verify/vp-submission', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(vpPayload),
-    })
-
-    if (res.ok) {
-      const data = await res.json()
-      return { payload: { ...vpPayload, _verification_response: data }, source: 'live' }
-    }
-
-    const errorBody = await res.json().catch(() => ({ error: res.statusText }))
-    return {
-      payload: {
-        ...vpPayload,
-        _api_attempted: true,
-        _api_status: res.status,
-        _api_response: errorBody,
-        _note: `VP submitted to Inji Verify but rejected (HTTP ${res.status}). This is expected because no real credential was issued (issuance blocked by OAuth requirement).`,
-      },
-      source: 'mock',
-    }
-  } catch {
-    return {
-      payload: {
-        vp_token: isLdp ? {
-          '@context': ['https://www.w3.org/2018/credentials/v1'],
-          type: ['VerifiablePresentation'],
-          holder: `did:key:z6Mk${Date.now()}`,
-          verifiableCredential: ['<no real credential — issuance was blocked by sandbox OAuth requirement>'],
-        } : `eyJhbGciOiJFUzI1NiJ9.mock-vp-no-real-credential.sig~disclosure~`,
-        presentation_submission: {
-          id: `ps-${Date.now()}`,
-          definition_id: `pd-${Date.now()}`,
-          descriptor_map: [{
-            id: 'credential-check',
-            format: isLdp ? 'ldp_vp' : 'vc+sd-jwt',
-            path: '$',
-          }],
-        },
-        _api_attempted: true,
-        _api_error: 'unreachable',
-        _note: 'Inji Verify API unreachable. Showing spec-compliant mock VP response.',
-      },
-      source: 'mock',
-    }
+export async function submitVPResponse(): Promise<StepResult> {
+  const session = currentVpSession
+  if (!session) {
+    throw new StepError('No VP session — the authorization request step did not complete', {})
   }
+
+  const statusRes = await safeFetch(
+    `/api/verifier/v1/verify/vp-request/${session.requestId}/status`,
+  )
+  const status = await readBody(statusRes)
+
+  throw new StepError('No credential is held, so no Verifiable Presentation can be signed', {
+    _vp_session: session,
+    _request_status: status,
+    _request_status_http: statusRes.status,
+    _blocked_by: 'Credential issuance failed upstream (step 4).',
+    _next: 'A holder wallet that owns a real credential and signs the vp_token against this nonce is required to complete direct_post.',
+  })
 }
 
-// Step 7: Verification — attempt real verification via Inji Verify API
+// ── Step 7: verification result ─────────────────────────────────────────────
+
 export async function verifyPresentation(): Promise<StepResult> {
-  try {
-    // First check if verifier is reachable
-    const healthRes = await safeFetch('/api/verifier/v1/verify/health')
-    const verifierReachable = healthRes.ok
-
-    // Try to get a verification result from a real endpoint
-    const verifyRes = await safeFetch('/api/verifier/v1/verify/vp-result', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transactionId: `txn-${Date.now()}` }),
-    })
-
-    if (verifyRes.ok) {
-      const data = await verifyRes.json()
-      return { payload: data, source: 'live' }
-    }
-
-    // Verifier is reachable but didn't return a result (expected — we never submitted a real VP)
-    const errorBody = await verifyRes.json().catch(() => ({ error: verifyRes.statusText }))
-    return {
-      payload: {
-        verified: false,
-        verifier_reachable: verifierReachable,
-        _api_attempted: true,
-        _api_status: verifyRes.status,
-        _api_response: errorBody,
-        _note: 'Verification could not be completed because no real credential was issued (sandbox requires interactive OAuth via eSignet). The verifier service is reachable and operational.',
-        _gap: 'Full end-to-end verification requires: (1) completing eSignet OAuth to get an access token, (2) issuing a real VC, (3) signing a VP with the holder key, (4) submitting to Inji Verify.',
-      },
-      source: 'mock',
-    }
-  } catch {
-    return {
-      payload: {
-        verified: false,
-        verifier_reachable: false,
-        _api_attempted: true,
-        _api_error: 'unreachable',
-        _note: 'Inji Verify service is unreachable. Cannot perform verification.',
-      },
-      source: 'mock',
-    }
+  const session = currentVpSession
+  if (!session) {
+    throw new StepError('No VP session to fetch a result for', {})
   }
+
+  const { res, data } = await postJson(
+    `/api/verifier/v1/verify/v2/vp-results/${session.transactionId}`,
+    { includeClaims: true },
+  )
+
+  if (!res.ok) {
+    throw new StepError(`No verification result for ${session.transactionId} (HTTP ${res.status})`, {
+      _transaction_id: session.transactionId,
+      _http_status: res.status,
+      _response: data,
+      _reason: 'Inji Verify only produces a result once a vp_token has been submitted to direct_post.',
+    })
+  }
+
+  return { payload: data, source: 'live' }
+}
+
+/**
+ * Direct VC verification against Inji Verify's /v2/vc-verification.
+ * Independent of the VP session, so it works for any credential we can obtain
+ * and is the quickest way to check a new signature suite in isolation.
+ */
+export async function verifyCredential(
+  verifiableCredential: string,
+  opts: { includeClaims?: boolean; skipStatusChecks?: boolean } = {},
+): Promise<StepResult> {
+  const { res, data } = await postJson('/api/verifier/v1/verify/v2/vc-verification', {
+    verifiableCredential,
+    includeClaims: opts.includeClaims ?? true,
+    skipStatusChecks: opts.skipStatusChecks ?? false,
+  })
+
+  if (!res.ok) {
+    throw new StepError(`VC verification call failed (HTTP ${res.status})`, {
+      _http_status: res.status,
+      _response: data,
+    })
+  }
+  return { payload: data, source: 'live' }
 }

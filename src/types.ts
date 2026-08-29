@@ -6,6 +6,14 @@ export interface CredentialType {
   name: string
   format: CredentialFormat
   proofTypes: string[]
+  /** The credential configuration id the issuer advertises, e.g. `FarmerCredential`. */
+  credentialTypeName?: string
+  /** Full `type` array for ldp_vc / jwt_vc, used to build a DCQL `type_values`. */
+  vcTypes?: string[]
+  /** SD-JWT VC type identifier, used to build a DCQL `vct_values`. */
+  vct?: string
+  /** VC Data Model version, so the report can distinguish 1.1 from 2.0 runs. */
+  dataModel?: '1.1' | '2.0'
 }
 
 // Issuer, wallet, verifier configs
@@ -14,6 +22,12 @@ export interface IssuerConfig {
   name: string
   description: string
   credentialTypes: CredentialType[]
+  /** Credential issuer base URL, e.g. `https://injicertify-farmer.collab.mosip.net`. */
+  host?: string
+  /** OIDC client the Collab sandbox has registered for this issuer, from Mimoto. */
+  clientId?: string
+  /** True for issuers discovered from Mimoto's registry rather than hardcoded. */
+  fromRegistry?: boolean
 }
 
 export interface WalletConfig {
