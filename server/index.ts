@@ -1,9 +1,17 @@
 import express from 'express'
 import cors from 'cors'
 import * as jose from 'jose'
+import { createIssuer } from './issuer'
+import { createWallet } from './wallet'
 
 const app = express()
 const PORT = Number(process.env.PORT || 3001)
+
+// Override when a tunnel is fronting the BFF, so credential offers and QR codes
+// carry a URL a phone can actually reach.
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, '')
+const ISSUER_MOUNT = '/playground/issuer'
+const PLAYGROUND_ISSUER_ID = `${PUBLIC_BASE_URL}${ISSUER_MOUNT}`
 
 // ── Collab sandbox endpoints ────────────────────────────────────────────────
 // Inji Verify is NOT deployed at api.collab.mosip.net. That host answers with a
@@ -35,7 +43,7 @@ app.use(express.json({ limit: '5mb' }))
 app.use(express.urlencoded({ extended: true, limit: '5mb' }))
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', endpoints: ENDPOINTS })
+  res.json({ status: 'ok', endpoints: ENDPOINTS, playgroundIssuer: PLAYGROUND_ISSUER_ID })
 })
 
 // ── Generic proxy ───────────────────────────────────────────────────────────
@@ -177,6 +185,7 @@ app.get('/api/registry/issuers', async (_req, res) => {
 // fetchable, so this cannot be turned into an open proxy.
 async function assertAllowedIssuerHost(host: string) {
   if (host === ENDPOINTS.issuer) return
+  if (host === PLAYGROUND_ISSUER_ID) return
   const registry = await loadRegistry()
   if (!registry.some(i => i.credentialIssuerHost === host)) {
     throw new Error(`Issuer host not in Mimoto registry: ${host}`)
@@ -293,7 +302,49 @@ app.post('/api/flow/issue', async (req, res) => {
   }
 })
 
+// ── The playground's own OpenID4VCI issuer ──────────────────────────────────
+const playgroundIssuer = await createIssuer({ baseUrl: PUBLIC_BASE_URL, mountPath: ISSUER_MOUNT })
+app.use(ISSUER_MOUNT, playgroundIssuer.router)
+
+// OpenID4VCI says the well-known segment is inserted between the host and the
+// path of the issuer identifier, while nearly every wallet in practice appends
+// it to the end. Both are served, so a wallet works either way — and the
+// disagreement itself is worth recording in the interoperability report.
+app.get(`/.well-known/openid-credential-issuer${ISSUER_MOUNT}`, (_req, res) => {
+  res.json(playgroundIssuer.issuerMetadata())
+})
+app.get(`/.well-known/oauth-authorization-server${ISSUER_MOUNT}`, (_req, res) => {
+  res.json(playgroundIssuer.authorizationServerMetadata())
+})
+
+// ── The playground's holder wallet ──────────────────────────────────────────
+// Points at any OpenID4VCI issuer, not just ours, so the same step log can be
+// compared across implementations.
+const playgroundWallet = await createWallet()
+app.use('/api/wallet', playgroundWallet.router)
+
+// ── Mock v1 Verifier for the React SDK ──────────────────────────────────────
+// The @mosip/react-inji-verify-sdk strictly expects the older v1 API (presentationDefinition)
+// which has been removed from the Collab Sandbox. This mock satisfies its initialization
+// step so the SDK successfully renders its OpenID4VP QR code in the UI for the demo video.
+app.post('/api/mock-verifier/authorization-request', (_req, res) => {
+  const transactionId = `mock-txn-${Date.now()}`
+  res.json({
+    transactionId,
+    requestUri: `${PUBLIC_BASE_URL}/api/mock-verifier/request-object/${transactionId}`,
+    client_id: 'did:web:mock-verifier.inji.playground',
+  })
+})
+
+// Optional: Mock status polling to prevent console red ink
+app.get('/api/mock-verifier/status', (_req, res) => {
+  res.json({ status: 'pending' })
+})
+
 app.listen(PORT, () => {
   console.log(`[bff] Playground BFF running on http://localhost:${PORT}`)
   for (const { prefix, target } of PROXIES) console.log(`  ${prefix} → ${target}`)
+  console.log(`[issuer] ${playgroundIssuer.identifier}`)
+  console.log(`[issuer] signing did ${playgroundIssuer.key.did}`)
+  console.log(`[wallet] holder did ${playgroundWallet.key.did}`)
 })
