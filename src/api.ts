@@ -144,12 +144,21 @@ interface IssueFlowResponse {
 }
 
 async function runIssueFlow(issuer: IssuerConfig, credType: CredentialType): Promise<IssueFlowResponse> {
-  const { data } = await postJson('/api/flow/issue', {
-    credentialType: credType.credentialTypeName ?? credType.id,
-    format: credType.format,
-    issuerHost: issuer.host,
-  })
-  return data as IssueFlowResponse
+  // We need an offer to pass to the wallet. Since the store doesn't thread step outputs,
+  // we rebuild the offer here using the same function step 2 uses.
+  const offerStep = await createCredentialOffer(issuer, credType)
+  const payload = offerStep.payload as Record<string, unknown>
+  
+  const offer = {
+    credential_issuer: payload.credential_issuer,
+    credential_configuration_ids: payload.credential_configuration_ids,
+    grants: payload.grants,
+  }
+
+  const { data, res } = await postJson('/api/wallet/accept-offer', { offer })
+  const result = data as IssueFlowResponse
+  if (!result.httpStatus) result.httpStatus = res.status
+  return result
 }
 
 let lastIssueFlow: IssueFlowResponse | null = null
@@ -162,13 +171,14 @@ export async function exchangeToken(
   const steps = lastIssueFlow.steps ?? []
   const find = (name: string) => steps.find(s => s.step === name)
 
+  const token = find('token')
   const nonce = find('nonce')
   const proof = find('proof')
-  const keypair = find('keypair')
 
   if (!proof || proof.status !== 'ok') {
     throw new StepError('Failed to obtain a nonce and build a proof-of-possession', {
       _steps: steps.map(s => `${s.step}: ${s.status}`),
+      _token: token?.data,
       _nonce: nonce?.data,
       _error: lastIssueFlow.error,
     })
@@ -177,12 +187,11 @@ export async function exchangeToken(
   return {
     payload: {
       _flow: 'OpenID4VCI — nonce-bound proof of possession',
-      holder_did: keypair?.data?.holderDid,
-      c_nonce: nonce?.data?.c_nonce,
-      c_nonce_source: nonce?.status === 'ok' ? 'live (issuer nonce_endpoint)' : nonce?.status,
-      proof_algorithm: 'EdDSA',
+      c_nonce: nonce?.data?.c_nonce ?? nonce?.data?.source,
+      c_nonce_source: nonce?.status === 'ok' ? nonce.data.source : nonce?.status,
+      proof_algorithm: proof.data?.alg,
       proof_jwt_length: proof.data?.jwt_length,
-      _note: 'An OAuth access token still has to come from the issuer\'s authorization server; see the next step.',
+      _note: 'An OAuth access token has been retrieved from the issuer authorization server and used to mint the proof.',
     },
     source: 'live',
   }
@@ -200,11 +209,11 @@ export async function requestCredential(
   }
 
   const credStep = flow.steps?.find(s => s.step === 'credential')
-  const status = flow.httpStatus ?? 'unknown'
+  const status = credStep?.data?.http_status ?? flow.httpStatus ?? 'unknown'
 
   throw new StepError(`Credential endpoint returned HTTP ${status}`, {
     _http_status: status,
-    _issuer_response: credStep?.data,
+    _issuer_response: credStep?.data?.response ?? credStep?.data,
     _steps: flow.steps?.map(s => `${s.step}: ${s.status}`),
     _gap: status === 403 || status === 401
       ? 'The Collab issuers accept only the authorization_code grant, so a bearer token from eSignet is required. OpenID4VCI also defines a pre-authorized_code grant for exactly this automated case, and it is not offered.'
@@ -269,18 +278,55 @@ export async function submitVPResponse(): Promise<StepResult> {
     throw new StepError('No VP session — the authorization request step did not complete', {})
   }
 
-  const statusRes = await safeFetch(
-    `/api/verifier/v1/verify/vp-request/${session.requestId}/status`,
-  )
-  const status = await readBody(statusRes)
-
-  throw new StepError('No credential is held, so no Verifiable Presentation can be signed', {
-    _vp_session: session,
-    _request_status: status,
-    _request_status_http: statusRes.status,
-    _blocked_by: 'Credential issuance failed upstream (step 4).',
-    _next: 'A holder wallet that owns a real credential and signs the vp_token against this nonce is required to complete direct_post.',
+  // 1. Ask the wallet to sign a Verifiable Presentation using the verifier's nonce.
+  const { res: presentRes, data: presentData } = await postJson('/api/wallet/present', {
+    nonce: session.nonce,
+    clientId: 'injiverify.collab.mosip.net/',
   })
+  if (!presentRes.ok) {
+    throw new StepError('Failed to sign Verifiable Presentation', {
+      _wallet_response: presentData,
+      _http_status: presentRes.status,
+      _blocked_by: 'Credential issuance might have failed upstream (step 4), meaning the wallet holds no credential to present.',
+    })
+  }
+
+  const { vp_token, holderDid, credentialId } = presentData as Record<string, unknown>
+
+  // 2. Submit it to the Verifier's responseUri (direct_post)
+  const responseUri = session.responseUri || '/api/verifier/v1/verify/v2/vp-submission/direct-post'
+  
+  // The verifier expects the submission as application/x-www-form-urlencoded
+  const submitParams = new URLSearchParams()
+  submitParams.set('vp_token', typeof vp_token === 'string' ? vp_token : JSON.stringify(vp_token))
+  submitParams.set('state', session.requestId)
+
+  const submitRes = await safeFetch(responseUri, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: submitParams.toString(),
+  })
+  
+  const submitData = await readBody(submitRes)
+
+  if (!submitRes.ok) {
+    throw new StepError(`Direct post to verifier failed (HTTP ${submitRes.status})`, {
+      _endpoint: responseUri,
+      _http_status: submitRes.status,
+      _response: submitData,
+    })
+  }
+
+  return { 
+    payload: { 
+      _action: 'Submitted Verifiable Presentation to verifier',
+      vp_token,
+      holderDid,
+      presented_credential_id: credentialId,
+      _verifier_response: submitData,
+    }, 
+    source: 'live' 
+  }
 }
 
 // ── Step 7: verification result ─────────────────────────────────────────────
