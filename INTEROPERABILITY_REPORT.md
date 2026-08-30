@@ -6,7 +6,7 @@
 
 ## Gap 1: No Pre-Authorized Code Grant on the Mock Issuer
 
-**Severity**: 🔴 Blocking  
+**Severity**: Blocking  
 **Component**: Inji Certify (Mock Identity) — `injicertify-mock.collab.mosip.net`  
 **Protocol**: OpenID4VCI  
 
@@ -35,11 +35,11 @@ POST /v1/certify/issuance/credential → HTTP 403 Forbidden
 ```
 
 All prerequisite steps succeed:
-- ✅ Keypair generation (EdDSA)
-- ✅ Metadata discovery
-- ✅ Nonce retrieval (`c_nonce` from `/v1/certify/nonce`)
-- ✅ JWT proof-of-possession construction
-- ❌ Credential issuance (requires OAuth token)
+- Keypair generation (EdDSA)
+- Metadata discovery
+- Nonce retrieval (`c_nonce` from `/v1/certify/nonce`)
+- JWT proof-of-possession construction
+- Credential issuance (requires OAuth token) [FAILED]
 
 ### Recommendation
 
@@ -49,7 +49,7 @@ Provide a `pre-authorized_code` grant on the mock issuer for testing purposes, o
 
 ## Gap 2: CORS Restrictions on Inji Verify API
 
-**Severity**: 🟡 Significant  
+**Severity**: Significant  
 **Component**: Inji Verify — `api.collab.mosip.net`  
 **Protocol**: OpenID4VP  
 
@@ -74,7 +74,7 @@ Add `Access-Control-Allow-Origin: *` (or a configurable allowlist) to the Inji V
 
 ## Gap 3: `@mosip/react-inji-verify-sdk` Requires React 18
 
-**Severity**: 🟡 Significant  
+**Severity**: Significant  
 **Component**: `@mosip/react-inji-verify-sdk@0.17.0-beta.13`  
 **Protocol**: N/A (SDK compatibility)  
 
@@ -103,7 +103,7 @@ Update the SDK to use `peerDependencies` for React rather than bundling React in
 
 ## Gap 4: eSignet Mock Requires Dynamic OTP
 
-**Severity**: 🟡 Significant  
+**Severity**: Significant  
 **Component**: eSignet Mock — `esignet-mock.collab.mosip.net`  
 **Protocol**: OAuth 2.0 / OIDC  
 
@@ -125,7 +125,7 @@ Provide a static test OTP mode for the mock eSignet, or expose a `/test/authenti
 
 ## Gap 5: Credential Offer Endpoint Not Discoverable
 
-**Severity**: 🟢 Minor  
+**Severity**: Minor  
 **Component**: Inji Certify (Mock) — OpenID4VCI  
 **Protocol**: OpenID4VCI  
 
@@ -143,11 +143,11 @@ Playground applications must construct credential offers manually from metadata 
 
 | Gap | Component | Severity | Workaround Available |
 |-----|-----------|----------|---------------------|
-| No pre-authorized code grant | Inji Certify Mock | 🔴 Blocking | None (requires manual OAuth) |
-| CORS on verify API | Inji Verify | 🟡 Significant | BFF proxy |
-| SDK requires React 18 | react-inji-verify-sdk | 🟡 Significant | Downgrade React |
-| Dynamic OTP on eSignet | eSignet Mock | 🟡 Significant | None (requires email access) |
-| No credential offer endpoint | Inji Certify Mock | 🟢 Minor | Manual construction |
+| No pre-authorized code grant | Inji Certify Mock | Blocking | None (requires manual OAuth) |
+| CORS on verify API | Inji Verify | Significant | BFF proxy |
+| SDK requires React 18 | react-inji-verify-sdk | Significant | Downgrade React |
+| Dynamic OTP on eSignet | eSignet Mock | Significant | None (requires email access) |
+| No credential offer endpoint | Inji Certify Mock | Minor | Manual construction |
 
 ---
 

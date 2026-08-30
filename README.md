@@ -2,7 +2,7 @@
 
 A unified web application for testing **Verifiable Credential interoperability** across the [MOSIP Inji](https://docs.inji.io/) ecosystem. Issue, hold, present, and verify credentials across Inji Certify, Inji Web, and Inji Verify — visualizing every protocol exchange along the way.
 
-## ✨ Features
+## Features
 
 - **3-Column Role Selector** — Pick an Issuer, Wallet, and Verifier from a matrix of implementations
 - **Live Sandbox Integration** — Connects to the MOSIP Collab sandbox via a BFF proxy for real API calls
@@ -12,7 +12,7 @@ A unified web application for testing **Verifiable Credential interoperability**
 - **Run History** — Track and compare multiple test runs
 - **Multi-Format Support** — W3C VC (JSON-LD) and SD-JWT VC credential formats
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -59,7 +59,7 @@ OpenID4VCI (Issuance)                    OpenID4VP (Verification)
 4. Credential Issuance
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -97,7 +97,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 npm run dev:all
 ```
 
-## 🎮 Usage
+## Usage
 
 1. **Select Roles** — Choose an Issuer, Wallet, and Verifier from the selector cards
 2. **Pick a Credential Format** — W3C VC (JSON-LD) or SD-JWT VC
@@ -107,10 +107,10 @@ npm run dev:all
 6. **Check the Sequence Diagram** — See the protocol message flow visualized
 
 Each step shows a **`live`** or **`mock`** badge:
-- 🟢 **live** — Data came from the real Collab sandbox
-- 🟡 **mock** — Simulated locally (fallback or wallet-initiated step)
+- **live** — Data came from the real Collab sandbox
+- **mock** — Simulated locally (fallback or wallet-initiated step)
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 inji-playground/
@@ -135,7 +135,7 @@ inji-playground/
 └── tsconfig.json
 ```
 
-## 🔧 Tech Stack
+## Tech Stack
 
 | Component | Technology |
 |-----------|-----------|
@@ -147,7 +147,7 @@ inji-playground/
 | Crypto | jose (JWT signing, key generation) |
 | Sandbox | MOSIP Collab Environment |
 
-## 🌐 Sandbox Endpoints
+## Sandbox Endpoints
 
 | Service | URL |
 |---------|-----|
@@ -155,7 +155,7 @@ inji-playground/
 | eSignet (Mock) | `https://esignet-mock.collab.mosip.net` |
 | Inji Verify | `https://api.collab.mosip.net` |
 
-## 📋 Supported Combinations
+## Supported Combinations
 
 | Issuer | Wallet | Verifier | Format | Status |
 |--------|--------|----------|--------|--------|
@@ -163,7 +163,7 @@ inji-playground/
 | Inji Certify (Mock Identity) | Inji Web | Inji Verify | SD-JWT VC | Live sandbox calls |
 | Inji Certify (Mock Identity) | Inji Wallet (Mobile) | Inji Verify | W3C VC (JSON-LD) | Live sandbox calls |
 
-## 🔍 Interoperability Findings
+## Interoperability Findings
 
 ### What Works
 - Issuer metadata discovery returns complete OpenID4VCI configuration
@@ -176,6 +176,6 @@ inji-playground/
 - eSignet-mock requires dynamic OTP (not static) making automated testing complex
 - The credential endpoint returns 403 without a valid access token, even with a correct JWT proof
 
-## 📄 License
+## License
 
 MIT
