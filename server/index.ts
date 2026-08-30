@@ -10,7 +10,7 @@ const PORT = Number(process.env.PORT || 3001)
 // Override when a tunnel is fronting the BFF, so credential offers and QR codes
 // carry a URL a phone can actually reach.
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, '')
-const ISSUER_MOUNT = '/playground/issuer'
+const ISSUER_MOUNT = '/api/playground-issuer'
 const PLAYGROUND_ISSUER_ID = `${PUBLIC_BASE_URL}${ISSUER_MOUNT}`
 
 // ── Collab sandbox endpoints ────────────────────────────────────────────────

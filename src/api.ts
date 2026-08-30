@@ -109,6 +109,27 @@ export async function createCredentialOffer(
   }
 
   const configId = credType.credentialTypeName ?? credType.id
+
+  if (issuer.id === 'certify-playground') {
+    // Fetch a real offer from our playground issuer that includes a valid pre-authorized_code
+    const offerRes = await postJson('/api/playground-issuer/offer', {
+      configurationId: configId,
+    })
+    
+    if (offerRes.res.ok) {
+      const { credential_offer, credential_offer_uri } = offerRes.data as Record<string, any>
+      return {
+        payload: {
+          ...credential_offer,
+          _offer_uri: credential_offer_uri,
+          _constructed_by: 'issuer',
+          _reason: 'Fetched from the internal Playground Issuer /offer endpoint.',
+        },
+        source: 'live',
+      }
+    }
+  }
+
   return {
     payload: {
       credential_issuer: metadata.credential_issuer,
@@ -294,11 +315,25 @@ export async function submitVPResponse(): Promise<StepResult> {
   const { vp_token, holderDid, credentialId } = presentData as Record<string, unknown>
 
   // 2. Submit it to the Verifier's responseUri (direct_post)
-  const responseUri = session.responseUri || '/api/verifier/v1/verify/v2/vp-submission/direct-post'
+  let responseUri = session.responseUri || '/api/verifier/v1/verify/v2/vp-submission/direct-post'
   
-  // The verifier expects the submission as application/x-www-form-urlencoded
+  // The verifier returns an absolute URL (https://injiverify.collab.mosip.net/...), 
+  // which will fail with a CORS error if fetched directly from the browser. 
+  // We rewrite it to go through our BFF proxy.
+  if (responseUri.startsWith('https://injiverify.collab.mosip.net')) {
+    responseUri = responseUri.replace('https://injiverify.collab.mosip.net', '/api/verifier')
+  }
+
+  // The verifier expects the submission as application/x-www-form-urlencoded.
+  // Because it uses DCQL (v2 API), the vp_token must not be the raw presentation,
+  // but a JSON object mapping the query ID to an array of presentations.
+  const queryId = session.dcqlQuery.credentials[0]?.id || 'credential_1'
+  const dcqlVpToken = {
+    [queryId]: Array.isArray(vp_token) ? vp_token : [vp_token]
+  }
+
   const submitParams = new URLSearchParams()
-  submitParams.set('vp_token', typeof vp_token === 'string' ? vp_token : JSON.stringify(vp_token))
+  submitParams.set('vp_token', JSON.stringify(dcqlVpToken))
   submitParams.set('state', session.requestId)
 
   const submitRes = await safeFetch(responseUri, {

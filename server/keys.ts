@@ -205,3 +205,97 @@ export function didKeyDocument(key: PlaygroundKey): Record<string, unknown> {
     assertionMethod: [key.verificationMethod],
   }
 }
+
+// ── Resolving someone else's DID ─────────────────────────────────────────────
+// The credential endpoint has to verify a wallet's proof-of-possession JWT, and
+// the only key material it gets is whatever the JWT header names. Both DID
+// methods below are self-describing, so this stays offline: no resolver service,
+// no network fetch, nothing to be unreachable at verification time.
+
+const P256_P = 2n ** 256n - 2n ** 224n + 2n ** 192n + 2n ** 96n - 1n
+const P256_B = 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604bn
+
+function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
+  let result = 1n
+  let b = base % mod
+  let e = exp
+  while (e > 0n) {
+    if (e & 1n) result = (result * b) % mod
+    b = (b * b) % mod
+    e >>= 1n
+  }
+  return result
+}
+
+/**
+ * Recovers y from a compressed SEC1 point. P-256's prime is 3 mod 4, so the
+ * square root is a single exponentiation rather than a full Tonelli-Shanks.
+ */
+function decompressP256(compressed: Uint8Array): { x: Uint8Array; y: Uint8Array } {
+  const prefix = compressed[0]
+  if (prefix !== 0x02 && prefix !== 0x03) throw new Error('Not a compressed SEC1 point')
+  const xBytes = compressed.subarray(1, 33)
+  const x = BigInt(`0x${Buffer.from(xBytes).toString('hex')}`)
+
+  // y² = x³ - 3x + b (mod p)
+  const ySquared = (modPow(x, 3n, P256_P) - 3n * x + P256_B) % P256_P
+  let y = modPow((ySquared + P256_P) % P256_P, (P256_P + 1n) / 4n, P256_P)
+
+  // The prefix encodes y's parity; flip to the other root if it disagrees.
+  if ((y & 1n) !== BigInt(prefix & 1)) y = P256_P - y
+
+  return {
+    x: xBytes,
+    y: Uint8Array.from(Buffer.from(y.toString(16).padStart(64, '0'), 'hex')),
+  }
+}
+
+export interface ResolvedDidKey {
+  did: string
+  publicJwk: jose.JWK
+  alg: 'EdDSA' | 'ES256'
+}
+
+export function publicJwkFromDidKey(did: string): ResolvedDidKey {
+  const multibase = did.slice('did:key:'.length).split('#')[0]
+  if (!multibase.startsWith('z')) throw new Error(`Unsupported did:key encoding in ${did}`)
+  const bytes = base58Decode(multibase.slice(1))
+
+  if (bytes[0] === MULTICODEC.ed25519Pub[0] && bytes[1] === MULTICODEC.ed25519Pub[1]) {
+    return {
+      did: `did:key:${multibase}`,
+      alg: 'EdDSA',
+      publicJwk: { kty: 'OKP', crv: 'Ed25519', x: b64u(bytes.subarray(2)) },
+    }
+  }
+
+  if (bytes[0] === MULTICODEC.p256Pub[0] && bytes[1] === MULTICODEC.p256Pub[1]) {
+    const { x, y } = decompressP256(bytes.subarray(2))
+    return {
+      did: `did:key:${multibase}`,
+      alg: 'ES256',
+      publicJwk: { kty: 'EC', crv: 'P-256', x: b64u(x), y: b64u(y) },
+    }
+  }
+
+  throw new Error(`Unsupported did:key multicodec 0x${bytes[0].toString(16)}${bytes[1].toString(16)}`)
+}
+
+export function publicJwkFromDidJwk(did: string): ResolvedDidKey {
+  const encoded = did.slice('did:jwk:'.length).split('#')[0]
+  let publicJwk: jose.JWK
+  try {
+    publicJwk = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'))
+  } catch {
+    throw new Error('did:jwk payload is not base64url-encoded JSON')
+  }
+  return { did: `did:jwk:${encoded}`, publicJwk, alg: publicJwk.crv === 'Ed25519' ? 'EdDSA' : 'ES256' }
+}
+
+/** Resolves either supported DID method, or reports which ones are supported. */
+export function resolveDid(did: string): ResolvedDidKey {
+  if (did.startsWith('did:key:')) return publicJwkFromDidKey(did)
+  if (did.startsWith('did:jwk:')) return publicJwkFromDidJwk(did)
+  throw new Error(`Unsupported DID method in ${did.split(':').slice(0, 2).join(':')} — expected did:key or did:jwk`)
+}
+

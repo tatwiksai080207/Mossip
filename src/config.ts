@@ -27,7 +27,34 @@ const mockLdp20: CredentialType = {
   dataModel: '2.0',
 }
 
+const playgroundLdp: CredentialType = {
+  id: 'PlaygroundIdentityCredential',
+  name: 'Playground Identity (W3C VC 1.1)',
+  format: 'ldp_vc',
+  proofTypes: ['Ed25519Signature2020'],
+  credentialTypeName: 'PlaygroundIdentityCredential',
+  vcTypes: ['VerifiableCredential', 'PlaygroundIdentityCredential'],
+  dataModel: '1.1',
+}
+
+const playgroundLdp20: CredentialType = {
+  id: 'PlaygroundIdentityCredential_VCDM2.0',
+  name: 'Playground Identity (W3C VC 2.0)',
+  format: 'ldp_vc',
+  proofTypes: ['Ed25519Signature2020'],
+  credentialTypeName: 'PlaygroundIdentityCredential',
+  vcTypes: ['VerifiableCredential', 'PlaygroundIdentityCredential'],
+  dataModel: '2.0',
+}
+
 export const issuers: IssuerConfig[] = [
+  {
+    id: 'certify-playground',
+    name: 'Playground Issuer',
+    description: 'Internal OpenID4VCI mock issuer — supports headless pre-authorized_code flow',
+    host: 'http://localhost:3001/api/playground-issuer',
+    credentialTypes: [playgroundLdp, playgroundLdp20],
+  },
   {
     id: 'certify-mock',
     name: 'Inji Certify (Mock Identity)',
