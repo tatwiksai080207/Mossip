@@ -56,6 +56,32 @@ export const issuers: IssuerConfig[] = [
     credentialTypes: [playgroundLdp, playgroundLdp20],
   },
   {
+    id: 'certify-local',
+    name: 'Local Inji Certify',
+    description: 'Local MOSIP Docker Stack Issuer',
+    host: 'http://localhost:3001/api/local-certify',
+    credentialTypes: [
+      {
+        id: 'farmer-ldp-vcdm11',
+        name: 'W3C VC 1.1 (JSON-LD)',
+        format: 'ldp_vc',
+        proofTypes: ['Ed25519Signature2020'],
+        credentialTypeName: 'FarmerCredential',
+        vcTypes: ['VerifiableCredential', 'FarmerCredential'],
+        dataModel: '1.1',
+      },
+      {
+        id: 'farmer-ldp-vcdm20',
+        name: 'W3C VC 2.0 (JSON-LD)',
+        format: 'ldp_vc',
+        proofTypes: ['Ed25519Signature2020'],
+        credentialTypeName: 'FarmerCredential',
+        vcTypes: ['VerifiableCredential', 'FarmerCredential'],
+        dataModel: '2.0',
+      }
+    ],
+  },
+  {
     id: 'certify-mock',
     name: 'Inji Certify (Mock Identity)',
     description: 'Collab mock issuer — advertises VCDM 1.1 and 2.0 configurations',

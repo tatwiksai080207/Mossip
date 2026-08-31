@@ -21,7 +21,7 @@ function statusColor(status: StepStatus) {
 }
 
 export default function FlowProgress() {
-  const { steps, isRunning } = useStore()
+  const { steps, isRunning, pausedStep, oauthUrl } = useStore()
   const [expandedStep, setExpandedStep] = useState<string | null>(null)
 
   if (steps.length === 0) return null
@@ -57,8 +57,19 @@ export default function FlowProgress() {
               }>
                 {step.label}
               </span>
-              {step.status === 'running' && (
+              {step.status === 'running' && pausedStep !== step.id && (
                 <span className="text-xs text-blue-400 ml-auto">in progress</span>
+              )}
+              {step.status === 'running' && pausedStep === step.id && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (oauthUrl) window.open(oauthUrl, 'eSignet Login', 'width=500,height=600')
+                  }}
+                  className="ml-auto text-xs font-medium px-2.5 py-1 rounded bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition-colors"
+                >
+                  Login via eSignet
+                </button>
               )}
               {step.status === 'done' && (
                 <span className="flex items-center gap-2 ml-auto">

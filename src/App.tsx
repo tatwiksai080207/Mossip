@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import Header from './components/Header'
 import RoleSelector from './components/RoleSelector'
 import FlowProgress from './components/FlowProgress'
@@ -11,8 +12,30 @@ import { useStore } from './store'
 function App() {
   const {
     selectedIssuer, selectedWallet, selectedVerifier, selectedCredType,
-    steps, isRunning, runFlow,
+    steps, isRunning, runFlow, resumeOAuthFlow
   } = useStore()
+
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'oauth-code' && e.data.code) {
+        resumeOAuthFlow(e.data.code)
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [resumeOAuthFlow])
+
+  if (window.location.pathname === '/callback') {
+    const code = new URLSearchParams(window.location.search).get('code')
+    if (code) {
+      if (window.opener) {
+        window.opener.postMessage({ type: 'oauth-code', code }, '*')
+        window.close()
+      }
+      return <div className="p-10 text-white font-mono">Authenticating... You can close this window.</div>
+    }
+    return <div className="p-10 text-red-400 font-mono">Authentication failed: No code provided.</div>
+  }
 
   const canRun = selectedIssuer && selectedWallet && selectedVerifier && selectedCredType && !isRunning
   const flowHasRun = !isRunning && steps.length > 0 && steps.every(s => s.status !== 'pending' && s.status !== 'running')

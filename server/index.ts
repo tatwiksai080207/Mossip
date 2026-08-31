@@ -1,8 +1,12 @@
 import express from 'express'
 import cors from 'cors'
 import * as jose from 'jose'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { createIssuer } from './issuer'
 import { createWallet } from './wallet'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const app = express()
 const PORT = Number(process.env.PORT || 3001)
@@ -25,6 +29,8 @@ const ENDPOINTS = {
   esignetMock: 'https://esignet-mock.collab.mosip.net',
   verifier: 'https://injiverify.collab.mosip.net',
   mimoto: 'https://api.collab.mosip.net/v1/mimoto',
+  localCertify: 'http://localhost:8090/v1/certify',
+  localVerifier: 'http://localhost:8095/v1/verify',
 }
 
 // Inji Verify exposes a v2, DCQL-based API that the cloned repo predates.
@@ -101,6 +107,8 @@ const PROXIES: { prefix: string; target: string; label: string }[] = [
   { prefix: '/api/esignet-mock', target: ENDPOINTS.esignetMock, label: 'eSignet (mock)' },
   { prefix: '/api/verifier', target: ENDPOINTS.verifier, label: 'verifier' },
   { prefix: '/api/mimoto', target: ENDPOINTS.mimoto, label: 'Mimoto' },
+  { prefix: '/api/local-certify', target: ENDPOINTS.localCertify, label: 'Local Certify' },
+  { prefix: '/api/local-verifier', target: ENDPOINTS.localVerifier, label: 'Local Verifier' },
 ]
 
 for (const { prefix, target, label } of PROXIES) {
@@ -186,6 +194,7 @@ app.get('/api/registry/issuers', async (_req, res) => {
 async function assertAllowedIssuerHost(host: string) {
   if (host === ENDPOINTS.issuer) return
   if (host === PLAYGROUND_ISSUER_ID) return
+  if (host === 'http://localhost:3001/api/local-certify') return
   const registry = await loadRegistry()
   if (!registry.some(i => i.credentialIssuerHost === host)) {
     throw new Error(`Issuer host not in Mimoto registry: ${host}`)
@@ -231,8 +240,14 @@ app.post('/api/flow/issue', async (req, res) => {
     const metadataRes = await fetch(`${issuerHost}/.well-known/openid-credential-issuer`)
     if (!metadataRes.ok) throw new Error(`Metadata discovery returned HTTP ${metadataRes.status}`)
     const metadata = await metadataRes.json() as Record<string, unknown>
-    const credEndpoint = metadata.credential_endpoint as string
-    const nonceEndpoint = metadata.nonce_endpoint as string
+    let credEndpoint = metadata.credential_endpoint as string
+    let nonceEndpoint = metadata.nonce_endpoint as string
+    if (credEndpoint?.includes('certify-nginx')) {
+      credEndpoint = credEndpoint.replace('http://certify-nginx:80/v1/certify', issuerHost)
+    }
+    if (nonceEndpoint?.includes('certify-nginx')) {
+      nonceEndpoint = nonceEndpoint.replace('http://certify-nginx:80/v1/certify', issuerHost)
+    }
     steps.push({
       step: 'metadata',
       status: 'ok',
@@ -339,6 +354,16 @@ app.post('/api/mock-verifier/authorization-request', (_req, res) => {
 // Optional: Mock status polling to prevent console red ink
 app.get('/api/mock-verifier/status', (_req, res) => {
   res.json({ status: 'pending' })
+})
+
+// ── Serve React Frontend ────────────────────────────────────────────────────
+// In production (e.g. inside Docker), the BFF serves the compiled React app
+const distPath = path.join(__dirname, '../dist')
+app.use(express.static(distPath))
+
+app.get('/*splat', (_req, res) => {
+  // If we get here and the file exists, send it (fallback for react-router)
+  res.sendFile(path.join(distPath, 'index.html'))
 })
 
 app.listen(PORT, () => {

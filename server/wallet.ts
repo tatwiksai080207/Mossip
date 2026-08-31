@@ -140,7 +140,7 @@ export async function createWallet(): Promise<Wallet> {
 
   async function acceptOffer(
     input: unknown,
-    opts: { accessToken?: string; txCode?: string } = {},
+    opts: { accessToken?: string; txCode?: string; authCode?: string; clientId?: string } = {},
   ): Promise<AcceptOfferResult> {
     const steps: WalletStep[] = []
     const record = (step: string, status: StepStatus, data: Record<string, unknown>) => {
@@ -187,6 +187,41 @@ export async function createWallet(): Promise<Wallet> {
 
     if (accessToken) {
       record('token', 'skipped', { reason: 'A caller-supplied access token was used', token_length: accessToken.length })
+    } else if (opts.authCode) {
+      // Exchange authorization_code for access_token
+      try {
+        const tokenEndpoint = metadata.token_endpoint as string
+        if (!tokenEndpoint) throw new Error('No token_endpoint in issuer metadata')
+        
+        const response = await fetch(tokenEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            client_id: opts.clientId || 'mpartner-default-mimoto-mosipid-oidc',
+            code: opts.authCode,
+            redirect_uri: 'http://localhost:3000/callback',
+          }).toString()
+        })
+        
+        if (!response.ok) {
+          throw new Error(`Token endpoint returned ${response.status}: ${await response.text()}`)
+        }
+        const data = await response.json() as Record<string, unknown>
+        accessToken = data.access_token as string
+        cNonce = data.c_nonce as string
+        
+        record('token', 'ok', {
+          grant: 'authorization_code',
+          expires_in: data.expires_in,
+          has_nonce: !!cNonce
+        })
+      } catch (err) {
+        record('token', 'failed', { error: String(err) })
+        return bail(String(err))
+      }
     } else {
       const grants = offer.grants ?? {}
       const preAuth = grants[PRE_AUTH_GRANT]
@@ -344,8 +379,8 @@ export async function createWallet(): Promise<Wallet> {
   })
 
   router.post('/accept-offer', async (req: Request, res: Response) => {
-    const { offer, offerUri, accessToken, txCode } = req.body ?? {}
-    const result = await acceptOffer(offer ?? offerUri, { accessToken, txCode })
+    const { offer, offerUri, accessToken, txCode, authCode, clientId } = req.body ?? {}
+    const result = await acceptOffer(offer ?? offerUri, { accessToken, txCode, authCode, clientId })
     res.status(result.success ? 200 : 400).json(result)
   })
 

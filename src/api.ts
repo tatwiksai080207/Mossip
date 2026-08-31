@@ -164,7 +164,7 @@ interface IssueFlowResponse {
   steps?: { step: string; status: string; data: Record<string, unknown> }[]
 }
 
-async function runIssueFlow(issuer: IssuerConfig, credType: CredentialType): Promise<IssueFlowResponse> {
+async function runIssueFlow(issuer: IssuerConfig, credType: CredentialType, authCode?: string): Promise<IssueFlowResponse> {
   // We need an offer to pass to the wallet. Since the store doesn't thread step outputs,
   // we rebuild the offer here using the same function step 2 uses.
   const offerStep = await createCredentialOffer(issuer, credType)
@@ -173,10 +173,55 @@ async function runIssueFlow(issuer: IssuerConfig, credType: CredentialType): Pro
   const offer = {
     credential_issuer: payload.credential_issuer,
     credential_configuration_ids: payload.credential_configuration_ids,
-    grants: payload.grants,
+    grants: payload.grants as Record<string, unknown>,
   }
 
-  const { data, res } = await postJson('/api/wallet/accept-offer', { offer })
+  if (!authCode) {
+    const preAuth = offer.grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']
+    const authCodeGrant = offer.grants['authorization_code']
+
+    if (!preAuth && authCodeGrant) {
+      // Need manual intervention!
+      const metadata = await fetchIssuerMetadata(issuer)
+      const authServers = (metadata.payload as any).authorization_servers as string[] | undefined
+      if (authServers && authServers.length > 0) {
+        const authServerUrl = authServers[0]
+        
+        // Fetch the authorization server metadata to find the authorization endpoint
+        const asMetadataRes = await fetch(`${authServerUrl}/.well-known/openid-configuration`)
+        if (asMetadataRes.ok) {
+          const asMetadata = await asMetadataRes.json()
+          const authEndpoint = asMetadata.authorization_endpoint
+          
+          if (authEndpoint) {
+            const url = new URL(authEndpoint)
+            url.searchParams.set('client_id', issuer.clientId || 'mpartner-default-mimoto-mosipid-oidc')
+            url.searchParams.set('response_type', 'code')
+            url.searchParams.set('redirect_uri', 'http://localhost:3000/callback')
+            url.searchParams.set('scope', 'openid')
+            
+            const err = new Error('OAuthPauseRequired') as any
+            err.oauthUrl = url.toString()
+            throw err
+          }
+        } else {
+           // Fallback if discovery fails
+           const url = new URL(`${authServerUrl}/authorize`)
+           url.searchParams.set('client_id', issuer.clientId || 'mpartner-default-mimoto-mosipid-oidc')
+           url.searchParams.set('response_type', 'code')
+           url.searchParams.set('redirect_uri', 'http://localhost:3000/callback')
+           url.searchParams.set('scope', 'openid')
+           
+           const err = new Error('OAuthPauseRequired') as any
+           err.oauthUrl = url.toString()
+           throw err
+        }
+      }
+    }
+  }
+
+  const clientId = issuer.clientId || 'mpartner-default-mimoto-mosipid-oidc'
+  const { data, res } = await postJson('/api/wallet/accept-offer', { offer, authCode, clientId })
   const result = data as IssueFlowResponse
   if (!result.httpStatus) result.httpStatus = res.status
   return result
@@ -187,8 +232,9 @@ let lastIssueFlow: IssueFlowResponse | null = null
 export async function exchangeToken(
   issuer: IssuerConfig,
   credType: CredentialType,
+  code?: string,
 ): Promise<StepResult> {
-  lastIssueFlow = await runIssueFlow(issuer, credType)
+  lastIssueFlow = await runIssueFlow(issuer, credType, code)
   const steps = lastIssueFlow.steps ?? []
   const find = (name: string) => steps.find(s => s.step === name)
 

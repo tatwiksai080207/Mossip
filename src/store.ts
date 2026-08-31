@@ -19,6 +19,8 @@ interface PlaygroundStore {
   selectedCredType: CredentialType | null
   steps: FlowStepInfo[]
   isRunning: boolean
+  pausedStep: FlowStepInfo['id'] | null
+  oauthUrl: string | null
   history: TestRun[]
 
   selectIssuer: (issuer: IssuerConfig) => void
@@ -26,6 +28,7 @@ interface PlaygroundStore {
   selectVerifier: (verifier: VerifierConfig) => void
   selectCredType: (ct: CredentialType) => void
   runFlow: () => Promise<void>
+  resumeOAuthFlow: (code: string) => void
   clearHistory: () => void
 }
 
@@ -36,7 +39,11 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
   selectedCredType: null,
   steps: [],
   isRunning: false,
+  pausedStep: null,
+  oauthUrl: null,
   history: [],
+
+  _resumeResolver: null as ((code: string) => void) | null,
 
   selectIssuer: (issuer) => {
     set({
@@ -87,8 +94,35 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
           idx === i ? { ...s, status: 'done', payload: result.payload, source: result.source } : s
         )})
       } catch (err: unknown) {
+        const errObj = err as { stepPayload?: Record<string, unknown>; message?: string; oauthUrl?: string }
+        
+        if (errObj.message === 'OAuthPauseRequired' && errObj.oauthUrl) {
+          set({
+            pausedStep: stepId,
+            oauthUrl: errObj.oauthUrl,
+            steps: get().steps.map((s, idx) =>
+              idx === i ? { ...s, status: 'running' } : s
+            )
+          })
+
+          const code = await new Promise<string>(resolve => {
+            set({ _resumeResolver: resolve } as Partial<PlaygroundStore>)
+          })
+
+          set({ pausedStep: null, oauthUrl: null, _resumeResolver: null } as Partial<PlaygroundStore>)
+          
+          // Retry the step (assuming the API orchestrator will pick up the code or state)
+          // We pass the code to the exchangeToken step. We need to modify stepActions for token-exchange
+          if (stepId === 'token-exchange') {
+            const result = await api.exchangeToken(get().selectedIssuer!, get().selectedCredType!, code)
+            set({ steps: get().steps.map((s, idx) =>
+              idx === i ? { ...s, status: 'done', payload: result.payload, source: result.source } : s
+            )})
+          }
+          continue;
+        }
+
         // StepError carries a diagnostic payload; anything else is unexpected.
-        const errObj = err as { stepPayload?: Record<string, unknown>; message?: string }
         const payload = errObj.stepPayload
           ? { _error: errObj.message, ...errObj.stepPayload }
           : { _error: String(err) }
@@ -116,5 +150,12 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
     }
 
     set({ isRunning: false, history: [run, ...get().history] })
+  },
+
+  resumeOAuthFlow: (code: string) => {
+    const resolver = (get() as any)._resumeResolver
+    if (resolver) {
+      resolver(code)
+    }
   },
 }))

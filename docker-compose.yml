@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  playground:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inji-playground
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - PUBLIC_BASE_URL=http://localhost:3001
+    restart: unless-stopped
