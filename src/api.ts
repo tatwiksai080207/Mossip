@@ -197,7 +197,7 @@ async function runIssueFlow(issuer: IssuerConfig, credType: CredentialType, auth
             const url = new URL(authEndpoint)
             url.searchParams.set('client_id', issuer.clientId || 'mpartner-default-mimoto-mosipid-oidc')
             url.searchParams.set('response_type', 'code')
-            url.searchParams.set('redirect_uri', 'http://localhost:3000/callback')
+            url.searchParams.set('redirect_uri', 'http://localhost:3001/callback')
             url.searchParams.set('scope', 'openid')
             
             const err = new Error('OAuthPauseRequired') as any
@@ -209,7 +209,7 @@ async function runIssueFlow(issuer: IssuerConfig, credType: CredentialType, auth
            const url = new URL(`${authServerUrl}/authorize`)
            url.searchParams.set('client_id', issuer.clientId || 'mpartner-default-mimoto-mosipid-oidc')
            url.searchParams.set('response_type', 'code')
-           url.searchParams.set('redirect_uri', 'http://localhost:3000/callback')
+           url.searchParams.set('redirect_uri', 'http://localhost:3001/callback')
            url.searchParams.set('scope', 'openid')
            
            const err = new Error('OAuthPauseRequired') as any

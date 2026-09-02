@@ -178,6 +178,28 @@ export async function generateP256Key(): Promise<PlaygroundKey> {
   }
 }
 
+/** RSA key for maximum compatibility with Inji Certify proof validation. */
+export async function generateRS256Key(): Promise<PlaygroundKey> {
+  const { publicKey, privateKey } = await jose.generateKeyPair('RS256', { extractable: true })
+  const publicJwk = await jose.exportJWK(publicKey)
+  const privateJwk = await jose.exportJWK(privateKey)
+
+  // RSA keys don't have a standard multicodec for did:key in the same way,
+  // but we only need did:jwk for Certify anyway.
+  const did = didJwkFrom(publicJwk)
+  return {
+    alg: 'ES256' as const,
+    did,
+    didJwk: did,
+    verificationMethod: `${did}#0`,
+    publicKeyMultibase: '', // Not used for did:jwk
+    publicJwk,
+    privateJwk,
+    privateKey,
+    publicKey,
+  }
+}
+
 /**
  * The `did:key` DID document, so the playground can serve a resolvable document
  * for wallets that fetch rather than decode. Inji Verify decodes, but Inji Web

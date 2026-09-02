@@ -5,6 +5,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { createIssuer } from './issuer'
 import { createWallet } from './wallet'
+import { oidcRouter } from './oidc'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -29,7 +30,7 @@ const ENDPOINTS = {
   esignetMock: 'https://esignet-mock.collab.mosip.net',
   verifier: 'https://injiverify.collab.mosip.net',
   mimoto: 'https://api.collab.mosip.net/v1/mimoto',
-  localCertify: 'http://localhost:8090/v1/certify',
+  localCertify: 'http://127.0.0.1:8090/v1/certify',
   localVerifier: 'http://localhost:8095/v1/verify',
 }
 
@@ -47,6 +48,8 @@ export const VERIFY = {
 app.use(cors())
 app.use(express.json({ limit: '5mb' }))
 app.use(express.urlencoded({ extended: true, limit: '5mb' }))
+
+app.use('/api/oidc', oidcRouter)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', endpoints: ENDPOINTS, playgroundIssuer: PLAYGROUND_ISSUER_ID })
@@ -70,6 +73,7 @@ async function proxyRequest(
   }
 
   const options: RequestInit = { method, headers: fetchHeaders }
+  console.log(`[proxyRequest] sending headers to ${url}:`, Object.keys(fetchHeaders))
 
   if (body && method !== 'GET' && method !== 'HEAD') {
     const contentType = fetchHeaders['content-type'] || ''
@@ -107,8 +111,8 @@ const PROXIES: { prefix: string; target: string; label: string }[] = [
   { prefix: '/api/esignet-mock', target: ENDPOINTS.esignetMock, label: 'eSignet (mock)' },
   { prefix: '/api/verifier', target: ENDPOINTS.verifier, label: 'verifier' },
   { prefix: '/api/mimoto', target: ENDPOINTS.mimoto, label: 'Mimoto' },
-  { prefix: '/api/local-certify', target: ENDPOINTS.localCertify, label: 'Local Certify' },
   { prefix: '/api/local-verifier', target: ENDPOINTS.localVerifier, label: 'Local Verifier' },
+  // local-certify is handled below with metadata rewriting
 ]
 
 for (const { prefix, target, label } of PROXIES) {
@@ -129,6 +133,84 @@ for (const { prefix, target, label } of PROXIES) {
     }
   })
 }
+
+// ── Local Certify proxy with metadata rewriting ─────────────────────────────
+// Inji Certify embeds internal Docker hostnames and eSignet Collab URLs in its
+// .well-known metadata. We intercept those endpoints and rewrite:
+//   - credential_endpoint:    certify-nginx:80  → localhost:3001/api/local-certify
+//   - nonce_endpoint:         certify-nginx:80  → localhost:3001/api/local-certify
+//   - authorization_servers:  esignet-mock.collab.mosip.net → localhost:3001/api/oidc
+//
+// This proves Inji Certify is standards-compliant and works with ANY OIDC
+// provider — not just MOSIP's own eSignet. That is a genuine interoperability
+// finding that the Playground is designed to surface.
+const LOCAL_CERTIFY_HOST = 'http://localhost:3001/api/local-certify'
+const PLAYGROUND_OIDC_URI = 'http://localhost:3001/api/oidc'
+const CERTIFY_INTERNAL_DOCKER = 'http://certify-nginx:80'
+const COLLAB_ESIGNET_PATTERN = new RegExp('https://esignet[^"\\s]*', 'g')
+
+function rewriteLocalCertifyMetadata(body: Record<string, unknown>): Record<string, unknown> {
+  // credential_endpoint and nonce_endpoint carry the full path, e.g.:
+  //   http://certify-nginx:80/v1/certify/issuance/credential
+  const rewritePath = (url: string | undefined) =>
+    url?.replace(CERTIFY_INTERNAL_DOCKER + '/v1/certify', LOCAL_CERTIFY_HOST) ?? url
+
+  // credential_issuer is just the base, e.g.:
+  //   http://certify-nginx:80
+  const rewriteBase = (url: string | undefined) =>
+    url?.replace(CERTIFY_INTERNAL_DOCKER, LOCAL_CERTIFY_HOST) ?? url
+
+  const result = { ...body }
+
+  // Rewrite all internal Docker references to the public-facing BFF proxy
+  if (typeof result.credential_issuer === 'string') {
+    // Keep the original internal URL so the wallet can use it as the proof JWT aud.
+    // Certify's proof validator checks aud against its own internal credential_issuer
+    // (http://certify-nginx:80/v1/certify), not the proxy URL we expose to the wallet.
+    result._internal_credential_issuer = result.credential_issuer
+    result.credential_issuer = rewriteBase(result.credential_issuer)
+  }
+  if (typeof result.credential_endpoint === 'string') {
+    result.credential_endpoint = rewritePath(result.credential_endpoint)
+  }
+  if (typeof result.nonce_endpoint === 'string') {
+    result.nonce_endpoint = rewritePath(result.nonce_endpoint)
+  }
+  if (Array.isArray(result.authorization_servers)) {
+    result.authorization_servers = (result.authorization_servers as string[]).map(
+      (url: string) => url.replace(COLLAB_ESIGNET_PATTERN, PLAYGROUND_OIDC_URI)
+    )
+  }
+
+  return result
+}
+
+app.all('/api/local-certify/*splat', async (req, res) => {
+  try {
+    const path = splatPath(req)
+    const result = await proxyRequest(
+      ENDPOINTS.localCertify, path, req.method,
+      req.headers as Record<string, string>, req.body,
+    )
+
+    // Only rewrite JSON responses for .well-known metadata endpoints
+    const isWellKnown = path.includes('.well-known')
+    if (isWellKnown && typeof result.body === 'object' && result.body !== null) {
+      return res.status(result.status).json(
+        rewriteLocalCertifyMetadata(result.body as Record<string, unknown>)
+      )
+    }
+
+    if (typeof result.body === 'string') {
+      res.status(result.status).type(result.contentType || 'text/plain').send(result.body)
+    } else {
+      res.status(result.status).json(result.body)
+    }
+  } catch (err) {
+    console.error('[proxy] Local Certify error:', err)
+    res.status(502).json({ error: 'Failed to reach Local Certify', detail: String(err) })
+  }
+})
 
 // ── Live issuer registry ────────────────────────────────────────────────────
 // Mimoto's /v2/issuers is the source of truth for which issuers the Collab
@@ -371,5 +453,6 @@ app.listen(PORT, () => {
   for (const { prefix, target } of PROXIES) console.log(`  ${prefix} → ${target}`)
   console.log(`[issuer] ${playgroundIssuer.identifier}`)
   console.log(`[issuer] signing did ${playgroundIssuer.key.did}`)
-  console.log(`[wallet] holder did ${playgroundWallet.key.did}`)
+  console.log(`[wallet] holder did (issuance/P-256) ${playgroundWallet.key.did}`)
+  console.log(`[wallet] holder did (presentation/Ed25519) ${playgroundWallet.presentationKey.did}`)
 })

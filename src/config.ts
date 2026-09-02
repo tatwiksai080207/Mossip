@@ -58,8 +58,9 @@ export const issuers: IssuerConfig[] = [
   {
     id: 'certify-local',
     name: 'Local Inji Certify',
-    description: 'Local MOSIP Docker Stack Issuer',
+    description: 'Local MOSIP Docker Stack — uses the Playground OIDC Provider for token exchange',
     host: 'http://localhost:3001/api/local-certify',
+    clientId: 'playground-local-client',
     credentialTypes: [
       {
         id: 'farmer-ldp-vcdm11',

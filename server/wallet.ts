@@ -15,7 +15,7 @@
 
 import { Router, type Request, type Response } from 'express'
 import * as jose from 'jose'
-import { generateEd25519Key, type PlaygroundKey } from './keys'
+import { generateP256Key, generateEd25519Key, type PlaygroundKey } from './keys'
 import { signPresentation } from './formats/ldp'
 
 const PRE_AUTH_GRANT = 'urn:ietf:params:oauth:grant-type:pre-authorized_code'
@@ -119,20 +119,29 @@ export interface AcceptOfferResult {
 
 export interface Wallet {
   router: Router
+  /** P-256 key — used for the OpenID4VCI proof-of-possession JWT. */
   key: PlaygroundKey
+  /** Ed25519 key — used for signing Verifiable Presentations (Ed25519Signature2020). */
+  presentationKey: PlaygroundKey
   credentials: () => HeldCredential[]
   acceptOffer: (input: unknown, opts?: { accessToken?: string; txCode?: string }) => Promise<AcceptOfferResult>
 }
 
 export async function createWallet(): Promise<Wallet> {
-  // One holder identity per process. did:key, because that is the method the
-  // Collab Inji Verify deployment resolves without a network fetch.
-  const key = await generateEd25519Key()
+  // Two keys for two different cryptographic roles:
+  //   - issueKey (P-256 / ES256): signs the OpenID4VCI proof-of-possession JWT.
+  //     Certify 0.14.0 validates proofs using RS256 or ES256 — P-256 satisfies both.
+  //   - presentKey (Ed25519 / EdDSA): signs Verifiable Presentations using
+  //     Ed25519Signature2020. The LD-Proof suite requires an Ed25519 key and
+  //     won't accept P-256.
+  const key = await generateP256Key()
+  const presentationKey = await generateEd25519Key()
   const held = new Map<string, HeldCredential>()
 
   async function buildProofJwt(audience: string, nonce: string | undefined): Promise<string> {
+    // Always uses the P-256 issuance key for the OID4VCI credential request proof.
     return new jose.SignJWT(nonce ? { nonce } : {})
-      .setProtectedHeader({ alg: 'EdDSA', typ: 'openid4vci-proof+jwt', kid: key.verificationMethod })
+      .setProtectedHeader({ alg: 'ES256', typ: 'openid4vci-proof+jwt', jwk: key.publicJwk })
       .setAudience(audience)
       .setIssuedAt()
       .sign(key.privateKey)
@@ -188,10 +197,30 @@ export async function createWallet(): Promise<Wallet> {
     if (accessToken) {
       record('token', 'skipped', { reason: 'A caller-supplied access token was used', token_length: accessToken.length })
     } else if (opts.authCode) {
-      // Exchange authorization_code for access_token
+      // Exchange authorization_code for access_token.
+      // Per OpenID4VCI spec, the token_endpoint lives on the authorization server (AS),
+      // not the credential issuer. Discover it from authorization_servers[0].
       try {
-        const tokenEndpoint = metadata.token_endpoint as string
-        if (!tokenEndpoint) throw new Error('No token_endpoint in issuer metadata')
+        let tokenEndpoint = metadata.token_endpoint as string | undefined
+        
+        if (!tokenEndpoint) {
+          const authServers = metadata.authorization_servers as string[] | undefined
+          const asUrl = authServers?.[0]
+          if (asUrl) {
+            try {
+              const asDiscovery = await fetch(`${asUrl}/.well-known/openid-configuration`)
+              if (asDiscovery.ok) {
+                const asMetadata = await asDiscovery.json() as Record<string, unknown>
+                tokenEndpoint = asMetadata.token_endpoint as string
+              }
+            } catch {
+              // If AS discovery fails, try to construct token_endpoint from the AS URL
+              tokenEndpoint = `${asUrl}/token`
+            }
+          }
+        }
+        
+        if (!tokenEndpoint) throw new Error('No token_endpoint discoverable from issuer or authorization server metadata')
         
         const response = await fetch(tokenEndpoint, {
           method: 'POST',
@@ -200,9 +229,10 @@ export async function createWallet(): Promise<Wallet> {
           },
           body: new URLSearchParams({
             grant_type: 'authorization_code',
-            client_id: opts.clientId || 'mpartner-default-mimoto-mosipid-oidc',
-            code: opts.authCode,
-            redirect_uri: 'http://localhost:3000/callback',
+            code: opts.authCode!,
+            client_id: opts.clientId || 'mock_client_id',
+            redirect_uri: 'http://localhost:3001/callback',
+            wallet_jwk: JSON.stringify(key.publicJwk),
           }).toString()
         })
         
@@ -293,14 +323,26 @@ export async function createWallet(): Promise<Wallet> {
       record('nonce', 'skipped', { reason: 'No nonce_endpoint and no c_nonce; sending an unbound proof' })
     }
 
-    // 5 — proof of possession
-    const credentialIssuer = (metadata.credential_issuer as string | undefined) ?? offer.credential_issuer
-    const proofJwt = await buildProofJwt(credentialIssuer, cNonce)
+    // 5 - proof of possession
+    // The proof JWT 'aud' must match the issuer's INTERNAL credential_issuer identifier.
+    //
+    // For Local Certify, the BFF rewrites the metadata credential_issuer from the
+    // Docker-internal http://certify-nginx:80/v1/certify → http://localhost:3001/api/local-certify.
+    // But Certify validates the proof JWT aud against its OWN internal issuer ID.
+    // The rewriter stores the original value in _internal_credential_issuer for exactly this use.
+    //
+    // For the Playground issuer: no rewriting happens, so credential_issuer is already correct.
+    const proofAudience =
+      (metadata._internal_credential_issuer as string | undefined)
+      ?? (metadata.credential_issuer as string | undefined)
+      ?? offer.credential_issuer
+    const proofJwt = await buildProofJwt(proofAudience, cNonce)
     record('proof', 'ok', {
-      alg: 'EdDSA',
+      alg: 'ES256',
       typ: 'openid4vci-proof+jwt',
       kid: key.verificationMethod,
-      aud: credentialIssuer,
+      aud: proofAudience,
+      internal_issuer_used: Boolean(metadata._internal_credential_issuer),
       nonce_bound: Boolean(cNonce),
       jwt_length: proofJwt.length,
       decoded_header: jose.decodeProtectedHeader(proofJwt),
@@ -313,17 +355,53 @@ export async function createWallet(): Promise<Wallet> {
       return bail('Issuer metadata advertises no credential_endpoint')
     }
 
+    // Inji Certify ≤0.14.0 uses the older "credential_definition" field (draft 11-13).
+    // Newer issuers use "credential_configuration_id" (draft 14+).
+    // Certify 0.14.0 has a strict Jackson parser that throws 500 on unknown fields,
+    // so we MUST NOT send credential_configuration_id to it.
+    const isLegacyCertify = offer.credential_issuer.includes('local-certify') || offer.credential_issuer.includes('certify-nginx')
+    
     const request: Record<string, unknown> = {
       format,
-      credential_configuration_id: configurationId,
+      ...(configurationId
+        ? isLegacyCertify
+          ? {
+              // For legacy Certify (≤0.14.0), send the entire credential_definition object
+              // as advertised in the metadata, because Certify validates the entire structure.
+              credential_definition: config?.credential_definition
+                ?? { type: ['VerifiableCredential', configurationId] },
+            }
+          : {
+              credential_configuration_id: configurationId,
+            }
+        : {}),
       proof: { proof_type: 'jwt', jwt: proofJwt },
     }
-    const credRes = await fetch(credentialEndpoint, {
+    
+    // TEMPORARY LOG FOR DEBUGGING
+    console.log('[wallet] sending request to:', credentialEndpoint)
+    console.log('[wallet] auth header:', `Bearer ${accessToken}`)
+    console.log('[wallet] payload:', JSON.stringify(request, null, 2))
+
+    let credRes = await fetch(credentialEndpoint, {
       method: 'POST',
       headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
       body: JSON.stringify(request),
     })
-    const credBody = await readBody(credRes) as Record<string, unknown>
+    let credBody = await readBody(credRes) as Record<string, unknown>
+
+    if (!credRes.ok && credBody?.error === 'invalid_proof' && typeof credBody?.c_nonce === 'string') {
+      console.log('[wallet] Retrying with new c_nonce:', credBody.c_nonce)
+      const newProofJwt = await buildProofJwt(proofAudience, credBody.c_nonce)
+      request.proof = { proof_type: 'jwt', jwt: newProofJwt }
+      console.log('[wallet] retry payload:', JSON.stringify(request, null, 2))
+      credRes = await fetch(credentialEndpoint, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
+        body: JSON.stringify(request),
+      })
+      credBody = await readBody(credRes) as Record<string, unknown>
+    }
 
     if (!credRes.ok || !credBody?.credential) {
       record('credential', 'failed', {
@@ -341,7 +419,7 @@ export async function createWallet(): Promise<Wallet> {
     const credential: HeldCredential = {
       id: `cred-${Date.now()}-${held.size + 1}`,
       format,
-      issuer: credentialIssuer,
+      issuer: offer.credential_issuer,
       credentialConfigurationId: configurationId,
       credential: raw,
       types: Array.isArray(rawTypes) ? rawTypes as string[] : undefined,
@@ -366,7 +444,13 @@ export async function createWallet(): Promise<Wallet> {
   const router = Router()
 
   router.get('/', (_req, res) => {
-    res.json({ holder_did: key.did, verification_method: key.verificationMethod, count: held.size })
+    res.json({
+      holder_did: key.did,
+      verification_method: key.verificationMethod,
+      presentation_did: presentationKey.did,
+      presentation_verification_method: presentationKey.verificationMethod,
+      count: held.size
+    })
   })
 
   router.get('/credentials', (_req, res) => {
@@ -407,17 +491,19 @@ export async function createWallet(): Promise<Wallet> {
     }
 
     try {
+      // Use the Ed25519 presentationKey to sign the VP with Ed25519Signature2020.
+      // The issuance key (P-256) is only used for the OID4VCI proof-of-possession JWT.
       const vp = await signPresentation({
         credentials: [target.credential as Record<string, unknown>],
-        holderKey: key,
+        holderKey: presentationKey,
         challenge: String(nonce),
         domain: clientId ? String(clientId) : undefined,
       })
-      res.json({ vp_token: vp, holderDid: key.did, credentialId: target.id })
+      res.json({ vp_token: vp, holderDid: presentationKey.did, credentialId: target.id })
     } catch (err) {
       res.status(500).json({ error: 'Failed to sign the presentation', detail: String(err) })
     }
   })
 
-  return { router, key, credentials: () => [...held.values()], acceptOffer }
+  return { router, key, presentationKey, credentials: () => [...held.values()], acceptOffer }
 }

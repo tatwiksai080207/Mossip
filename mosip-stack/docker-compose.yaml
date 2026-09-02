@@ -18,6 +18,8 @@ services:
   certify:
     image: injistack/inji-certify-with-plugins:0.14.0
     user: root
+    extra_hosts:
+      - "localhost:host-gateway"
     ports:
       - 8090:8090
     environment:
