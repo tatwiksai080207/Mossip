@@ -1,4 +1,4 @@
-import type { IssuerConfig, CredentialType } from './types'
+import type { IssuerConfig, CredentialType, VerifierConfig } from './types'
 import { buildDcqlQuery, generateNonce, type DcqlQuery } from './dcql'
 
 // Every call goes through the BFF proxy at /api/*.
@@ -290,21 +290,51 @@ export async function requestCredential(
 
 // ── Step 5: VP authorization request (real OpenID4VP, DCQL) ─────────────────
 
-export async function createVPRequest(credType: CredentialType): Promise<StepResult> {
+export async function createVPRequest(credType: CredentialType, verifier: VerifierConfig): Promise<StepResult> {
   const dcqlQuery = buildDcqlQuery(credType)
   const nonce = generateNonce()
   const transactionId = `txn-playground-${Date.now()}`
+  const host = verifier.host || '/api/verifier'
+  let request: any;
+  let endpoint = '';
 
-  // clientId must match how the verifier identifies itself; the deployed Collab
-  // verify-ui reports `injiverify.collab.mosip.net/` in its env.config.js.
-  const request = {
-    clientId: 'injiverify.collab.mosip.net/',
-    transactionId,
-    nonce,
-    dcqlQuery,
+  if (verifier.env === 'local') {
+    // Local Inji Verify 0.17.0 uses v1 Presentation Exchange
+    const configId = credType.credentialTypeName || credType.id;
+    request = {
+      clientId: 'verify-service:8080/',
+      transactionId,
+      nonce,
+      presentationDefinition: {
+        id: "presentation_definition",
+        input_descriptors: [
+          {
+            id: configId,
+            constraints: {
+              fields: [
+                {
+                  path: ["$.type"],
+                  filter: { type: "string", pattern: "VerifiableCredential" }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+    endpoint = `${host}/v1/verify/vp-request`
+  } else {
+    // Collab Inji Verify uses v2 DCQL
+    request = {
+      clientId: 'injiverify.collab.mosip.net/',
+      transactionId,
+      nonce,
+      dcqlQuery,
+    }
+    endpoint = `${host}/v1/verify/v2/vp-request`
   }
 
-  const { res, data } = await postJson('/api/verifier/v1/verify/v2/vp-request', request)
+  const { res, data } = await postJson(endpoint, request)
 
   if (!res.ok) {
     throw new StepError(`VP request rejected by Inji Verify (HTTP ${res.status})`, {
@@ -339,7 +369,7 @@ export async function createVPRequest(credType: CredentialType): Promise<StepRes
 // Until the playground wallet holds a real credential (next phase), there is
 // nothing genuine to present. Report that plainly instead of inventing a VP.
 
-export async function submitVPResponse(): Promise<StepResult> {
+export async function submitVPResponse(verifier: VerifierConfig): Promise<StepResult> {
   const session = currentVpSession
   if (!session) {
     throw new StepError('No VP session — the authorization request step did not complete', {})
@@ -361,25 +391,38 @@ export async function submitVPResponse(): Promise<StepResult> {
   const { vp_token, holderDid, credentialId } = presentData as Record<string, unknown>
 
   // 2. Submit it to the Verifier's responseUri (direct_post)
-  let responseUri = session.responseUri || '/api/verifier/v1/verify/v2/vp-submission/direct-post'
+  let responseUri = session.responseUri || `${verifier.host || '/api/verifier'}/v1/verify/${verifier.env === 'local' ? 'vp-submission/direct-post' : 'v2/vp-submission/direct-post'}`
   
-  // The verifier returns an absolute URL (https://injiverify.collab.mosip.net/...), 
-  // which will fail with a CORS error if fetched directly from the browser. 
-  // We rewrite it to go through our BFF proxy.
-  if (responseUri.startsWith('https://injiverify.collab.mosip.net')) {
-    responseUri = responseUri.replace('https://injiverify.collab.mosip.net', '/api/verifier')
+  if (responseUri.startsWith('https://injiverify.collab.mosip.net') || responseUri.startsWith('http://verify-service:8080')) {
+    // Both collab and local return an absolute URI that will fail with CORS.
+    // Rewrite it to use the proxy path.
+    const url = new URL(responseUri)
+    responseUri = `${verifier.host || '/api/verifier'}${url.pathname}`
   }
 
   // The verifier expects the submission as application/x-www-form-urlencoded.
-  // Because it uses DCQL (v2 API), the vp_token must not be the raw presentation,
-  // but a JSON object mapping the query ID to an array of presentations.
-  const queryId = session.dcqlQuery.credentials[0]?.id || 'credential_1'
-  const dcqlVpToken = {
-    [queryId]: Array.isArray(vp_token) ? vp_token : [vp_token]
+  const submitParams = new URLSearchParams()
+  if (verifier.env === 'local') {
+    submitParams.set('vp_token', typeof vp_token === 'string' ? vp_token : JSON.stringify(vp_token))
+    submitParams.set('presentation_submission', JSON.stringify({
+      id: "submission_1",
+      definition_id: "presentation_definition",
+      descriptor_map: [
+        {
+          id: (session.dcqlQuery.credentials?.[0]?.id || 'credential_1'),
+          format: "ldp_vp",
+          path: "$"
+        }
+      ]
+    }))
+  } else {
+    const queryId = session.dcqlQuery.credentials?.[0]?.id || 'credential_1'
+    const dcqlVpToken = {
+      [queryId]: Array.isArray(vp_token) ? vp_token : [vp_token]
+    }
+    submitParams.set('vp_token', JSON.stringify(dcqlVpToken))
   }
 
-  const submitParams = new URLSearchParams()
-  submitParams.set('vp_token', JSON.stringify(dcqlVpToken))
   submitParams.set('state', session.requestId)
 
   const submitRes = await safeFetch(responseUri, {
@@ -412,16 +455,26 @@ export async function submitVPResponse(): Promise<StepResult> {
 
 // ── Step 7: verification result ─────────────────────────────────────────────
 
-export async function verifyPresentation(): Promise<StepResult> {
+export async function verifyPresentation(verifier: VerifierConfig): Promise<StepResult> {
   const session = currentVpSession
   if (!session) {
     throw new StepError('No VP session to fetch a result for', {})
   }
 
-  const { res, data } = await postJson(
-    `/api/verifier/v1/verify/v2/vp-results/${session.transactionId}`,
-    { includeClaims: true },
-  )
+  const host = verifier.host || '/api/verifier'
+  let res, data;
+  if (verifier.env === 'local') {
+    const getRes = await safeFetch(`${host}/v1/verify/vp-result/${session.transactionId}`)
+    res = getRes;
+    data = await readBody(getRes);
+  } else {
+    const postRes = await postJson(
+      `${host}/v1/verify/v2/vp-results/${session.transactionId}`,
+      { includeClaims: true },
+    )
+    res = postRes.res;
+    data = postRes.data;
+  }
 
   if (!res.ok) {
     throw new StepError(`No verification result for ${session.transactionId} (HTTP ${res.status})`, {

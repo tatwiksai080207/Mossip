@@ -53,6 +53,7 @@ export const issuers: IssuerConfig[] = [
     name: 'Playground Issuer',
     description: 'Internal OpenID4VCI mock issuer — supports headless pre-authorized_code flow',
     host: 'http://localhost:3001/api/playground-issuer',
+    env: 'mock',
     credentialTypes: [playgroundLdp, playgroundLdp20],
   },
   {
@@ -61,6 +62,7 @@ export const issuers: IssuerConfig[] = [
     description: 'Local MOSIP Docker Stack — uses the Playground OIDC Provider for token exchange',
     host: 'http://localhost:3001/api/local-certify',
     clientId: 'playground-local-client',
+    env: 'local',
     credentialTypes: [
       {
         id: 'farmer-ldp-vcdm11',
@@ -87,6 +89,7 @@ export const issuers: IssuerConfig[] = [
     name: 'Inji Certify (Mock Identity)',
     description: 'Collab mock issuer — advertises VCDM 1.1 and 2.0 configurations',
     host: COLLAB('mock'),
+    env: 'mock',
     credentialTypes: [mockLdp, mockLdp20],
   },
   {
@@ -95,6 +98,7 @@ export const issuers: IssuerConfig[] = [
     description: 'Farmer identity card, issued via the CSV data-provider plugin',
     host: COLLAB('farmer'),
     clientId: 'mpartner-default-mimoto-land-oidc',
+    env: 'collab',
     credentialTypes: [
       {
         id: 'farmer-ldp-vcdm11',
@@ -122,6 +126,7 @@ export const issuers: IssuerConfig[] = [
     description: 'National ID credential, backed by eSignet + MOSIP IDA',
     host: COLLAB('mosipid'),
     clientId: 'mpartner-default-mimoto-mosipid-oidc',
+    env: 'collab',
     credentialTypes: [
       {
         id: 'mosipid-ldp',
@@ -140,6 +145,7 @@ export const issuers: IssuerConfig[] = [
     description: 'Driving licence as an ISO/IEC 18013-5 mDoc',
     host: COLLAB('mdl'),
     clientId: 'mpartner-default-mimoto-mdl-oidc',
+    env: 'collab',
     credentialTypes: [
       {
         id: 'mdl-mdoc',
@@ -156,6 +162,7 @@ export const issuers: IssuerConfig[] = [
     description: 'Sunbird RC backed insurance credential',
     host: COLLAB('insurance'),
     clientId: 'esignet-sunbird-partner',
+    env: 'collab',
     credentialTypes: [
       {
         id: 'insurance-ldp',
@@ -173,13 +180,21 @@ export const issuers: IssuerConfig[] = [
 export const wallets: WalletConfig[] = [
   {
     id: 'inji-web',
-    name: 'Inji Web',
-    description: 'Browser-based wallet, Mimoto BFF',
+    name: 'Inji Web (Mock / Automated)',
+    description: 'Browser-based wallet mock using internal BFF',
+    env: 'local',
+  },
+  {
+    id: 'inji-web-manual',
+    name: 'Inji Web (Manual / Real App)',
+    description: 'Generates an offer QR code for the real local Inji Web app',
+    env: 'local',
   },
   {
     id: 'inji-mobile',
     name: 'Inji Wallet (Mobile)',
     description: 'React Native wallet, cross-device via QR',
+    env: 'local',
   },
 ]
 
@@ -188,5 +203,14 @@ export const verifiers: VerifierConfig[] = [
     id: 'inji-verify',
     name: 'Inji Verify',
     description: 'Collab verify-service, OpenID4VP v2 / DCQL',
+    env: 'collab',
+    host: '/api/verifier',
+  },
+  {
+    id: 'verify-local',
+    name: 'Local Inji Verify',
+    description: 'Local MOSIP Docker Stack — running on port 8095',
+    env: 'local',
+    host: '/api/local-verifier',
   },
 ]

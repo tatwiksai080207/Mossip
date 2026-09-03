@@ -30,6 +30,8 @@ interface PlaygroundStore {
   runFlow: () => Promise<void>
   resumeOAuthFlow: (code: string) => void
   clearHistory: () => void
+  continueVerification: () => Promise<void>
+  checkVerificationResult: () => Promise<void>
 }
 
 export const useStore = create<PlaygroundStore>((set, get) => ({
@@ -75,9 +77,9 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       'credential-offer': () => api.createCredentialOffer(selectedIssuer, selectedCredType),
       'token-exchange': () => api.exchangeToken(selectedIssuer, selectedCredType),
       'credential-issuance': () => api.requestCredential(selectedIssuer, selectedCredType),
-      'vp-request': () => api.createVPRequest(selectedCredType),
-      'vp-response': () => api.submitVPResponse(),
-      'verification': () => api.verifyPresentation(),
+      'vp-request': () => api.createVPRequest(selectedCredType, selectedVerifier),
+      'vp-response': () => api.submitVPResponse(selectedVerifier),
+      'verification': () => api.verifyPresentation(selectedVerifier),
     }
 
     for (let i = 0; i < FLOW_STEPS.length; i++) {
@@ -93,6 +95,15 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
         set({ steps: get().steps.map((s, idx) =>
           idx === i ? { ...s, status: 'done', payload: result.payload, source: result.source } : s
         )})
+        
+        // Stop early if manual mode is enabled and we just generated the offer
+        if ((selectedWallet.id === 'inji-web-manual' || selectedWallet.id === 'inji-mobile') && stepId === 'credential-offer') {
+          // Mark remaining steps as skipped
+          set({ steps: get().steps.map((s, idx) =>
+            idx > i ? { ...s, status: 'pending', payload: { _note: 'Manual mode: waiting for user to complete flow.' } } : s
+          )})
+          break;
+        }
       } catch (err: unknown) {
         const errObj = err as { stepPayload?: Record<string, unknown>; message?: string; oauthUrl?: string }
         
@@ -158,4 +169,86 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       resolver(code)
     }
   },
+
+  continueVerification: async () => {
+    const { steps, selectedCredType, selectedVerifier } = get()
+    if (!selectedCredType || !selectedVerifier) return
+
+    set({ isRunning: true })
+
+    const vpRequestIdx = steps.findIndex(s => s.id === 'vp-request')
+    if (vpRequestIdx === -1) return
+
+    set({ steps: get().steps.map((s, idx) =>
+      idx === vpRequestIdx ? { ...s, status: 'running' } : s
+    )})
+
+    try {
+      const result = await api.createVPRequest(selectedCredType, selectedVerifier)
+      set({ steps: get().steps.map((s, idx) => {
+        if (idx === vpRequestIdx) return { ...s, status: 'done', payload: result.payload, source: result.source }
+        if (idx > vpRequestIdx) return { ...s, status: 'pending', payload: { _note: 'Manual mode: waiting for user to verify.' } }
+        return s
+      })})
+    } catch (err: unknown) {
+      const errObj = err as { stepPayload?: Record<string, unknown>; message?: string }
+      const payload = errObj.stepPayload
+        ? { _error: errObj.message, ...errObj.stepPayload }
+        : { _error: String(err) }
+      
+      set({ steps: get().steps.map((s, idx) =>
+        idx === vpRequestIdx ? { ...s, status: 'error', payload, source: 'live' } : s
+      )})
+    }
+
+    set({ isRunning: false })
+  },
+
+  checkVerificationResult: async () => {
+    const { steps, selectedVerifier } = get()
+    if (!selectedVerifier) return
+
+    set({ isRunning: true })
+
+    const verificationIdx = steps.findIndex(s => s.id === 'verification')
+    if (verificationIdx === -1) return
+
+    set({ steps: get().steps.map((s, idx) =>
+      idx === verificationIdx ? { ...s, status: 'running' } : s
+    )})
+
+    try {
+      const result = await api.verifyPresentation(selectedVerifier)
+      set({ steps: get().steps.map((s, idx) =>
+        idx === verificationIdx ? { ...s, status: 'done', payload: result.payload, source: result.source } : s
+      )})
+    } catch (err: unknown) {
+      const errObj = err as { stepPayload?: Record<string, unknown>; message?: string }
+      const payload = errObj.stepPayload
+        ? { _error: errObj.message, ...errObj.stepPayload }
+        : { _error: String(err) }
+      
+      set({ steps: get().steps.map((s, idx) =>
+        idx === verificationIdx ? { ...s, status: 'error', payload, source: 'live' } : s
+      )})
+    }
+
+    // save to history
+    const finalSteps = get().steps
+    const allPassed = finalSteps.every(s => s.status === 'done' || (s.status === 'pending' && s.payload && (s.payload as any)._note))
+    const run: TestRun = {
+      id: `run-${Date.now()}`,
+      config: {
+        issuer: get().selectedIssuer!,
+        wallet: get().selectedWallet!,
+        verifier: get().selectedVerifier!,
+        credentialType: get().selectedCredType!,
+      },
+      steps: finalSteps,
+      result: allPassed ? 'pass' : 'fail',
+      timestamp: Date.now(),
+    }
+
+    set({ isRunning: false, history: [run, ...get().history] })
+  }
 }))

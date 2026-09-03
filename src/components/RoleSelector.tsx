@@ -7,6 +7,21 @@ export default function RoleSelector() {
     selectIssuer, selectWallet, selectVerifier, selectCredType,
   } = useStore()
 
+  const EnvBadge = ({ env }: { env?: string }) => {
+    if (!env) return null
+    const colors = {
+      local: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+      mock: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+      collab: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    }
+    const colorClass = colors[env as keyof typeof colors] || ''
+    return (
+      <span className={`ml-2 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider border rounded ${colorClass}`}>
+        {env}
+      </span>
+    )
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {/* Issuer */}
@@ -23,7 +38,10 @@ export default function RoleSelector() {
                   : 'border-slate-700 hover:border-slate-600 text-slate-300'
               }`}
             >
-              <div className="font-medium">{issuer.name}</div>
+              <div className="font-medium flex items-center">
+                {issuer.name}
+                <EnvBadge env={issuer.env} />
+              </div>
               <div className="text-xs text-slate-500 mt-0.5">{issuer.description}</div>
             </button>
           ))}
@@ -64,7 +82,10 @@ export default function RoleSelector() {
                   : 'border-slate-700 hover:border-slate-600 text-slate-300'
               }`}
             >
-              <div className="font-medium">{wallet.name}</div>
+              <div className="font-medium flex items-center">
+                {wallet.name}
+                <EnvBadge env={wallet.env} />
+              </div>
               <div className="text-xs text-slate-500 mt-0.5">{wallet.description}</div>
             </button>
           ))}
@@ -85,7 +106,10 @@ export default function RoleSelector() {
                   : 'border-slate-700 hover:border-slate-600 text-slate-300'
               }`}
             >
-              <div className="font-medium">{verifier.name}</div>
+              <div className="font-medium flex items-center">
+                {verifier.name}
+                <EnvBadge env={verifier.env} />
+              </div>
               <div className="text-xs text-slate-500 mt-0.5">{verifier.description}</div>
             </button>
           ))}

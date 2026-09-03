@@ -28,18 +28,24 @@ export interface IssuerConfig {
   clientId?: string
   /** True for issuers discovered from Mimoto's registry rather than hardcoded. */
   fromRegistry?: boolean
+  /** The environment/type of this service. */
+  env?: 'local' | 'mock' | 'collab'
 }
 
 export interface WalletConfig {
   id: string
   name: string
   description: string
+  env?: 'local' | 'mock' | 'collab'
 }
 
 export interface VerifierConfig {
   id: string
   name: string
   description: string
+  env?: 'local' | 'mock' | 'collab'
+  /** The backend proxy path or URL for this verifier, e.g. /api/verifier */
+  host?: string
 }
 
 // Test run config — what the user selects before running a test

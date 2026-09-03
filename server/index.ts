@@ -31,7 +31,7 @@ const ENDPOINTS = {
   verifier: 'https://injiverify.collab.mosip.net',
   mimoto: 'https://api.collab.mosip.net/v1/mimoto',
   localCertify: 'http://127.0.0.1:8090/v1/certify',
-  localVerifier: 'http://localhost:8095/v1/verify',
+  localVerifier: 'http://localhost:8095',
 }
 
 // Inji Verify exposes a v2, DCQL-based API that the cloned repo predates.
@@ -133,6 +133,27 @@ for (const { prefix, target, label } of PROXIES) {
     }
   })
 }
+
+// ── Inji Wallet Mimoto Proxy Bypass ──────────────────────────────────────────
+// Inji Wallet tries to hit the default Mimoto host on `/v1/mimoto/issuers`.
+// Since the local PC's port 8099 is blocked by the Windows Firewall for the phone,
+// we proxy `/v1/mimoto/*splat` through the Playground Backend (which is exposed via Ngrok).
+app.all('/v1/mimoto/*splat', async (req, res) => {
+  try {
+    const result = await proxyRequest(
+      'http://localhost:8099/v1/mimoto', splatPath(req), req.method,
+      req.headers as Record<string, string>, req.body,
+    )
+    if (typeof result.body === 'string') {
+      res.status(result.status).type(result.contentType || 'text/plain').send(result.body)
+    } else {
+      res.status(result.status).json(result.body)
+    }
+  } catch (err) {
+    console.error('[proxy] Local Mimoto error:', err)
+    res.status(502).json({ error: 'Failed to reach local mimoto', detail: String(err) })
+  }
+})
 
 // ── Local Certify proxy with metadata rewriting ─────────────────────────────
 // Inji Certify embeds internal Docker hostnames and eSignet Collab URLs in its
@@ -275,8 +296,8 @@ app.get('/api/registry/issuers', async (_req, res) => {
 // fetchable, so this cannot be turned into an open proxy.
 async function assertAllowedIssuerHost(host: string) {
   if (host === ENDPOINTS.issuer) return
-  if (host === PLAYGROUND_ISSUER_ID) return
-  if (host === 'http://localhost:3001/api/local-certify') return
+  if (host === PLAYGROUND_ISSUER_ID || host === 'http://localhost:3001/api/playground-issuer') return
+  if (host === 'http://localhost:3001/api/local-certify' || host === `${PUBLIC_BASE_URL}/api/local-certify`) return
   const registry = await loadRegistry()
   if (!registry.some(i => i.credentialIssuerHost === host)) {
     throw new Error(`Issuer host not in Mimoto registry: ${host}`)

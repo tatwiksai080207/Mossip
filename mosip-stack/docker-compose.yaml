@@ -55,6 +55,7 @@ services:
       - ./config/mimoto-trusted-verifiers.json:/config/server/mimoto-trusted-verifiers.json
       - ./config/credential-template.html:/config/server/credential-template.html
       - ./config/vp_request_config.json:/config/server/vp_request_config.json
+      - ./config/mosip-cbeff.xsd:/config/server/mosip-cbeff.xsd
     networks:
       - network
     depends_on:
@@ -126,7 +127,7 @@ services:
       - DATABASE_USERNAME=postgres
       - DATABASE_PASSWORD=postgres
       - INJI_VP_REQUEST_LONG_POLLING_TIMEOUT=55000
-      - INJI_VP_SUBMISSION_BASE_URL=http://verify-service:8080/v1/verify
+      - INJI_VP_SUBMISSION_BASE_URL=https://80281eb61ff907.lhr.life/v1/verify
       - INJI_DID_VERIFY_URI=did:web:verify-service:v1:verify
       - INJI_DID_VERIFY_PUBLIC_KEY_URI=did:web:verify-service:v1:verify#key-0
       - INJI_KEYSTORE_FILE_PASS=mosip
