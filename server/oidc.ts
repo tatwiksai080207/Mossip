@@ -31,25 +31,30 @@ function getIssuerUri(req: any): string {
   return `http://${host}/api/oidc`
 }
 
-oidcRouter.get('/.well-known/openid-configuration', (req, res) => {
+const discoveryHandler = (req: any, res: any) => {
   const issuer = getIssuerUri(req)
   res.json({
-    // 'issuer' here matches what will be in the JWT iss claim (host.docker.internal)
-    // when the request comes from Certify. For browser requests, issuer == localhost.
     issuer,
-    // authorization_endpoint MUST be reachable from the user's browser (host machine),
-    // so we always use the dynamic issuer (localhost:3001 for browser requests).
-    authorization_endpoint: `${issuer}/authorize`,
+    authorization_endpoint: 'http://localhost:3001/api/oidc/authorize',
     token_endpoint: `${issuer}/token`,
     jwks_uri: `${issuer}/jwks`,
     response_types_supported: ['code'],
+    grant_types_supported: ['authorization_code', 'urn:ietf:params:oauth:grant-type:pre-authorized_code'],
     subject_types_supported: ['public'],
     id_token_signing_alg_values_supported: ['RS256'],
     scopes_supported: ['openid', 'profile']
   })
-})
+}
+
+oidcRouter.get('/.well-known/openid-configuration', discoveryHandler)
+oidcRouter.get('/.well-known/oauth-authorization-server', discoveryHandler)
 
 oidcRouter.get('/jwks', (_req, res) => {
+  res.json({
+    keys: jwk ? [jwk] : []
+  })
+})
+oidcRouter.get('/protocol/openid-connect/certs', (_req, res) => {
   res.json({
     keys: jwk ? [jwk] : []
   })
@@ -94,6 +99,9 @@ oidcRouter.get('/authorize', (req, res) => {
     </html>
   `)
 })
+oidcRouter.get('/protocol/openid-connect/auth', (req, res) => {
+  res.redirect('/api/oidc/authorize?' + new URLSearchParams(req.query as Record<string, string>).toString());
+})
 
 // Handle the mock login submission
 oidcRouter.post('/authorize/submit', (req, res) => {
@@ -107,7 +115,7 @@ oidcRouter.post('/authorize/submit', (req, res) => {
 })
 
 // Token Endpoint
-oidcRouter.post('/token', async (req, res) => {
+const tokenHandler = async (req: any, res: any) => {
   if (!privateKey) {
     return res.status(500).json({ error: 'server_error', error_description: 'Keys not initialized' })
   }
@@ -127,8 +135,8 @@ oidcRouter.post('/token', async (req, res) => {
     c_nonce_expires_in: 86400
   }
   
-  console.log('[oidc] req.body.wallet_jwk =', req.body.wallet_jwk)
-  if (req.body.wallet_jwk) {
+  console.log('[oidc] req.body?.wallet_jwk =', req.body?.wallet_jwk)
+  if (req.body?.wallet_jwk) {
     try {
       jwtPayload.cnf = { jwk: JSON.parse(req.body.wallet_jwk) }
     } catch (e) {
@@ -156,4 +164,7 @@ oidcRouter.post('/token', async (req, res) => {
     c_nonce_expires_in: 86400,
     id_token: jwt // some clients expect id_token too
   })
-})
+}
+
+oidcRouter.post('/token', tokenHandler)
+oidcRouter.post('/protocol/openid-connect/token', tokenHandler)

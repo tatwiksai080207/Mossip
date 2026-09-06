@@ -76,11 +76,11 @@ services:
       - SPRING_CLOUD_BOOTSTRAP_LOCATION=/home/mosip/mimoto-bootstrap.properties
       - oidc_p12_password=xy4gh6swa2i
       - WALLET_BINDING_PARTNER_API_KEY=dummywalletbindingpartnerapikey
+      - GOOGLE_OAUTH_CLIENT_ID=297624953605-pdbaemggubg5jkp7nabefddp4kcftu9r.apps.googleusercontent.com
+      - GOOGLE_OAUTH_CLIENT_SECRET=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
       - SPRING_DATASOURCE_URL=jdbc:postgresql://database:5432/inji_mimoto
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - GOOGLE_OAUTH_CLIENT_ID=clientId
-      - GOOGLE_OAUTH_CLIENT_SECRET=clientSecret
     networks:
       - network
     volumes:
@@ -105,6 +105,7 @@ services:
       - ./config/mimoto-issuers-config.json:/home/mosip/mimoto-issuers-config.json
       - ./config/mimoto-trusted-verifiers.json:/home/mosip/mimoto-trusted-verifiers.json
       - ./config/credential-template.html:/home/mosip/credential-template.html
+      - ./config/env-config.js:/usr/share/nginx/html/env-config.js
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       - mimoto-service
@@ -127,7 +128,7 @@ services:
       - DATABASE_USERNAME=postgres
       - DATABASE_PASSWORD=postgres
       - INJI_VP_REQUEST_LONG_POLLING_TIMEOUT=55000
-      - INJI_VP_SUBMISSION_BASE_URL=https://80281eb61ff907.lhr.life/v1/verify
+      - INJI_VP_SUBMISSION_BASE_URL=https://d36f-119-161-98-68.ngrok-free.app/v1/verify
       - INJI_DID_VERIFY_URI=did:web:verify-service:v1:verify
       - INJI_DID_VERIFY_PUBLIC_KEY_URI=did:web:verify-service:v1:verify#key-0
       - INJI_KEYSTORE_FILE_PASS=mosip
@@ -137,12 +138,22 @@ services:
     networks:
       - network
 
+  inji-playground:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    container_name: inji-playground
+    environment:
+      - LOCAL_VERIFIER_URL=http://verify-service:8080
+      - LOCAL_CERTIFY_URL=http://certify:8090/v1/certify
+      - LOCAL_MIMOTO_URL=http://mimoto-service:8099/v1/mimoto
+    ports:
+      - "3001:3001"
+    volumes:
+      - ../server:/app/server
+      - ../dist:/app/dist
+    networks:
+      - network
+
 networks:
   network:
-    name: mosip_network
-    external: true
-
-volumes:
-  cache:
-    driver: local
-  postgres-data:

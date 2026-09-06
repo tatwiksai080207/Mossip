@@ -1,7 +1,7 @@
 {
   "verifiers": [
     {
-      "client_id": "injiverify.collab.mosip.net/",
+      "client_id": "https://injiverify.collab.mosip.net",
       "redirect_uri": [
         "https://injiverify.collab.mosip.net/"
       ],
@@ -11,10 +11,45 @@
       "allow_unsigned_request": true
     },
     {
-      "client_id": "verify-service:8080/",
+      "client_id": "localhost-verifier",
       "redirect_uri": [],
       "response_uris": [
-        "https://80281eb61ff907.lhr.life/v1/verify/vp-submission/direct-post"
+        "https://d36f-119-161-98-68.ngrok-free.app/v1/verify/v2/vp-submission/direct-post",
+        "https://d36f-119-161-98-68.ngrok-free.app/v1/verify/vp-submission/direct-post",
+        "http://localhost:8095/v1/verify/v2/vp-submission/direct-post",
+        "http://localhost:8095/v1/verify/vp-submission/direct-post"
+      ],
+      "jwks_uri": "http://inji-playground:3001/api/verifier/jwks.json",
+      "allow_unsigned_request": true
+    },
+    {
+      "client_id": "https://d36f-119-161-98-68.ngrok-free.app",
+      "redirect_uri": [],
+      "response_uris": [
+        "https://d36f-119-161-98-68.ngrok-free.app/v1/verify/v2/vp-submission/direct-post",
+        "https://d36f-119-161-98-68.ngrok-free.app/v1/verify/vp-submission/direct-post",
+        "http://localhost:8095/v1/verify/v2/vp-submission/direct-post",
+        "http://localhost:8095/v1/verify/vp-submission/direct-post"
+      ],
+      "jwks_uri": "http://inji-playground:3001/api/verifier/jwks.json",
+      "allow_unsigned_request": true
+    },
+    {
+      "client_id": "http://localhost:8095",
+      "redirect_uri": [],
+      "response_uris": [
+        "http://localhost:8095/v1/verify/v2/vp-submission/direct-post",
+        "http://localhost:8095/v1/verify/vp-submission/direct-post",
+        "http://verify-service:8080/v1/verify/vp-submission/direct-post"
+      ],
+      "allow_unsigned_request": true
+    },
+    {
+      "client_id": "http://verify-service:8080",
+      "redirect_uri": [],
+      "response_uris": [
+        "http://verify-service:8080/v1/verify/vp-submission/direct-post",
+        "http://localhost:8095/v1/verify/vp-submission/direct-post"
       ],
       "allow_unsigned_request": true
     }

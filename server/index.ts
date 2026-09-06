@@ -30,8 +30,9 @@ const ENDPOINTS = {
   esignetMock: 'https://esignet-mock.collab.mosip.net',
   verifier: 'https://injiverify.collab.mosip.net',
   mimoto: 'https://api.collab.mosip.net/v1/mimoto',
-  localCertify: 'http://127.0.0.1:8090/v1/certify',
-  localVerifier: 'http://localhost:8095',
+  localCertify: process.env.LOCAL_CERTIFY_URL || 'http://127.0.0.1:8090/v1/certify',
+  localVerifier: process.env.LOCAL_VERIFIER_URL || 'http://localhost:8095',
+  localMimoto: process.env.LOCAL_MIMOTO_URL || 'http://localhost:8099/v1/mimoto',
 }
 
 // Inji Verify exposes a v2, DCQL-based API that the cloned repo predates.
@@ -45,6 +46,10 @@ export const VERIFY = {
   vcVerification: '/v1/verify/v2/vc-verification',
 }
 
+app.use((req, _res, next) => {
+  console.log('[HTTP]', req.method, req.url)
+  next()
+})
 app.use(cors())
 app.use(express.json({ limit: '5mb' }))
 app.use(express.urlencoded({ extended: true, limit: '5mb' }))
@@ -53,6 +58,48 @@ app.use('/api/oidc', oidcRouter)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', endpoints: ENDPOINTS, playgroundIssuer: PLAYGROUND_ISSUER_ID })
+})
+
+// Expose JWKS for Local Inji Verify (Ed25519 public key from verify-service test.p12)
+app.get('/api/verifier/jwks.json', (_req, res) => {
+  res.json({
+    keys: [
+      {
+        kty: 'OKP',
+        crv: 'Ed25519',
+        x: 'YT6KJVovMxNYJ-gxCEa3C0lCy0BSWaPjp30_BWLOr_k',
+        use: 'sig',
+        kid: 'did:web:verify-service:v1:verify#key-0'
+      }
+    ]
+  })
+})
+
+// ── Mock Mosip Internal Auth ────────────────────────────────────────────────
+// Mimoto's TokenHelper requires an internal Mosip service token to make outgoing
+// OIDC requests. We mock the Keycloak discovery and token endpoints.
+app.get('/auth/realms/*splat/.well-known/openid-configuration', (req, res) => {
+  console.log('[MOCK-GET]', req.url)
+  const baseUrl = `http://${req.headers.host}`
+  const realmPath = `/auth/realms/${req.params.splat}`
+  res.json({
+    issuer: `${baseUrl}${realmPath}`,
+    token_endpoint: `${baseUrl}${realmPath}/protocol/openid-connect/token`,
+    jwks_uri: `${baseUrl}${realmPath}/protocol/openid-connect/certs`,
+    subject_types_supported: ['public'],
+    id_token_signing_alg_values_supported: ['RS256']
+  })
+})
+app.post('/auth/realms/*splat', (req, res) => {
+  console.log('[MOCK-POST]', req.url)
+  res.json({
+    access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJtaW1vdG8iLCJjbGllbnRJZCI6Im1pbW90byIsInJvbGVzIjpbImFkbWluIl19.dummy',
+    expires_in: 3600,
+    refresh_expires_in: 0,
+    token_type: 'Bearer',
+    'not-before-policy': 0,
+    scope: 'profile email'
+  })
 })
 
 // ── Generic proxy ───────────────────────────────────────────────────────────
@@ -141,7 +188,7 @@ for (const { prefix, target, label } of PROXIES) {
 app.all('/v1/mimoto/*splat', async (req, res) => {
   try {
     const result = await proxyRequest(
-      'http://localhost:8099/v1/mimoto', splatPath(req), req.method,
+      ENDPOINTS.localMimoto, splatPath(req), req.method,
       req.headers as Record<string, string>, req.body,
     )
     if (typeof result.body === 'string') {
@@ -199,12 +246,16 @@ function rewriteLocalCertifyMetadata(body: Record<string, unknown>): Record<stri
   }
   if (Array.isArray(result.authorization_servers)) {
     result.authorization_servers = (result.authorization_servers as string[]).map(
-      (url: string) => url.replace(COLLAB_ESIGNET_PATTERN, PLAYGROUND_OIDC_URI)
+      (url: string) => url.replace(COLLAB_ESIGNET_PATTERN, PLAYGROUND_OIDC_URI).replace('http://inji-playground:3001/api/oidc', PLAYGROUND_OIDC_URI)
     )
   }
 
   return result
 }
+
+app.get('/api/playground-issuer/.well-known/openid-configuration', (_req, res) => {
+  res.redirect('/api/oidc/.well-known/openid-configuration')
+})
 
 app.all('/api/local-certify/*splat', async (req, res) => {
   try {

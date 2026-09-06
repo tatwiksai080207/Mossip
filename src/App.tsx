@@ -58,11 +58,10 @@ function App() {
 
     if (requestId) {
       if (selectedVerifier?.env === 'local') {
-        // Local verifier: the request_uri must be reachable by the phone.
-        // We use a localhost.run tunnel (lhr.life) to avoid ngrok's browser warning intercept.
-        const ngrokUrl = 'https://80281eb61ff907.lhr.life'
-        requestUri = `${ngrokUrl}/v1/verify/vp-request/${requestId}`
-        vpClientId = 'verify-service:8080/'
+        // Local verifier tunnel (OpenID4VP mandates https with a domain name)
+        const tunnelUrl = 'https://d36f-119-161-98-68.ngrok-free.app'
+        requestUri = `${tunnelUrl}/v1/verify/vp-request/${requestId}`
+        vpClientId = 'localhost-verifier'
       } else {
         // Collab verifier: use its public URL directly — fully reachable by the phone.
         requestUri = `https://injiverify.collab.mosip.net/v1/verify/v2/vp-request/${requestId}`
@@ -72,7 +71,9 @@ function App() {
   }
 
   const vpRequestDeepLink = (requestUri && vpClientId)
-    ? `openid4vp://authorize?client_id=${vpClientId}&request_uri=${encodeURIComponent(requestUri)}`
+    ? (selectedVerifier?.env === 'local'
+        ? `openid4vp://?client_id=${encodeURIComponent(vpClientId)}&response_type=vp_token&request_uri=${encodeURIComponent(requestUri)}`
+        : `openid4vp://?client_id=${encodeURIComponent(vpClientId)}&client_id_scheme=pre-registered&response_type=vp_token&request_uri=${encodeURIComponent(requestUri)}`)
     : null
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -122,30 +123,44 @@ function App() {
 
         {isManualMode && offerUri && !vpRequestDeepLink && (
           <div className="mt-8 flex flex-col items-center justify-center p-8 border border-slate-800 rounded-lg bg-slate-900/50">
-            <h3 className="text-lg font-medium text-slate-200 mb-2">Manual Issuance QR Code</h3>
-            <p className="text-sm text-slate-400 mb-6 text-center max-w-md">
-              Scan this QR code using the official Inji Mobile App.
-            </p>
-            <div className="bg-white p-4 rounded-xl mb-6">
-              <QRCode value={offerUri} size={256} />
-            </div>
-            
-            <div className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-lg p-4 mb-4">
-              <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wider">Raw Deep Link (For Copy/Pasting)</p>
-              <code className="text-xs text-green-400 break-all">{offerUri}</code>
-            </div>
+            {selectedWallet?.id === 'inji-mobile' ? (
+              <>
+                <h3 className="text-lg font-medium text-slate-200 mb-2">Manual Issuance QR Code</h3>
+                <p className="text-sm text-slate-400 mb-6 text-center max-w-md">
+                  Scan this QR code using the official Inji Mobile App.
+                </p>
+                <div className="bg-white p-4 rounded-xl mb-6">
+                  <QRCode value={offerUri} size={256} />
+                </div>
+                
+                <div className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-lg p-4 mb-4">
+                  <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wider">Raw Deep Link (For Copy/Pasting)</p>
+                  <code className="text-xs text-green-400 break-all">{offerUri}</code>
+                </div>
 
-            <p className="text-sm text-slate-400 mb-4 text-center max-w-lg">
-              <strong className="text-slate-200">Where is the mobile app?</strong> Search for "Inji Wallet" on the Play Store/App Store, or download the APK directly from the <a href="https://github.com/mosip/inji/releases" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">MOSIP GitHub Releases</a>.
-            </p>
-
-            <a 
-              href={`http://localhost:3004/?credential_offer=${encodeURIComponent(new URL(offerUri.replace('openid-credential-offer://', 'http://dummy')).searchParams.get('credential_offer') || '')}`}
-              target="_blank" rel="noreferrer"
-              className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-lg transition-colors border border-slate-700"
-            >
-              Open in Local Web Wallet (Port 3004)
-            </a>
+                <p className="text-sm text-slate-400 mb-4 text-center max-w-lg">
+                  <strong className="text-slate-200">Where is the mobile app?</strong> Search for "Inji Wallet" on the Play Store/App Store, or download the APK directly from the <a href="https://github.com/mosip/inji/releases" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">MOSIP GitHub Releases</a>.
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-medium text-slate-200 mb-2">Web Wallet Issuance</h3>
+                <p className="text-sm text-slate-400 mb-6 text-center max-w-md">
+                  Open the credential offer directly in your local web wallet.
+                </p>
+                <a 
+                  href={`http://localhost:3004/?credential_offer=${encodeURIComponent(new URL(offerUri.replace('openid-credential-offer://', 'http://dummy')).searchParams.get('credential_offer') || '')}`}
+                  target="_blank" rel="noreferrer"
+                  className="mt-2 mb-4 inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-lg transition-colors border border-slate-700"
+                >
+                  Open in Local Web Wallet (Port 3004)
+                </a>
+                <div className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-lg p-4 mb-4">
+                  <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wider">Raw Deep Link (For Copy/Pasting)</p>
+                  <code className="text-xs text-green-400 break-all">{offerUri}</code>
+                </div>
+              </>
+            )}
 
             {!vpRequestStep || vpRequestStep.status === 'pending' ? (
               <button
@@ -161,13 +176,33 @@ function App() {
 
         {isManualMode && vpRequestDeepLink && (
           <div className="mt-4 flex flex-col items-center justify-center p-8 border border-slate-800 rounded-lg bg-slate-900/50">
-            <h3 className="text-lg font-medium text-slate-200 mb-2">Manual Presentation QR Code</h3>
-            <p className="text-sm text-slate-400 mb-6 text-center max-w-md">
-              Scan this QR code using the official Inji Mobile App's "Share" tab to present your credential.
-            </p>
-            <div className="bg-white p-4 rounded-xl mb-6">
-              <QRCode value={vpRequestDeepLink} size={256} />
-            </div>
+            {selectedWallet?.id === 'inji-mobile' ? (
+              <>
+                <h3 className="text-lg font-medium text-slate-200 mb-2">Manual Presentation QR Code</h3>
+                <p className="text-sm text-slate-400 mb-6 text-center max-w-md">
+                  Scan this QR code using the official Inji Mobile App's "Share" tab to present your credential.
+                </p>
+                <div className="bg-white p-4 rounded-xl mb-6">
+                  <QRCode value={vpRequestDeepLink} size={256} />
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-medium text-slate-200 mb-2">Web Wallet Presentation</h3>
+                <p className="text-sm text-slate-400 mb-6 text-center max-w-md">
+                  Present your credential directly using your local Inji Web wallet.
+                </p>
+                <a 
+                  href={selectedVerifier?.env === 'local'
+                    ? `http://localhost:3004/user/authorize?client_id=${encodeURIComponent(vpClientId || '')}&request_uri=${encodeURIComponent(requestUri || '')}`
+                    : `http://localhost:3004/user/authorize?client_id=${encodeURIComponent(vpClientId || '')}&client_id_scheme=pre-registered&request_uri=${encodeURIComponent(requestUri || '')}`}
+                  target="_blank" rel="noreferrer"
+                  className="mt-2 mb-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+                >
+                  Present from Local Web Wallet (Port 3004)
+                </a>
+              </>
+            )}
             
             <div className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-lg p-4 mb-4">
               <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wider">Raw Deep Link (For Copy/Pasting)</p>

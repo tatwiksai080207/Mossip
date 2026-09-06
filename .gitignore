@@ -10,3 +10,6 @@ npm-debug.log*
 AGENT_HANDOFF.md
 scratch_log_dump.md
 inji_ecosystem_flow.md
+
+*.jar
+images.html

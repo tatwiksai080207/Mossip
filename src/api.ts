@@ -302,7 +302,7 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
     // Local Inji Verify 0.17.0 uses v1 Presentation Exchange
     const configId = credType.credentialTypeName || credType.id;
     request = {
-      clientId: 'verify-service:8080/',
+      clientId: 'localhost-verifier',
       transactionId,
       nonce,
       presentationDefinition: {
@@ -393,7 +393,7 @@ export async function submitVPResponse(verifier: VerifierConfig): Promise<StepRe
   // 2. Submit it to the Verifier's responseUri (direct_post)
   let responseUri = session.responseUri || `${verifier.host || '/api/verifier'}/v1/verify/${verifier.env === 'local' ? 'vp-submission/direct-post' : 'v2/vp-submission/direct-post'}`
   
-  if (responseUri.startsWith('https://injiverify.collab.mosip.net') || responseUri.startsWith('http://verify-service:8080')) {
+  if (responseUri.startsWith('https://injiverify.collab.mosip.net') || responseUri.startsWith('http://verify-service:8080') || responseUri.startsWith('http://localhost:8095')) {
     // Both collab and local return an absolute URI that will fail with CORS.
     // Rewrite it to use the proxy path.
     const url = new URL(responseUri)
@@ -425,11 +425,23 @@ export async function submitVPResponse(verifier: VerifierConfig): Promise<StepRe
 
   submitParams.set('state', session.requestId)
 
-  const submitRes = await safeFetch(responseUri, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: submitParams.toString(),
-  })
+  console.log('=== SUBMIT VP RESPONSE DEBUG ===')
+  console.log('Original session responseUri:', session.responseUri)
+  console.log('Final responseUri being fetched:', responseUri)
+  console.log('Fetch options method:', 'POST')
+  console.log('Fetch params:', Array.from(submitParams.entries()))
+  
+  let submitRes;
+  try {
+    submitRes = await safeFetch(responseUri, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: submitParams.toString(),
+    })
+  } catch (err) {
+    console.error('Fetch caught an exception:', err)
+    throw err;
+  }
   
   const submitData = await readBody(submitRes)
 
