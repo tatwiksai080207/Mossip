@@ -14,7 +14,21 @@ const PORT = Number(process.env.PORT || 3001)
 
 // Override when a tunnel is fronting the BFF, so credential offers and QR codes
 // carry a URL a phone can actually reach.
-const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, '')
+let activeTunnelUrl = process.env.PUBLIC_BASE_URL || 'https://eb9f-119-161-98-68.ngrok-free.app'
+
+export function getPublicBaseUrl(req?: express.Request): string {
+  if (activeTunnelUrl) return activeTunnelUrl.replace(/\/$/, '')
+  if (req) {
+    const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http'
+    const host = (req.headers['x-forwarded-host'] as string) || req.headers.host
+    if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+      return `${proto}://${host}`
+    }
+  }
+  return `http://localhost:${PORT}`
+}
+
+const PUBLIC_BASE_URL = getPublicBaseUrl()
 const ISSUER_MOUNT = '/api/playground-issuer'
 const PLAYGROUND_ISSUER_ID = `${PUBLIC_BASE_URL}${ISSUER_MOUNT}`
 
@@ -56,11 +70,47 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }))
 
 app.use('/api/oidc', oidcRouter)
 
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', endpoints: ENDPOINTS, playgroundIssuer: PLAYGROUND_ISSUER_ID })
+app.get('/api/health', (req, res) => {
+  const base = getPublicBaseUrl(req)
+  res.json({
+    status: 'ok',
+    endpoints: ENDPOINTS,
+    playgroundIssuer: `${base}${ISSUER_MOUNT}`,
+    tunnelUrl: activeTunnelUrl,
+  })
 })
 
-// Expose JWKS for Local Inji Verify (Ed25519 public key from verify-service test.p12)
+app.get('/api/tunnel', (_req, res) => {
+  res.json({ tunnelUrl: activeTunnelUrl })
+})
+
+app.post('/api/tunnel', (req, res) => {
+  if (req.body?.tunnelUrl) {
+    activeTunnelUrl = req.body.tunnelUrl.replace(/\/$/, '')
+  }
+  res.json({ tunnelUrl: activeTunnelUrl })
+})
+
+// Expose /v1/verify on the root path for OpenID4VP request_uri and vp-submission direct_post
+app.all('/v1/verify/*splat', async (req, res) => {
+  try {
+    const path = '/v1/verify' + splatPath(req)
+    const result = await proxyRequest(
+      ENDPOINTS.localVerifier, path, req.method,
+      req.headers as Record<string, string>, req.body,
+    )
+    if (typeof result.body === 'string') {
+      res.status(result.status).type(result.contentType || 'text/plain').send(result.body)
+    } else {
+      res.status(result.status).json(result.body)
+    }
+  } catch (err) {
+    console.error('[proxy] /v1/verify error:', err)
+    res.status(502).json({ error: 'Failed to reach local verifier', detail: String(err) })
+  }
+})
+
+// Expose JWKS for Local and Collab Inji Verify (Ed25519 public key)
 app.get('/api/verifier/jwks.json', (_req, res) => {
   res.json({
     keys: [
@@ -70,10 +120,104 @@ app.get('/api/verifier/jwks.json', (_req, res) => {
         x: 'YT6KJVovMxNYJ-gxCEa3C0lCy0BSWaPjp30_BWLOr_k',
         use: 'sig',
         kid: 'did:web:verify-service:v1:verify#key-0'
+      },
+      {
+        kty: 'OKP',
+        crv: 'Ed25519',
+        x: 'YT6KJVovMxNYJ-gxCEa3C0lCy0BSWaPjp30_BWLOr_k',
+        use: 'sig',
+        kid: 'did:web:injiverify.collab.mosip.net:v1:verify#key-0'
       }
     ]
   })
 })
+
+// ── Mimoto Proxy & Dynamic Trusted Verifiers ─────────────────────────────────
+// Allows Inji Wallet Mobile to use the active tunnel URL as its Credential Registry
+const localMimotoHost = (ENDPOINTS.localMimoto || 'http://localhost:8099').replace(/\/v1\/mimoto\/?$/, '')
+
+app.get('/v1/mimoto/allProperties', async (req, res) => {
+  try {
+    const result = await proxyRequest(
+      localMimotoHost,
+      '/v1/mimoto/allProperties',
+      'GET',
+      req.headers as Record<string, string>,
+    )
+    if (result.body && typeof result.body === 'object' && (result.body as any).response) {
+      const resp = (result.body as any).response;
+      resp.warningDomainName = activeTunnelUrl;
+      resp.cacheTTLInMilliSeconds = '1';
+      resp.openid4vpClientValidation = 'true';
+      resp.disableCredentialOfferVcVerification = true;
+    }
+    res.status(result.status).json(result.body)
+  } catch (err) {
+    console.error('[proxy] /v1/mimoto/allProperties error:', err)
+    res.status(502).json({ error: 'Failed to reach local mimoto', detail: String(err) })
+  }
+})
+
+app.get('/v1/mimoto/verifiers', async (req, res) => {
+  try {
+    const result = await proxyRequest(
+      localMimotoHost,
+      '/v1/mimoto/verifiers',
+      'GET',
+      req.headers as Record<string, string>,
+    )
+    if (result.body && typeof result.body === 'object' && (result.body as any).response?.verifiers) {
+      const verifiers = (result.body as any).response.verifiers
+      for (const v of verifiers) {
+        if (v.client_id === 'localhost-verifier' || v.client_id?.includes('ngrok')) {
+          v.jwks_uri = `${activeTunnelUrl}/api/verifier/jwks.json`
+          v.response_uris = [
+            `${activeTunnelUrl}/v1/verify/v2/vp-submission/direct-post`,
+            `${activeTunnelUrl}/v1/verify/vp-submission/direct-post`,
+          ]
+        }
+      }
+      // Ensure Collab verifier is also in the list
+      const hasCollab = verifiers.some((v: any) => v.client_id === 'injiverify.collab.mosip.net/')
+      if (!hasCollab) {
+        verifiers.push({
+          client_id: 'injiverify.collab.mosip.net/',
+          redirect_uris: ['https://injiverify.collab.mosip.net/'],
+          response_uris: ['https://injiverify.collab.mosip.net/v1/verify/v2/vp-submission/direct-post'],
+          jwks_uri: `${activeTunnelUrl}/api/verifier/jwks.json`,
+          allow_unsigned_request: true,
+          spec_version: 'v1',
+        })
+      }
+    }
+    res.status(result.status).json(result.body)
+  } catch (err) {
+    console.error('[proxy] /v1/mimoto/verifiers error:', err)
+    res.status(502).json({ error: 'Failed to reach local mimoto', detail: String(err) })
+  }
+})
+
+app.all('/v1/mimoto/*splat', async (req, res) => {
+  try {
+    const path = '/v1/mimoto' + splatPath(req)
+    const result = await proxyRequest(
+      localMimotoHost,
+      path,
+      req.method,
+      req.headers as Record<string, string>,
+      req.body,
+    )
+    if (typeof result.body === 'string') {
+      res.status(result.status).type(result.contentType || 'text/plain').send(result.body)
+    } else {
+      res.status(result.status).json(result.body)
+    }
+  } catch (err) {
+    console.error('[proxy] /v1/mimoto error:', err)
+    res.status(502).json({ error: 'Failed to reach local mimoto', detail: String(err) })
+  }
+})
+
 
 // ── Mock Mosip Internal Auth ────────────────────────────────────────────────
 // Mimoto's TokenHelper requires an internal Mosip service token to make outgoing
@@ -212,31 +356,30 @@ app.all('/v1/mimoto/*splat', async (req, res) => {
 // This proves Inji Certify is standards-compliant and works with ANY OIDC
 // provider — not just MOSIP's own eSignet. That is a genuine interoperability
 // finding that the Playground is designed to surface.
-const LOCAL_CERTIFY_HOST = 'http://localhost:3001/api/local-certify'
-const PLAYGROUND_OIDC_URI = 'http://localhost:3001/api/oidc'
 const CERTIFY_INTERNAL_DOCKER = 'http://certify-nginx:80'
 const COLLAB_ESIGNET_PATTERN = new RegExp('https://esignet[^"\\s]*', 'g')
 
-function rewriteLocalCertifyMetadata(body: Record<string, unknown>): Record<string, unknown> {
+function rewriteLocalCertifyMetadata(body: Record<string, unknown>, req?: express.Request): Record<string, unknown> {
+  const baseUrl = getPublicBaseUrl(req)
+  const localCertifyHost = `${baseUrl}/api/local-certify`
+  const playgroundOidcUri = `${baseUrl}/api/oidc`
+
   // credential_endpoint and nonce_endpoint carry the full path, e.g.:
   //   http://certify-nginx:80/v1/certify/issuance/credential
   const rewritePath = (url: string | undefined) =>
-    url?.replace(CERTIFY_INTERNAL_DOCKER + '/v1/certify', LOCAL_CERTIFY_HOST) ?? url
+    url?.replace(CERTIFY_INTERNAL_DOCKER + '/v1/certify', localCertifyHost) ?? url
 
   // credential_issuer is just the base, e.g.:
   //   http://certify-nginx:80
   const rewriteBase = (url: string | undefined) =>
-    url?.replace(CERTIFY_INTERNAL_DOCKER, LOCAL_CERTIFY_HOST) ?? url
+    url?.replace(CERTIFY_INTERNAL_DOCKER, localCertifyHost) ?? url
 
   const result = { ...body }
 
   // Rewrite all internal Docker references to the public-facing BFF proxy
   if (typeof result.credential_issuer === 'string') {
-    // Keep the original internal URL so the wallet can use it as the proof JWT aud.
-    // Certify's proof validator checks aud against its own internal credential_issuer
-    // (http://certify-nginx:80/v1/certify), not the proxy URL we expose to the wallet.
-    result._internal_credential_issuer = result.credential_issuer
     result.credential_issuer = rewriteBase(result.credential_issuer)
+    result._internal_credential_issuer = result.credential_issuer
   }
   if (typeof result.credential_endpoint === 'string') {
     result.credential_endpoint = rewritePath(result.credential_endpoint)
@@ -246,7 +389,10 @@ function rewriteLocalCertifyMetadata(body: Record<string, unknown>): Record<stri
   }
   if (Array.isArray(result.authorization_servers)) {
     result.authorization_servers = (result.authorization_servers as string[]).map(
-      (url: string) => url.replace(COLLAB_ESIGNET_PATTERN, PLAYGROUND_OIDC_URI).replace('http://inji-playground:3001/api/oidc', PLAYGROUND_OIDC_URI)
+      (url: string) =>
+        url.replace(COLLAB_ESIGNET_PATTERN, playgroundOidcUri)
+           .replace('http://inji-playground:3001/api/oidc', playgroundOidcUri)
+           .replace('http://localhost:3001/api/oidc', playgroundOidcUri)
     )
   }
 
@@ -269,7 +415,7 @@ app.all('/api/local-certify/*splat', async (req, res) => {
     const isWellKnown = path.includes('.well-known')
     if (isWellKnown && typeof result.body === 'object' && result.body !== null) {
       return res.status(result.status).json(
-        rewriteLocalCertifyMetadata(result.body as Record<string, unknown>)
+        rewriteLocalCertifyMetadata(result.body as Record<string, unknown>, req)
       )
     }
 

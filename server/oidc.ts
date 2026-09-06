@@ -24,18 +24,19 @@ initKeys().catch(console.error)
 const DOCKER_ISSUER_URI = 'http://host.docker.internal:3001/api/oidc'
 
 // Dynamic helper — returns the base URL as seen by the requester.
-// When called from the browser, this returns localhost:3001.
-// When called from Certify inside Docker (for JWKS), it returns host.docker.internal:3001.
 function getIssuerUri(req: any): string {
-  const host = req.headers.host || 'localhost:3001'
-  return `http://${host}/api/oidc`
+  const tunnel = process.env.PUBLIC_BASE_URL || 'https://eb9f-119-161-98-68.ngrok-free.app'
+  if (tunnel) return `${tunnel.replace(/\/$/, '')}/api/oidc`
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http'
+  const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3001'
+  return `${proto}://${host}/api/oidc`
 }
 
 const discoveryHandler = (req: any, res: any) => {
   const issuer = getIssuerUri(req)
   res.json({
     issuer,
-    authorization_endpoint: 'http://localhost:3001/api/oidc/authorize',
+    authorization_endpoint: `${issuer}/authorize`,
     token_endpoint: `${issuer}/token`,
     jwks_uri: `${issuer}/jwks`,
     response_types_supported: ['code'],

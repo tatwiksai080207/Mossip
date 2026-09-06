@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Header from './components/Header'
 import RoleSelector from './components/RoleSelector'
 import FlowProgress from './components/FlowProgress'
@@ -15,6 +15,17 @@ function App() {
     selectedIssuer, selectedWallet, selectedVerifier, selectedCredType,
     steps, isRunning, runFlow, resumeOAuthFlow, continueVerification, checkVerificationResult
   } = useStore()
+
+  const [tunnelUrl, setTunnelUrl] = useState<string>('https://eb9f-119-161-98-68.ngrok-free.app')
+
+  useEffect(() => {
+    fetch('/api/tunnel')
+      .then(r => r.json())
+      .then(d => {
+        if (d?.tunnelUrl) setTunnelUrl(d.tunnelUrl)
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
@@ -59,7 +70,6 @@ function App() {
     if (requestId) {
       if (selectedVerifier?.env === 'local') {
         // Local verifier tunnel (OpenID4VP mandates https with a domain name)
-        const tunnelUrl = 'https://d36f-119-161-98-68.ngrok-free.app'
         requestUri = `${tunnelUrl}/v1/verify/vp-request/${requestId}`
         vpClientId = 'localhost-verifier'
       } else {
@@ -71,9 +81,7 @@ function App() {
   }
 
   const vpRequestDeepLink = (requestUri && vpClientId)
-    ? (selectedVerifier?.env === 'local'
-        ? `openid4vp://?client_id=${encodeURIComponent(vpClientId)}&response_type=vp_token&request_uri=${encodeURIComponent(requestUri)}`
-        : `openid4vp://?client_id=${encodeURIComponent(vpClientId)}&client_id_scheme=pre-registered&response_type=vp_token&request_uri=${encodeURIComponent(requestUri)}`)
+    ? `openid4vp://authorize?client_id=${encodeURIComponent(vpClientId)}&response_type=vp_token&response_mode=direct_post&request_uri=${encodeURIComponent(requestUri)}`
     : null
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">

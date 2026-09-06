@@ -30,6 +30,7 @@ services:
       - enable_certify_artifactory=false
       - download_hsm_client=false
       - mosip_certify_domain_url=http://certify-nginx:80
+      - mosip_certify_identifier=https://eb9f-119-161-98-68.ngrok-free.app/api/local-certify
     volumes:
       - ./config/certify-default.properties:/home/mosip/config/certify-default.properties
       - ./config/certify-csvdp-farmer.properties:/home/mosip/config/certify-csvdp-farmer.properties
@@ -128,7 +129,7 @@ services:
       - DATABASE_USERNAME=postgres
       - DATABASE_PASSWORD=postgres
       - INJI_VP_REQUEST_LONG_POLLING_TIMEOUT=55000
-      - INJI_VP_SUBMISSION_BASE_URL=https://d36f-119-161-98-68.ngrok-free.app/v1/verify
+      - INJI_VP_SUBMISSION_BASE_URL=https://eb9f-119-161-98-68.ngrok-free.app/v1/verify
       - INJI_DID_VERIFY_URI=did:web:verify-service:v1:verify
       - INJI_DID_VERIFY_PUBLIC_KEY_URI=did:web:verify-service:v1:verify#key-0
       - INJI_KEYSTORE_FILE_PASS=mosip

@@ -310,11 +310,19 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
         input_descriptors: [
           {
             id: configId,
+            format: {
+              ldp_vc: {
+                proof_type: ["Ed25519Signature2018", "Ed25519Signature2020", "RsaSignature2018"]
+              },
+              "vc+sd-jwt": {
+                "sd-jwt_alg_values": ["RS256", "ES256", "ES256K", "EdDSA"],
+                "kb-jwt_alg_values": ["RS256", "ES256", "ES256K", "EdDSA"]
+              }
+            },
             constraints: {
               fields: [
                 {
-                  path: ["$.type"],
-                  filter: { type: "string", pattern: "VerifiableCredential" }
+                  path: ["$.type"]
                 }
               ]
             }
