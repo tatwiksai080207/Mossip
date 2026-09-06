@@ -393,11 +393,15 @@ export async function submitVPResponse(verifier: VerifierConfig): Promise<StepRe
   // 2. Submit it to the Verifier's responseUri (direct_post)
   let responseUri = session.responseUri || `${verifier.host || '/api/verifier'}/v1/verify/${verifier.env === 'local' ? 'vp-submission/direct-post' : 'v2/vp-submission/direct-post'}`
   
-  if (responseUri.startsWith('https://injiverify.collab.mosip.net') || responseUri.startsWith('http://verify-service:8080') || responseUri.startsWith('http://localhost:8095')) {
-    // Both collab and local return an absolute URI that will fail with CORS.
-    // Rewrite it to use the proxy path.
-    const url = new URL(responseUri)
-    responseUri = `${verifier.host || '/api/verifier'}${url.pathname}`
+  if (responseUri.startsWith('http://') || responseUri.startsWith('https://')) {
+    try {
+      const url = new URL(responseUri)
+      if (typeof window !== 'undefined' && url.origin !== window.location.origin) {
+        responseUri = `${verifier.host || '/api/verifier'}${url.pathname}`
+      }
+    } catch {
+      // keep existing responseUri
+    }
   }
 
   // The verifier expects the submission as application/x-www-form-urlencoded.
