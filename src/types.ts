@@ -54,6 +54,7 @@ export interface TestRunConfig {
   wallet: WalletConfig
   verifier: VerifierConfig
   credentialType: CredentialType
+  tamperMode?: 'none' | 'signature' | 'expired'
 }
 
 // Steps in the flow

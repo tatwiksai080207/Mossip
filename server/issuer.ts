@@ -19,6 +19,7 @@ import { Router, type Request, type Response } from 'express'
 import * as jose from 'jose'
 import { generateEd25519Key, resolveDid, didKeyDocument, type PlaygroundKey } from './keys'
 import { issueLdpCredential, type DataModel } from './formats/ldp'
+import { issueSdJwtCredential } from './formats/sd-jwt'
 
 const PRE_AUTH_GRANT = 'urn:ietf:params:oauth:grant-type:pre-authorized_code'
 
@@ -54,6 +55,12 @@ export const CREDENTIAL_CONFIGS: CredentialConfig[] = [
     vcType: 'PlaygroundIdentityCredential',
     dataModel: '2.0',
     displayName: 'Playground Identity (W3C VC 2.0)',
+  },
+  {
+    id: 'PlaygroundIdentityCredential_SDJWT',
+    format: 'vc+sd-jwt',
+    vcType: 'PlaygroundIdentityCredential',
+    displayName: 'Playground Identity (SD-JWT VC)',
   },
 ]
 
@@ -120,7 +127,7 @@ function fail(res: Response, status: number, error: string, description: string,
 
 // ── Proof of possession ─────────────────────────────────────────────────────
 
-type ProofOutcome = { ok: true; holderDid: string } | { ok: false; description: string }
+type ProofOutcome = { ok: true; holderDid: string; publicJwk?: jose.JWK } | { ok: false; description: string }
 
 /**
  * Validates a wallet's `openid4vci-proof+jwt`.
@@ -170,7 +177,7 @@ async function validateProof(proofJwt: string, audience: string, accessToken: st
       }
     }
 
-    return { ok: true, holderDid }
+    return { ok: true, holderDid, publicJwk }
   } catch (err) {
     return { ok: false, description: `Proof JWT did not verify: ${String(err)}` }
   }
@@ -181,6 +188,36 @@ async function validateProof(proofJwt: string, audience: string, accessToken: st
 function credentialConfigurationsSupported(): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const cfg of CREDENTIAL_CONFIGS) {
+    if (cfg.format === 'vc+sd-jwt') {
+      out[cfg.id] = {
+        format: 'vc+sd-jwt',
+        scope: cfg.id,
+        vct: 'https://inji-playground.mosip.dev/credentials/identity',
+        cryptographic_binding_methods_supported: ['jwk', 'did:key', 'did:jwk'],
+        credential_signing_alg_values_supported: ['ES256', 'EdDSA'],
+        proof_types_supported: {
+          jwt: { proof_signing_alg_values_supported: ['EdDSA', 'ES256'] },
+        },
+        claims: {
+          fullName: { display: [{ name: 'Full Name', locale: 'en' }] },
+          dateOfBirth: { display: [{ name: 'Date of Birth', locale: 'en' }] },
+          gender: { display: [{ name: 'Gender', locale: 'en' }] },
+          email: { display: [{ name: 'Email', locale: 'en' }] },
+          region: { display: [{ name: 'Region', locale: 'en' }] },
+        },
+        display: [{
+          name: cfg.displayName,
+          locale: 'en',
+          background_color: '#0f172a',
+          text_color: '#ffffff',
+          logo: {
+            url: 'https://api.collab.mosip.net/inji/mosip-logo.png',
+            alt_text: 'logo'
+          }
+        }],
+      }
+      continue
+    }
     out[cfg.id] = {
       format: cfg.format,
       scope: cfg.id,
@@ -232,7 +269,7 @@ export async function createIssuer(opts: { baseUrl: string; mountPath: string })
   const router = Router()
 
   const getBaseUrl = (req?: Request) => {
-    if (req?.headers?.host) {
+    if (req?.headers?.host && !req.headers.host.includes('inji-playground')) {
       const proto = (req.headers['x-forwarded-proto'] as string) || 'http'
       return `${proto}://${req.headers.host}`
     }
@@ -412,6 +449,7 @@ export async function createIssuer(opts: { baseUrl: string; mountPath: string })
     // wallet can retry immediately, as the spec requires.
     const retry = () => ({ c_nonce: mintNonce(auth.token), c_nonce_expires_in: NONCE_TTL_S })
     let holderDid = 'did:jwk:eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6Im1vY2sifQ'
+    let holderJwk: jose.JWK | undefined
     const proof = body.proof as { proof_type?: string; jwt?: string } | undefined
     if (proof?.jwt) {
       const outcome = await validateProof(proof.jwt, identifier, auth.token)
@@ -419,6 +457,24 @@ export async function createIssuer(opts: { baseUrl: string; mountPath: string })
         return fail(res, 400, 'invalid_proof', outcome.description, retry())
       }
       holderDid = outcome.holderDid
+      holderJwk = outcome.publicJwk
+    }
+
+    if (cfg.format === 'vc+sd-jwt') {
+      const sdJwt = await issueSdJwtCredential({
+        issuerKey: key,
+        issuerUrl: identifier,
+        vct: 'https://inji-playground.mosip.dev/credentials/identity',
+        claims: SUBJECTS[auth.record.subjectId] ?? SUBJECTS['playground-holder-1'],
+        holderDid,
+        holderKey: holderJwk ? { publicJwk: holderJwk } as any : undefined,
+      })
+
+      return res.json({
+        credential: sdJwt.compact,
+        c_nonce: mintNonce(auth.token),
+        c_nonce_expires_in: NONCE_TTL_S,
+      })
     }
 
     if (cfg.format !== 'ldp_vc') {

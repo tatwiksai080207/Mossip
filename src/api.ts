@@ -322,7 +322,7 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
             constraints: {
               fields: [
                 {
-                  path: ["$.type"]
+                  path: credType.format === 'vc+sd-jwt' ? ["$.vct"] : ["$.type"]
                 }
               ]
             }
@@ -377,7 +377,10 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
 // Until the playground wallet holds a real credential (next phase), there is
 // nothing genuine to present. Report that plainly instead of inventing a VP.
 
-export async function submitVPResponse(verifier: VerifierConfig): Promise<StepResult> {
+export async function submitVPResponse(
+  verifier: VerifierConfig,
+  opts: { tamper?: 'none' | 'signature' | 'expired' } = {},
+): Promise<StepResult> {
   const session = currentVpSession
   if (!session) {
     throw new StepError('No VP session — the authorization request step did not complete', {})
@@ -387,6 +390,7 @@ export async function submitVPResponse(verifier: VerifierConfig): Promise<StepRe
   const { res: presentRes, data: presentData } = await postJson('/api/wallet/present', {
     nonce: session.nonce,
     clientId: 'injiverify.collab.mosip.net/',
+    tamper: opts.tamper && opts.tamper !== 'none' ? opts.tamper : undefined,
   })
   if (!presentRes.ok) {
     throw new StepError('Failed to sign Verifiable Presentation', {
@@ -396,7 +400,7 @@ export async function submitVPResponse(verifier: VerifierConfig): Promise<StepRe
     })
   }
 
-  const { vp_token, holderDid, credentialId } = presentData as Record<string, unknown>
+  const { vp_token, holderDid, credentialId, format: presFormat, tampered } = presentData as Record<string, unknown>
 
   // 2. Submit it to the Verifier's responseUri (direct_post)
   let responseUri = session.responseUri || `${verifier.host || '/api/verifier'}/v1/verify/${verifier.env === 'local' ? 'vp-submission/direct-post' : 'v2/vp-submission/direct-post'}`
@@ -414,6 +418,8 @@ export async function submitVPResponse(verifier: VerifierConfig): Promise<StepRe
 
   // The verifier expects the submission as application/x-www-form-urlencoded.
   const submitParams = new URLSearchParams()
+  const isSdJwt = presFormat === 'vc+sd-jwt' || (typeof vp_token === 'string' && vp_token.includes('~'))
+
   if (verifier.env === 'local') {
     submitParams.set('vp_token', typeof vp_token === 'string' ? vp_token : JSON.stringify(vp_token))
     submitParams.set('presentation_submission', JSON.stringify({
@@ -422,7 +428,7 @@ export async function submitVPResponse(verifier: VerifierConfig): Promise<StepRe
       descriptor_map: [
         {
           id: (session.dcqlQuery.credentials?.[0]?.id || 'credential_1'),
-          format: "ldp_vp",
+          format: isSdJwt ? "vc+sd-jwt" : "ldp_vp",
           path: "$"
         }
       ]
@@ -471,15 +477,18 @@ export async function submitVPResponse(verifier: VerifierConfig): Promise<StepRe
       vp_token,
       holderDid,
       presented_credential_id: credentialId,
+      format: presFormat,
+      tampered: Boolean(tampered),
       _verifier_response: submitData,
     }, 
     source: 'live' 
   }
 }
 
-// ── Step 7: verification result ─────────────────────────────────────────────
-
-export async function verifyPresentation(verifier: VerifierConfig): Promise<StepResult> {
+export async function verifyPresentation(
+  verifier: VerifierConfig,
+  opts: { isTampered?: boolean } = {},
+): Promise<StepResult> {
   const session = currentVpSession
   if (!session) {
     throw new StepError('No VP session to fetch a result for', {})
@@ -506,6 +515,42 @@ export async function verifyPresentation(verifier: VerifierConfig): Promise<Step
       _http_status: res.status,
       _response: data,
       _reason: 'Inji Verify only produces a result once a vp_token has been submitted to direct_post.',
+    })
+  }
+
+  const resultObj = data as Record<string, unknown> | null
+  const vpStatus = resultObj?.vpResultStatus as string | undefined
+  const vcResults = resultObj?.vcResults as Array<{ verificationStatus?: string; vc?: string }> | undefined
+  const isRejected = vpStatus === 'FAILED' || vcResults?.some(v => v.verificationStatus === 'INVALID')
+
+  if (isRejected) {
+    if (opts.isTampered) {
+      // In a negative test, verifier rejection proves cryptographic enforcement!
+      return {
+        payload: {
+          ...(typeof data === 'object' && data !== null ? data : {}),
+          _negative_test_outcome: 'PASSED (Verifier correctly rejected the tampered presentation)',
+          _tamper_detected: true,
+        },
+        source: 'live'
+      }
+    }
+
+    // In a normal test run, rejection means the verification failed!
+    throw new StepError(`Inji Verify rejected the presentation (status: ${vpStatus || 'FAILED'})`, {
+      _vp_result_status: vpStatus,
+      _verification_results: vcResults,
+      _response: data,
+      _interop_finding: 'Inji Verify currently requires an X.509 certificate chain (x5c) for SD-JWT VC rather than decentralized did:key/did:jwk.',
+    })
+  }
+
+  if (opts.isTampered) {
+    throw new StepError(`Negative test failed: Inji Verify accepted the tampered presentation (status: ${vpStatus || 'SUCCESS'}) instead of rejecting it.`, {
+      _vp_result_status: vpStatus,
+      _verification_results: vcResults,
+      _response: data,
+      _negative_test_outcome: 'FAILED (Expected Inji Verify to reject the presentation, but it accepted it)',
     })
   }
 

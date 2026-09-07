@@ -22,11 +22,13 @@ interface PlaygroundStore {
   pausedStep: FlowStepInfo['id'] | null
   oauthUrl: string | null
   history: TestRun[]
+  tamperMode: 'none' | 'signature' | 'expired'
 
   selectIssuer: (issuer: IssuerConfig) => void
   selectWallet: (wallet: WalletConfig) => void
   selectVerifier: (verifier: VerifierConfig) => void
   selectCredType: (ct: CredentialType) => void
+  setTamperMode: (mode: 'none' | 'signature' | 'expired') => void
   runFlow: () => Promise<void>
   resumeOAuthFlow: (code: string) => void
   clearHistory: () => void
@@ -44,6 +46,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
   pausedStep: null,
   oauthUrl: null,
   history: [],
+  tamperMode: 'none',
 
   _resumeResolver: null as ((code: string) => void) | null,
 
@@ -57,11 +60,25 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
   selectWallet: (wallet) => set({ selectedWallet: wallet }),
   selectVerifier: (verifier) => set({ selectedVerifier: verifier }),
   selectCredType: (ct) => set({ selectedCredType: ct }),
+  setTamperMode: (mode) => {
+    set({ tamperMode: mode })
+    fetch('/api/tamper', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tamperMode: mode }),
+    }).catch(err => console.error('Failed to sync tamper mode:', err))
+  },
   clearHistory: () => set({ history: [] }),
 
   runFlow: async () => {
-    const { selectedIssuer, selectedWallet, selectedVerifier, selectedCredType } = get()
+    const { selectedIssuer, selectedWallet, selectedVerifier, selectedCredType, tamperMode } = get()
     if (!selectedIssuer || !selectedWallet || !selectedVerifier || !selectedCredType) return
+
+    fetch('/api/tamper', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tamperMode }),
+    }).catch(err => console.error('Failed to sync tamper mode on runFlow:', err))
 
     set({ isRunning: true })
     api.resetVpSession()
@@ -78,8 +95,8 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       'token-exchange': () => api.exchangeToken(selectedIssuer, selectedCredType),
       'credential-issuance': () => api.requestCredential(selectedIssuer, selectedCredType),
       'vp-request': () => api.createVPRequest(selectedCredType, selectedVerifier),
-      'vp-response': () => api.submitVPResponse(selectedVerifier),
-      'verification': () => api.verifyPresentation(selectedVerifier),
+      'vp-response': () => api.submitVPResponse(selectedVerifier, { tamper: get().tamperMode }),
+      'verification': () => api.verifyPresentation(selectedVerifier, { isTampered: get().tamperMode !== 'none' }),
     }
 
     for (let i = 0; i < FLOW_STEPS.length; i++) {
@@ -154,6 +171,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
         wallet: selectedWallet,
         verifier: selectedVerifier,
         credentialType: selectedCredType,
+        tamperMode: get().tamperMode,
       },
       steps: finalSteps,
       result: allPassed ? 'pass' : 'fail',
@@ -171,8 +189,14 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
   },
 
   continueVerification: async () => {
-    const { steps, selectedCredType, selectedVerifier } = get()
+    const { steps, selectedCredType, selectedVerifier, tamperMode } = get()
     if (!selectedCredType || !selectedVerifier) return
+
+    fetch('/api/tamper', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tamperMode }),
+    }).catch(err => console.error('Failed to sync tamper mode on continueVerification:', err))
 
     set({ isRunning: true })
 
@@ -218,10 +242,15 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
     )})
 
     try {
-      const result = await api.verifyPresentation(selectedVerifier)
-      set({ steps: get().steps.map((s, idx) =>
-        idx === verificationIdx ? { ...s, status: 'done', payload: result.payload, source: result.source } : s
-      )})
+      const result = await api.verifyPresentation(selectedVerifier, { isTampered: get().tamperMode !== 'none' })
+      const isManual = get().selectedWallet?.id === 'inji-web-manual' || get().selectedWallet?.id === 'inji-mobile'
+      set({ steps: get().steps.map((s, idx) => {
+        if (idx === verificationIdx) return { ...s, status: 'done', payload: result.payload, source: result.source }
+        if (isManual && s.status === 'pending') {
+          return { ...s, status: 'done', payload: { ...(typeof s.payload === 'object' ? s.payload : {}), _note: 'Completed via external wallet app' }, source: 'live' }
+        }
+        return s
+      })})
     } catch (err: unknown) {
       const errObj = err as { stepPayload?: Record<string, unknown>; message?: string }
       const payload = errObj.stepPayload

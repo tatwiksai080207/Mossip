@@ -23,13 +23,15 @@ initKeys().catch(console.error)
 // (inside Docker) can resolve it to fetch the JWKS for token validation.
 const DOCKER_ISSUER_URI = 'http://host.docker.internal:3001/api/oidc'
 
-// Dynamic helper — returns the base URL as seen by the requester.
 function getIssuerUri(req: any): string {
-  const tunnel = process.env.PUBLIC_BASE_URL || 'https://eb9f-119-161-98-68.ngrok-free.app'
-  if (tunnel) return `${tunnel.replace(/\/$/, '')}/api/oidc`
   const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http'
-  const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3001'
-  return `${proto}://${host}/api/oidc`
+  const host = req.headers['x-forwarded-host'] || req.headers.host
+  if (host && !host.includes('localhost') && !host.includes('127.0.0.1') && !host.includes('host.docker.internal') && !host.includes('inji-playground')) {
+    return `${proto}://${host}/api/oidc`
+  }
+  const tunnel = process.env.PUBLIC_BASE_URL
+  if (tunnel) return `${tunnel.replace(/\/$/, '')}/api/oidc`
+  return `${proto}://${host || 'localhost:3001'}/api/oidc`
 }
 
 const discoveryHandler = (req: any, res: any) => {

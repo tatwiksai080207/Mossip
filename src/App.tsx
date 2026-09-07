@@ -13,10 +13,11 @@ import QRCode from 'react-qr-code'
 function App() {
   const {
     selectedIssuer, selectedWallet, selectedVerifier, selectedCredType,
-    steps, isRunning, runFlow, resumeOAuthFlow, continueVerification, checkVerificationResult
+    steps, isRunning, runFlow, resumeOAuthFlow, continueVerification, checkVerificationResult,
+    tamperMode, setTamperMode,
   } = useStore()
 
-  const [tunnelUrl, setTunnelUrl] = useState<string>('https://eb9f-119-161-98-68.ngrok-free.app')
+  const [tunnelUrl, setTunnelUrl] = useState<string>('https://01b2-119-161-98-68.ngrok-free.app')
 
   useEffect(() => {
     fetch('/api/tunnel')
@@ -100,25 +101,63 @@ function App() {
         </div>
 
         {/* Summary + run */}
-        <div className="flex items-center justify-between border border-slate-800 rounded-lg px-4 py-3 mb-8">
-          <div className="text-sm text-slate-400">
-            {selectedIssuer?.name || '—'} → {selectedWallet?.name || '—'} → {selectedVerifier?.name || '—'}
+        <div className="flex flex-wrap items-center justify-between gap-4 border border-slate-800 rounded-lg px-4 py-3 mb-6 bg-slate-900/30">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+            <span>{selectedIssuer?.name || '—'}</span>
+            <span className="text-slate-600">→</span>
+            <span>{selectedWallet?.name || '—'}</span>
+            <span className="text-slate-600">→</span>
+            <span>{selectedVerifier?.name || '—'}</span>
             {selectedCredType && (
-              <span className="ml-2 text-xs text-slate-500">({selectedCredType.name})</span>
+              <span className={`ml-2 px-2 py-0.5 rounded text-xs font-mono uppercase font-semibold border ${
+                selectedCredType.format === 'vc+sd-jwt'
+                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+              }`}>
+                {selectedCredType.format} ({selectedCredType.name})
+              </span>
             )}
           </div>
-          <button
-            disabled={!canRun}
-            onClick={runFlow}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              canRun
-                ? 'bg-blue-600 text-white hover:bg-blue-500'
-                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-            }`}
-          >
-            {isRunning ? 'Running...' : 'Run Test'}
-          </button>
+
+          <div className="flex items-center gap-3">
+            {/* Tamper & Negative Testing Mode Selector */}
+            <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-md px-2.5 py-1.5">
+              <span className="text-xs text-slate-400 font-medium">Tamper Test:</span>
+              <select
+                value={tamperMode}
+                onChange={(e) => setTamperMode(e.target.value as any)}
+                disabled={isRunning}
+                className="bg-transparent text-xs text-slate-200 focus:outline-none cursor-pointer"
+              >
+                <option value="none" className="bg-slate-900 text-slate-200">Normal (Valid VP)</option>
+                <option value="signature" className="bg-slate-900 text-amber-300">Corrupt Signature (Negative)</option>
+                <option value="expired" className="bg-slate-900 text-amber-300">Malformed / Expired (Negative)</option>
+              </select>
+            </div>
+
+            <button
+              disabled={!canRun}
+              onClick={runFlow}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                canRun
+                  ? 'bg-blue-600 text-white hover:bg-blue-500'
+                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+              }`}
+            >
+              {isRunning ? 'Running...' : 'Run Test'}
+            </button>
+          </div>
         </div>
+
+        {tamperMode !== 'none' && (
+          <div className="mb-6 border border-amber-500/40 bg-amber-500/10 rounded-lg px-4 py-2.5 flex items-center justify-between text-xs text-amber-300">
+            <div className="flex items-center gap-2">
+              <span className="font-bold">⚠️ Negative Testing Enabled:</span>
+              <span>Presentation will be deliberately modified ({tamperMode === 'signature' ? 'invalid cryptographic signature' : 'corrupted token payload'}) to verify rejection by Inji Verify.</span>
+            </div>
+            <button onClick={() => setTamperMode('none')} className="text-amber-400 hover:underline">Reset to Normal</button>
+          </div>
+        )}
 
         {steps.length > 0 ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -154,15 +193,37 @@ function App() {
               <>
                 <h3 className="text-lg font-medium text-slate-200 mb-2">Web Wallet Issuance</h3>
                 <p className="text-sm text-slate-400 mb-6 text-center max-w-md">
-                  Open the credential offer directly in your local web wallet.
+                  Directly download the credential offer into your local web wallet.
                 </p>
-                <a 
-                  href={`http://localhost:3004/?credential_offer=${encodeURIComponent(new URL(offerUri.replace('openid-credential-offer://', 'http://dummy')).searchParams.get('credential_offer') || '')}`}
-                  target="_blank" rel="noreferrer"
-                  className="mt-2 mb-4 inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-lg transition-colors border border-slate-700"
-                >
-                  Open in Local Web Wallet (Port 3004)
-                </a>
+                {(() => {
+                  const mimotoIssuerId = selectedIssuer?.id === 'certify-local' ? 'Farmer' : (selectedIssuer?.id === 'certify-mock' ? 'MockMdl' : 'Playground')
+                  const targetCredId = selectedCredType?.id || selectedCredType?.credentialTypeName || 'PlaygroundIdentityCredential'
+                  const rawOffer = new URL(offerUri.replace('openid-credential-offer://', 'http://dummy')).searchParams.get('credential_offer') || ''
+                  const directWalletIssuanceUrl = `http://localhost:3004/user/issuers/${mimotoIssuerId}?credential_id=${encodeURIComponent(targetCredId)}&auto_download=true&credential_offer=${encodeURIComponent(rawOffer)}`
+                  return (
+                    <>
+                      <div className="flex flex-col sm:flex-row items-center gap-3 mt-2 mb-3">
+                        <a 
+                          href={directWalletIssuanceUrl}
+                          target="_blank" rel="noreferrer"
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+                        >
+                          Open & Directly Download in Wallet (Port 3004)
+                        </a>
+                        <a 
+                          href="http://localhost:3004"
+                          target="_blank" rel="noreferrer"
+                          className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors border border-slate-700"
+                        >
+                          Login / Unlock Wallet First
+                        </a>
+                      </div>
+                      <p className="text-xs text-blue-400/90 mb-4 text-center max-w-lg bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-md">
+                        💡 <strong>Direct Flow:</strong> Routes directly to <strong>{selectedIssuer?.name || 'Playground Issuer'}</strong> and auto-selects <strong>{selectedCredType?.name || targetCredId}</strong> for download.
+                      </p>
+                    </>
+                  )
+                })()}
                 <div className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-lg p-4 mb-4">
                   <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wider">Raw Deep Link (For Copy/Pasting)</p>
                   <code className="text-xs text-green-400 break-all">{offerUri}</code>
@@ -200,15 +261,25 @@ function App() {
                 <p className="text-sm text-slate-400 mb-6 text-center max-w-md">
                   Present your credential directly using your local Inji Web wallet.
                 </p>
-                <a 
-                  href={selectedVerifier?.env === 'local'
-                    ? `http://localhost:3004/user/authorize?client_id=${encodeURIComponent(vpClientId || '')}&request_uri=${encodeURIComponent(requestUri || '')}`
-                    : `http://localhost:3004/user/authorize?client_id=${encodeURIComponent(vpClientId || '')}&client_id_scheme=pre-registered&request_uri=${encodeURIComponent(requestUri || '')}`}
-                  target="_blank" rel="noreferrer"
-                  className="mt-2 mb-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-                >
-                  Present from Local Web Wallet (Port 3004)
-                </a>
+                <div className="flex flex-col sm:flex-row items-center gap-3 mt-2 mb-3">
+                  <a 
+                    href={`http://localhost:3004/user/authorize?client_id=${encodeURIComponent(vpClientId || '')}&response_type=vp_token&response_mode=direct_post&request_uri=${encodeURIComponent(requestUri || '')}`}
+                    target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+                  >
+                    Present from Local Web Wallet (Port 3004)
+                  </a>
+                  <a 
+                    href="http://localhost:3004"
+                    target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors border border-slate-700"
+                  >
+                    1. Open / Login to Wallet (Port 3004)
+                  </a>
+                </div>
+                <p className="text-xs text-amber-400/90 mb-4 text-center max-w-lg bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-md">
+                  💡 <strong>Tip:</strong> Ensure you are signed in to your Inji Web wallet and have entered your 6-digit passcode before presenting.
+                </p>
               </>
             )}
             

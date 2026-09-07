@@ -17,6 +17,7 @@ import { Router, type Request, type Response } from 'express'
 import * as jose from 'jose'
 import { generateP256Key, generateEd25519Key, type PlaygroundKey } from './keys'
 import { signPresentation } from './formats/ldp'
+import { createSdJwtPresentation } from './formats/sd-jwt'
 
 const PRE_AUTH_GRANT = 'urn:ietf:params:oauth:grant-type:pre-authorized_code'
 const AUTH_CODE_GRANT = 'authorization_code'
@@ -75,13 +76,42 @@ async function readBody(res: { text: () => Promise<string> }): Promise<unknown> 
   try { return JSON.parse(text) } catch { return text.slice(0, 1200) }
 }
 
+const PORT = Number(process.env.PORT || 3001)
+
+function resolveCandidateUrls(targetUrl: string): string[] {
+  const list = [targetUrl]
+  try {
+    const parsed = new URL(targetUrl)
+    if (parsed.pathname.includes('/api/playground-issuer') || parsed.pathname.includes('/api/local-certify') || parsed.pathname.includes('/api/oidc')) {
+      list.push(`http://127.0.0.1:${PORT}${parsed.pathname}${parsed.search}`)
+      list.push(`http://localhost:${PORT}${parsed.pathname}${parsed.search}`)
+    }
+  } catch {}
+  return list
+}
+
+async function fetchWithFallback(url: string, init?: RequestInit): Promise<globalThis.Response> {
+  const candidates = resolveCandidateUrls(url)
+  let lastRes: globalThis.Response | null = null
+  let lastErr: unknown = null
+
+  for (const candidate of candidates) {
+    try {
+      const res = await fetch(candidate, init)
+      if (res.ok || (res.status !== 404 && res.status < 500)) {
+        return res
+      }
+      lastRes = res
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  if (lastRes) return lastRes
+  throw lastErr ?? new Error(`Failed to fetch ${url}`)
+}
+
 /**
- * Fetches issuer metadata, trying both well-known layouts.
- *
- * OpenID4VCI specifies inserting `/.well-known/openid-credential-issuer` between
- * the host and the path of the issuer identifier; most deployments append it
- * instead. A wallet that only implements one of the two silently fails against
- * half the ecosystem, so this tries both and records which one answered.
+ * Fetches issuer metadata, trying both well-known layouts and local fallback if tunneled.
  */
 async function discoverIssuerMetadata(credentialIssuer: string): Promise<{
   metadata: Record<string, unknown>
@@ -93,8 +123,16 @@ async function discoverIssuerMetadata(credentialIssuer: string): Promise<{
   const appended = `${base}/.well-known/openid-credential-issuer`
   const inserted = `${url.origin}/.well-known/openid-credential-issuer${url.pathname === '/' ? '' : url.pathname}`
 
+  const rawCandidates = appended === inserted ? [appended] : [appended, inserted]
+  const allCandidates: string[] = []
+  for (const c of rawCandidates) {
+    for (const r of resolveCandidateUrls(c)) {
+      if (!allCandidates.includes(r)) allCandidates.push(r)
+    }
+  }
+
   const attempted: string[] = []
-  for (const candidate of appended === inserted ? [appended] : [appended, inserted]) {
+  for (const candidate of allCandidates) {
     attempted.push(candidate)
     try {
       const res = await fetch(candidate, { headers: { accept: 'application/json' } })
@@ -104,7 +142,7 @@ async function discoverIssuerMetadata(credentialIssuer: string): Promise<{
         return { metadata: metadata as Record<string, unknown>, url: candidate, attempted }
       }
     } catch {
-      // Try the next layout.
+      // Try the next candidate
     }
   }
   throw new Error(`No issuer metadata at any well-known location (tried ${attempted.join(', ')})`)
@@ -277,7 +315,7 @@ export async function createWallet(): Promise<Wallet> {
       // tx_code is a user-supplied transaction code; send it only when asked for.
       if (preAuth.tx_code && opts.txCode) params.set('tx_code', opts.txCode)
 
-      const res = await fetch(tokenEndpoint, {
+      const res = await fetchWithFallback(tokenEndpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: params.toString(),
@@ -304,7 +342,7 @@ export async function createWallet(): Promise<Wallet> {
     // 4 — a fresh nonce, preferring the dedicated endpoint when advertised
     const nonceEndpoint = metadata.nonce_endpoint as string | undefined
     if (nonceEndpoint) {
-      const res = await fetch(nonceEndpoint, {
+      const res = await fetchWithFallback(nonceEndpoint, {
         method: 'POST',
         headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
         body: '{}',
@@ -383,7 +421,7 @@ export async function createWallet(): Promise<Wallet> {
     console.log('[wallet] auth header:', `Bearer ${accessToken}`)
     console.log('[wallet] payload:', JSON.stringify(request, null, 2))
 
-    let credRes = await fetch(credentialEndpoint, {
+    let credRes = await fetchWithFallback(credentialEndpoint, {
       method: 'POST',
       headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
       body: JSON.stringify(request),
@@ -395,7 +433,7 @@ export async function createWallet(): Promise<Wallet> {
       const newProofJwt = await buildProofJwt(proofAudience, credBody.c_nonce)
       request.proof = { proof_type: 'jwt', jwt: newProofJwt }
       console.log('[wallet] retry payload:', JSON.stringify(request, null, 2))
-      credRes = await fetch(credentialEndpoint, {
+      credRes = await fetchWithFallback(credentialEndpoint, {
         method: 'POST',
         headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
         body: JSON.stringify(request),
@@ -415,14 +453,25 @@ export async function createWallet(): Promise<Wallet> {
 
     const raw = credBody.credential
     const asObject = typeof raw === 'object' && raw !== null ? raw as Record<string, unknown> : undefined
-    const rawTypes = asObject?.type
+    let rawTypes = asObject?.type
+    if (!rawTypes && typeof raw === 'string') {
+      try {
+        const parts = raw.split('~')[0].split('.')
+        if (parts.length >= 2) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
+          if (payload.vct) rawTypes = [payload.vct]
+        }
+      } catch {
+        // ignore parse error
+      }
+    }
     const credential: HeldCredential = {
       id: `cred-${Date.now()}-${held.size + 1}`,
       format,
       issuer: offer.credential_issuer,
       credentialConfigurationId: configurationId,
       credential: raw,
-      types: Array.isArray(rawTypes) ? rawTypes as string[] : undefined,
+      types: Array.isArray(rawTypes) ? rawTypes as string[] : (rawTypes ? [rawTypes as unknown as string] : ['VerifiableCredential']),
       holderDid: key.did,
       receivedAt: Date.now(),
     }
@@ -470,11 +519,11 @@ export async function createWallet(): Promise<Wallet> {
 
   /**
    * Signs a Verifiable Presentation over a held credential, bound to the
-   * verifier's nonce. `ldp_vp` only for now — the JWT and mDoc presentation
-   * paths land with their credential formats.
+   * verifier's nonce. Supports both W3C VC (ldp_vp) and IETF SD-JWT VC (vc+sd-jwt),
+   * with optional tamper mode for negative-path testing.
    */
   router.post('/present', async (req: Request, res: Response) => {
-    const { credentialId, nonce, clientId } = req.body ?? {}
+    const { credentialId, nonce, clientId, tamper } = req.body ?? {}
     if (!nonce) {
       res.status(400).json({ error: 'A verifier nonce is required to bind the presentation' })
       return
@@ -485,21 +534,74 @@ export async function createWallet(): Promise<Wallet> {
       res.status(404).json({ error: 'No such credential in the wallet', available: [...held.keys()] })
       return
     }
-    if (target.format !== 'ldp_vc') {
+    if (target.format !== 'ldp_vc' && target.format !== 'vc+sd-jwt') {
       res.status(400).json({ error: `Presenting ${target.format} is not implemented yet` })
       return
     }
 
     try {
-      // Use the Ed25519 presentationKey to sign the VP with Ed25519Signature2020.
-      // The issuance key (P-256) is only used for the OID4VCI proof-of-possession JWT.
-      const vp = await signPresentation({
+      if (target.format === 'vc+sd-jwt') {
+        let vp = await createSdJwtPresentation({
+          credential: String(target.credential),
+          holderKey: key, // P-256 key matching cnf
+          nonce: String(nonce),
+          audience: clientId ? String(clientId) : undefined,
+        })
+        if (tamper === 'signature') {
+          // Corrupt the signature segment
+          vp = vp.replace(/[a-zA-Z0-9_-]{10}$/, 'BAD_SIG_99')
+        } else if (tamper === 'expired') {
+          vp = vp + '.tampered'
+        }
+        res.json({
+          vp_token: vp,
+          holderDid: key.did,
+          credentialId: target.id,
+          format: 'vc+sd-jwt',
+          tampered: Boolean(tamper),
+        })
+        return
+      }
+
+      // ldp_vc flow
+      let vp = await signPresentation({
         credentials: [target.credential as Record<string, unknown>],
         holderKey: presentationKey,
         challenge: String(nonce),
         domain: clientId ? String(clientId) : undefined,
       })
-      res.json({ vp_token: vp, holderDid: presentationKey.did, credentialId: target.id })
+      if (tamper === 'signature') {
+        const vpObj = JSON.parse(JSON.stringify(vp))
+        if (vpObj.proof?.proofValue) {
+          vpObj.proof.proofValue = String(vpObj.proof.proofValue).slice(0, -10) + 'TAMPERED99'
+        }
+        if (vpObj.proof?.jws) {
+          vpObj.proof.jws = String(vpObj.proof.jws).slice(0, -10) + 'TAMPERED99'
+        }
+        if (Array.isArray(vpObj.verifiableCredential) && vpObj.verifiableCredential[0]?.proof) {
+          const vcProof = vpObj.verifiableCredential[0].proof
+          if (vcProof.proofValue) {
+            vcProof.proofValue = String(vcProof.proofValue).slice(0, -10) + 'TAMPERED99'
+          }
+          if (vcProof.jws) {
+            vcProof.jws = String(vcProof.jws).slice(0, -10) + 'TAMPERED99'
+          }
+        }
+        vp = vpObj
+      } else if (tamper === 'expired') {
+        const vpObj = JSON.parse(JSON.stringify(vp))
+        if (Array.isArray(vpObj.verifiableCredential) && vpObj.verifiableCredential[0]) {
+          vpObj.verifiableCredential[0].expirationDate = '2020-01-01T00:00:00Z'
+        }
+        vp = vpObj
+      }
+      res.json({
+        vp_token: vp,
+        holderDid: presentationKey.did,
+        credentialId: target.id,
+        format: 'ldp_vp',
+        tampered: Boolean(tamper),
+      })
     } catch (err) {
       res.status(500).json({ error: 'Failed to sign the presentation', detail: String(err) })
     }

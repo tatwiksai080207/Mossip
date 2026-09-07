@@ -47,6 +47,16 @@ const playgroundLdp20: CredentialType = {
   dataModel: '2.0',
 }
 
+const playgroundSdJwt: CredentialType = {
+  id: 'PlaygroundIdentityCredential_SDJWT',
+  name: 'Playground Identity (SD-JWT VC)',
+  format: 'vc+sd-jwt',
+  proofTypes: ['ES256'],
+  credentialTypeName: 'PlaygroundIdentityCredential_SDJWT',
+  vcTypes: ['PlaygroundIdentityCredential'],
+  vct: 'https://inji-playground.mosip.dev/credentials/identity',
+}
+
 export const issuers: IssuerConfig[] = [
   {
     id: 'certify-playground',
@@ -54,7 +64,7 @@ export const issuers: IssuerConfig[] = [
     description: 'Internal OpenID4VCI mock issuer — supports headless pre-authorized_code flow',
     host: 'http://localhost:3001/api/playground-issuer',
     env: 'mock',
-    credentialTypes: [playgroundLdp, playgroundLdp20],
+    credentialTypes: [playgroundLdp, playgroundLdp20, playgroundSdJwt],
   },
   {
     id: 'certify-local',

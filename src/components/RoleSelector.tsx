@@ -60,7 +60,19 @@ export default function RoleSelector() {
                       : 'border-slate-700 hover:border-slate-600 text-slate-400'
                   }`}
                 >
-                  {ct.name}
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{ct.name}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono uppercase ${
+                      ct.format === 'vc+sd-jwt'
+                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    }`}>
+                      {ct.format}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 font-mono">
+                    {ct.proofTypes.join(', ')}
+                  </div>
                 </button>
               ))}
             </div>
