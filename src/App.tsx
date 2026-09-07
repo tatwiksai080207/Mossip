@@ -69,7 +69,10 @@ function App() {
     const requestId = (vpRequestStep.payload as any)?._response?.requestId as string | undefined
 
     if (requestId) {
-      if (selectedVerifier?.env === 'local') {
+      if (selectedVerifier?.env === 'external') {
+        requestUri = `${tunnelUrl}/api/external/waltid/verifier/v1/verify/vp-request/${requestId}`
+        vpClientId = 'waltid-verifier'
+      } else if (selectedVerifier?.env === 'local') {
         // Local verifier tunnel (OpenID4VP mandates https with a domain name)
         requestUri = `${tunnelUrl}/v1/verify/vp-request/${requestId}`
         vpClientId = 'localhost-verifier'

@@ -298,11 +298,11 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
   let request: any;
   let endpoint = '';
 
-  if (verifier.env === 'local') {
-    // Local Inji Verify 0.17.0 uses v1 Presentation Exchange
+  if (verifier.env === 'local' || verifier.env === 'external') {
+    // Local Inji Verify 0.17.0 and walt.id use Presentation Exchange
     const configId = credType.credentialTypeName || credType.id;
     request = {
-      clientId: 'localhost-verifier',
+      clientId: verifier.env === 'external' ? 'waltid-verifier' : 'localhost-verifier',
       transactionId,
       nonce,
       presentationDefinition: {
@@ -420,7 +420,7 @@ export async function submitVPResponse(
   const submitParams = new URLSearchParams()
   const isSdJwt = presFormat === 'vc+sd-jwt' || (typeof vp_token === 'string' && vp_token.includes('~'))
 
-  if (verifier.env === 'local') {
+  if (verifier.env === 'local' || verifier.env === 'external') {
     submitParams.set('vp_token', typeof vp_token === 'string' ? vp_token : JSON.stringify(vp_token))
     submitParams.set('presentation_submission', JSON.stringify({
       id: "submission_1",
@@ -496,7 +496,7 @@ export async function verifyPresentation(
 
   const host = verifier.host || '/api/verifier'
   let res, data;
-  if (verifier.env === 'local') {
+  if (verifier.env === 'local' || verifier.env === 'external') {
     const getRes = await safeFetch(`${host}/v1/verify/vp-result/${session.transactionId}`)
     res = getRes;
     data = await readBody(getRes);

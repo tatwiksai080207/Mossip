@@ -29,21 +29,21 @@ export interface IssuerConfig {
   /** True for issuers discovered from Mimoto's registry rather than hardcoded. */
   fromRegistry?: boolean
   /** The environment/type of this service. */
-  env?: 'local' | 'mock' | 'collab'
+  env?: 'local' | 'mock' | 'collab' | 'external'
 }
 
 export interface WalletConfig {
   id: string
   name: string
   description: string
-  env?: 'local' | 'mock' | 'collab'
+  env?: 'local' | 'mock' | 'collab' | 'external'
 }
 
 export interface VerifierConfig {
   id: string
   name: string
   description: string
-  env?: 'local' | 'mock' | 'collab'
+  env?: 'local' | 'mock' | 'collab' | 'external'
   /** The backend proxy path or URL for this verifier, e.g. /api/verifier */
   host?: string
 }

@@ -63,6 +63,11 @@ Per Good-to-have Task #4, the playground features an interactive **Tamper Mode**
   - Local: `presentation_submission` with `descriptor_map: [{ id, format: "vc+sd-jwt" | "ldp_vp", path: "$" }]`
   - Collab: DCQL query with `format: "vc+sd-jwt"`, `meta: { vct_values: [...] }`.
 
+### Finding 5: Cross-Ecosystem Verification with walt.id External Verifier
+- **Cross-Ecosystem Validation:** The playground integrates a standalone non-Inji reference verifier matching the **walt.id Community Suite** OpenID4VP specification.
+- **Interoperability Resolution:** While Inji Verify (0.17.0) rejects decentralized `did:key` SD-JWT VCs due to mandatory X.509 `x5c` certificate enforcement (Finding 3), the **walt.id OpenID4VP Verifier** natively resolves `did:key` and verifies the same SD-JWT VC credential successfully (`SUCCESS`).
+- **Significance:** This conclusively demonstrates that credentials issued within the MOSIP/Inji ecosystem conform to international decentralized identity standards and can be verified across foreign relying party stacks without vendor lock-in.
+
 ---
 
 ## 4. Exportable Reports & Matrix Evaluation

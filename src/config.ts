@@ -223,4 +223,11 @@ export const verifiers: VerifierConfig[] = [
     env: 'local',
     host: '/api/local-verifier',
   },
+  {
+    id: 'verify-waltid',
+    name: 'walt.id Verifier',
+    description: 'External reference verifier (OpenID4VP) — supports W3C VCs & SD-JWT VCs with did:key resolution',
+    env: 'external',
+    host: '/api/external/waltid/verifier',
+  },
 ]

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url'
 import { createIssuer } from './issuer'
 import { createWallet } from './wallet'
 import { oidcRouter } from './oidc'
+import { waltidVerifierRouter } from './external/waltid'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -79,6 +80,7 @@ app.use(express.json({ limit: '5mb' }))
 app.use(express.urlencoded({ extended: true, limit: '5mb' }))
 
 app.use('/api/oidc', oidcRouter)
+app.use('/api/external/waltid/verifier', waltidVerifierRouter)
 
 app.get('/api/health', (req, res) => {
   const base = getPublicBaseUrl(req)
@@ -102,6 +104,10 @@ app.post('/api/tunnel', (req, res) => {
 })
 
 let activeTamperMode: 'none' | 'signature' | 'expired' = 'none'
+
+export function getActiveTamperMode() {
+  return activeTamperMode
+}
 
 app.get('/api/tamper', (_req, res) => {
   res.json({ tamperMode: activeTamperMode })
@@ -189,7 +195,7 @@ function applyTamperToObject(vpObj: any, mode: 'none' | 'signature' | 'expired')
   return cloned
 }
 
-function applyTamperingToVpToken(vpTokenRaw: any, mode: 'none' | 'signature' | 'expired'): any {
+export function applyTamperingToVpToken(vpTokenRaw: any, mode: 'none' | 'signature' | 'expired'): any {
   if (mode === 'none' || !vpTokenRaw) return vpTokenRaw
 
   try {
@@ -338,6 +344,22 @@ app.get('/v1/mimoto/verifiers', async (req, res) => {
           client_id: 'injiverify.collab.mosip.net/',
           redirect_uris: ['https://injiverify.collab.mosip.net/'],
           response_uris: ['https://injiverify.collab.mosip.net/v1/verify/v2/vp-submission/direct-post'],
+          jwks_uri: `${activeTunnelUrl}/api/verifier/jwks.json`,
+          allow_unsigned_request: true,
+          spec_version: 'v1',
+        })
+      }
+      // Ensure walt.id external verifier is in the list
+      const hasWaltid = verifiers.some((v: any) => v.client_id === 'waltid-verifier')
+      if (!hasWaltid) {
+        verifiers.push({
+          client_id: 'waltid-verifier',
+          redirect_uris: ['http://localhost:3001/api/external/waltid/verifier'],
+          response_uris: [
+            `${activeTunnelUrl}/api/external/waltid/verifier/v1/verify/vp-submission/direct-post`,
+            'http://localhost:3001/api/external/waltid/verifier/v1/verify/vp-submission/direct-post',
+            'http://inji-playground:3001/api/external/waltid/verifier/v1/verify/vp-submission/direct-post',
+          ],
           jwks_uri: `${activeTunnelUrl}/api/verifier/jwks.json`,
           allow_unsigned_request: true,
           spec_version: 'v1',

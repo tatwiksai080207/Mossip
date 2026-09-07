@@ -13,6 +13,7 @@ export default function RoleSelector() {
       local: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
       mock: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
       collab: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+      external: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
     }
     const colorClass = colors[env as keyof typeof colors] || ''
     return (
