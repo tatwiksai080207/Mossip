@@ -521,10 +521,17 @@ export async function verifyPresentation(
     })
   }
 
-  const resultObj = data as Record<string, unknown> | null
-  const vpStatus = resultObj?.vpResultStatus as string | undefined
+  const resultObj = data as Record<string, any> | null
+  const vpStatus = (resultObj?.vpResultStatus || resultObj?.verificationStatus) as string | undefined
   const vcResults = resultObj?.vcResults as Array<{ verificationStatus?: string; vc?: string }> | undefined
-  const isRejected = vpStatus === 'FAILED' || vcResults?.some(v => v.verificationStatus === 'INVALID')
+  const credResults = resultObj?.credentialResults as Array<{ allChecksSuccessful?: boolean; schemaAndSignatureCheck?: { valid?: boolean } }> | undefined
+
+  const isRejected = 
+    vpStatus === 'FAILED' || 
+    vpStatus === 'INVALID' || 
+    resultObj?.allChecksSuccessful === false ||
+    vcResults?.some(v => v.verificationStatus === 'INVALID') ||
+    credResults?.some(c => c.allChecksSuccessful === false || c.schemaAndSignatureCheck?.valid === false)
 
   if (isRejected) {
     if (opts.isTampered) {
@@ -542,7 +549,7 @@ export async function verifyPresentation(
     // In a normal test run, rejection means the verification failed!
     throw new StepError(`Inji Verify rejected the presentation (status: ${vpStatus || 'FAILED'})`, {
       _vp_result_status: vpStatus,
-      _verification_results: vcResults,
+      _verification_results: vcResults || credResults,
       _response: data,
       _interop_finding: 'Inji Verify currently requires an X.509 certificate chain (x5c) for SD-JWT VC rather than decentralized did:key/did:jwk.',
     })
@@ -551,7 +558,7 @@ export async function verifyPresentation(
   if (opts.isTampered) {
     throw new StepError(`Negative test failed: Inji Verify accepted the tampered presentation (status: ${vpStatus || 'SUCCESS'}) instead of rejecting it.`, {
       _vp_result_status: vpStatus,
-      _verification_results: vcResults,
+      _verification_results: vcResults || credResults,
       _response: data,
       _negative_test_outcome: 'FAILED (Expected Inji Verify to reject the presentation, but it accepted it)',
     })
