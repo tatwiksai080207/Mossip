@@ -14,6 +14,8 @@ export interface CredentialType {
   vct?: string
   /** VC Data Model version, so the report can distinguish 1.1 from 2.0 runs. */
   dataModel?: '1.1' | '2.0'
+  /** mDoc doctype, e.g. `org.iso.18013.5.1.mDL`. */
+  doctype?: string
 }
 
 // Issuer, wallet, verifier configs

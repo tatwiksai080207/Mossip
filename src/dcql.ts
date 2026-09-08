@@ -14,9 +14,10 @@ export interface DcqlCredentialQuery {
   id: string
   format: string
   meta: {
-    // ldp_vc / jwt_vc pick their credential by VC `type`; SD-JWT VC by `vct`.
+    // ldp_vc / jwt_vc pick their credential by VC `type`; SD-JWT VC by `vct`; mso_mdoc by `doctype`.
     type_values?: string[][]
     vct_values?: string[]
+    doctype_values?: string[]
   }
   claims?: DcqlClaimQuery[]
   require_cryptographic_holder_binding?: boolean
@@ -49,12 +50,19 @@ export function buildDcqlQuery(
   credType: CredentialType,
   opts: { claims?: DcqlClaimQuery[]; requireHolderBinding?: boolean } = {},
 ): DcqlQuery {
+  let meta: DcqlCredentialQuery['meta']
+  if (credType.format === 'mso_mdoc') {
+    meta = { doctype_values: [credType.doctype || 'org.iso.18013.5.1.mDL'] }
+  } else if (credType.format === 'vc+sd-jwt') {
+    meta = { vct_values: [credType.vct || credType.credentialTypeName || credType.id] }
+  } else {
+    meta = { type_values: [credType.vcTypes || ['VerifiableCredential', credType.credentialTypeName || credType.id]] }
+  }
+
   const query: DcqlCredentialQuery = {
     id: queryIdFor(credType),
     format: credType.format,
-    meta: credType.format === 'vc+sd-jwt'
-      ? { vct_values: [credType.vct || credType.credentialTypeName || credType.id] }
-      : { type_values: [credType.vcTypes || ['VerifiableCredential', credType.credentialTypeName || credType.id]] },
+    meta,
   }
 
   if (opts.claims?.length) query.claims = opts.claims

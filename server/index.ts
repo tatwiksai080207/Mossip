@@ -1,5 +1,7 @@
 import express from 'express'
 import cors from 'cors'
+import crypto from 'crypto'
+import pg from 'pg'
 import * as jose from 'jose'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -8,6 +10,9 @@ import { createWallet } from './wallet'
 import { oidcRouter } from './oidc'
 import { waltidVerifierRouter } from './external/waltid'
 import { createWaltIdIssuer } from './external/waltid-issuer'
+import { issueMdocCredential } from './formats/mdoc'
+import { issueLdpCredential, type DataModel } from './formats/ldp'
+import { issueSdJwtCredential } from './formats/sd-jwt'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -76,9 +81,20 @@ app.use((req, _res, next) => {
   console.log('[HTTP]', req.method, req.url)
   next()
 })
-app.use(cors())
+app.use(cors({ origin: true, credentials: true }))
 app.use(express.json({ limit: '5mb' }))
 app.use(express.urlencoded({ extended: true, limit: '5mb' }))
+
+// ── The playground's own OpenID4VCI issuer ──────────────────────────────────
+const playgroundIssuer = await createIssuer({ baseUrl: PUBLIC_BASE_URL, mountPath: ISSUER_MOUNT })
+app.use(ISSUER_MOUNT, playgroundIssuer.router)
+
+app.get(`/.well-known/openid-credential-issuer${ISSUER_MOUNT}`, (req, res) => {
+  res.json(playgroundIssuer.issuerMetadata(req))
+})
+app.get(`/.well-known/oauth-authorization-server${ISSUER_MOUNT}`, (req, res) => {
+  res.json(playgroundIssuer.authorizationServerMetadata(req))
+})
 
 app.use('/api/oidc', oidcRouter)
 app.use('/api/external/waltid/verifier', waltidVerifierRouter)
@@ -374,6 +390,306 @@ app.get('/v1/mimoto/verifiers', async (req, res) => {
   }
 })
 
+// ── Database & PDF Bridge for mDoc Credential in Inji Web ───────────────────
+async function getMimotoDbClient(): Promise<pg.Client> {
+  const candidates = [
+    { host: process.env.DATABASE_HOST || 'database', port: Number(process.env.DATABASE_PORT || 5432) },
+    { host: 'localhost', port: 5433 },
+    { host: '127.0.0.1', port: 5433 },
+    { host: 'localhost', port: 5432 },
+  ]
+  for (const c of candidates) {
+    try {
+      const client = new pg.Client({
+        host: c.host,
+        port: c.port,
+        user: process.env.POSTGRES_USER || 'postgres',
+        password: process.env.POSTGRES_PASSWORD || 'postgres',
+        database: process.env.POSTGRES_DB || 'inji_mimoto',
+        connectionTimeoutMillis: 1500,
+      })
+      await client.connect()
+      return client
+    } catch {
+      // try next candidate
+    }
+  }
+  throw new Error('Could not connect to PostgreSQL inji_mimoto database')
+}
+
+function generateDrivingLicencePdf(details?: { docNumber?: string; name?: string }): Buffer {
+  const docNum = details?.docNumber || 'DL-5720110023456'
+  const holderName = details?.name || 'Asha Raghunathan'
+  const content = `%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj
+4 0 obj << /Length 260 >> stream
+BT
+/F1 20 Tf
+100 700 Td
+(Playground Driving Licence) Tj
+/F1 12 Tf
+0 -30 Td
+(Document Number: ${docNum}) Tj
+0 -20 Td
+(Name: ${holderName}) Tj
+0 -20 Td
+(Issuing Authority: Karnataka Transport Department) Tj
+0 -20 Td
+(Format: ISO/IEC 18013-5 mDoc / mDL) Tj
+0 -20 Td
+(Status: Verified & Valid) Tj
+ET
+endstream
+endobj
+5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000244 00000 n 
+0000000555 00000 n 
+trailer << /Size 6 /Root 1 0 R >>
+startxref
+630
+%%EOF`
+  return Buffer.from(content)
+}
+
+function generateIdentityCredentialPdf(credType: string, details?: { name?: string; dob?: string; gender?: string; region?: string }): Buffer {
+  const name = details?.name || 'Asha Raghunathan'
+  const dob = details?.dob || '1991-07-14'
+  const gender = details?.gender || 'Female'
+  const region = details?.region || 'Karnataka'
+
+  let formatLabel = 'W3C Verifiable Credential 1.1'
+  if (credType.includes('2.0') || credType.includes('VCDM2.0')) {
+    formatLabel = 'W3C Verifiable Credential 2.0'
+  } else if (credType.includes('SDJWT') || credType.includes('sd-jwt')) {
+    formatLabel = 'IETF SD-JWT VC'
+  }
+
+  const content = `%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj
+4 0 obj << /Length 280 >> stream
+BT
+/F1 20 Tf
+100 700 Td
+(Playground Identity Credential) Tj
+/F1 12 Tf
+0 -30 Td
+(Name: ${name}) Tj
+0 -20 Td
+(Date of Birth: ${dob}) Tj
+0 -20 Td
+(Gender: ${gender}) Tj
+0 -20 Td
+(Region: ${region}) Tj
+0 -20 Td
+(Format: ${formatLabel}) Tj
+0 -20 Td
+(Status: Verified & Valid) Tj
+ET
+endstream
+endobj
+5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000244 00000 n 
+0000000575 00000 n 
+trailer << /Size 6 /Root 1 0 R >>
+startxref
+650
+%%EOF`
+  return Buffer.from(content)
+}
+
+async function handlePlaygroundIssuanceToMimoto(walletId: string, credentialConfigurationId: string, issuerId = 'Playground') {
+  const credType = credentialConfigurationId || 'PlaygroundIdentityCredential'
+  const isMdoc = credType.includes('mDoc') || credType.includes('DrivingLicense') || credType.toLowerCase().includes('mdoc')
+  const isSdJwt = credType.includes('SDJWT') || credType.includes('sd-jwt')
+  const isVcdm2 = credType.includes('2.0') || credType.includes('VCDM2.0')
+
+  let compactCred = ''
+  if (isMdoc) {
+    const mdoc = await issueMdocCredential({
+      issuerKey: playgroundIssuer.key,
+      issuerUrl: `${getPublicBaseUrl()}/api/playground-issuer`,
+      docType: 'org.iso.18013.5.1.mDL',
+      claims: {
+        family_name: 'Raghunathan',
+        given_name: 'Asha',
+        birth_date: '1991-07-14',
+        issue_date: '2022-01-01',
+        expiry_date: '2032-01-01',
+        issuing_country: 'IN',
+        issuing_authority: 'Karnataka Transport Department',
+        document_number: 'DL-5720110023456',
+        driving_privileges: ['B', 'A1'],
+      },
+    })
+    compactCred = mdoc.compact
+  } else if (isSdJwt) {
+    const sdjwt = await issueSdJwtCredential({
+      issuerKey: playgroundIssuer.key,
+      issuerUrl: `${getPublicBaseUrl()}/api/playground-issuer`,
+      vct: 'https://inji-playground.mosip.dev/credentials/identity',
+      claims: {
+        fullName: 'Asha Raghunathan',
+        dateOfBirth: '1991-07-14',
+        gender: 'Female',
+        email: 'asha.r@example.org',
+        region: 'Karnataka',
+      },
+    })
+    compactCred = sdjwt.compact
+  } else {
+    // W3C VC 1.1 or 2.0
+    const dataModel: DataModel = isVcdm2 ? '2.0' : '1.1'
+    const vc = await issueLdpCredential({
+      key: playgroundIssuer.key,
+      dataModel,
+      credentialType: 'PlaygroundIdentityCredential',
+      subject: {
+        fullName: 'Asha Raghunathan',
+        dateOfBirth: '1991-07-14',
+        gender: 'Female',
+        email: 'asha.r@example.org',
+        region: 'Karnataka',
+      },
+      holderDid: playgroundIssuer.key.did,
+    })
+    compactCred = JSON.stringify(vc)
+  }
+
+  const client = await getMimotoDbClient()
+  try {
+    const existing = await client.query(
+      `SELECT id FROM public.verifiable_credentials WHERE wallet_id = $1 AND credential_metadata->>'credentialType' = $2`,
+      [walletId, credType]
+    )
+
+    let credId: string
+    if (existing.rows.length > 0) {
+      credId = existing.rows[0].id
+      await client.query(
+        `UPDATE public.verifiable_credentials SET credential = $1, updated_at = now() WHERE id = $2`,
+        [compactCred, credId]
+      )
+      console.log(`[wallet-bridge] Updated existing ${credType} ${credId} in wallet ${walletId}`)
+    } else {
+      credId = crypto.randomUUID()
+      const metadata = JSON.stringify({ issuerId: issuerId || 'Playground', credentialType: credType })
+      await client.query(
+        `INSERT INTO public.verifiable_credentials (id, wallet_id, credential, credential_metadata, created_at, updated_at) VALUES ($1, $2, $3, $4, now(), now())`,
+        [credId, walletId, compactCred, metadata]
+      )
+      console.log(`[wallet-bridge] Inserted new ${credType} ${credId} into wallet ${walletId}`)
+    }
+
+    return { credentialId: credId }
+  } finally {
+    await client.end().catch(() => {})
+  }
+}
+
+// Backward compatibility alias
+const handleMdocIssuanceToMimoto = handlePlaygroundIssuanceToMimoto
+
+// Direct wallet bridge endpoints
+app.post('/api/wallet-bridge/mimoto-credential', async (req, res) => {
+  try {
+    const { walletId, credentialConfigurationId, issuerId } = req.body || {}
+    if (!walletId) {
+      return res.status(400).json({ error: 'walletId is required' })
+    }
+    console.log(`[wallet-bridge] Bridge issuance request for wallet ${walletId}, configId: ${credentialConfigurationId}`)
+    const result = await handlePlaygroundIssuanceToMimoto(walletId, credentialConfigurationId || 'PlaygroundDrivingLicense_mDoc', issuerId || 'Playground')
+    return res.status(200).json({ response: result })
+  } catch (err) {
+    console.error('[wallet-bridge] Bridge error:', err)
+    return res.status(500).json({ error: 'Bridge failed', detail: String(err) })
+  }
+})
+
+app.get('/api/wallet-bridge/credential-pdf', (req, res) => {
+  const credType = (req.query.credType as string) || 'PlaygroundDrivingLicense_mDoc'
+  const isMdoc = credType.includes('mDoc') || credType.includes('DrivingLicense') || credType.toLowerCase().includes('mdoc')
+  const pdfBuffer = isMdoc ? generateDrivingLicencePdf() : generateIdentityCredentialPdf(credType)
+  const filename = isMdoc ? 'PlaygroundDrivingLicense_mDoc.pdf' : `${credType}.pdf`
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Content-Disposition', `inline; filename="${filename}"`)
+  res.send(pdfBuffer)
+})
+
+// Mimoto proxy interceptors for wallet credentials
+app.post('/v1/mimoto/wallets/:walletId/credentials', async (req, res, next) => {
+  const { walletId } = req.params
+  const configId = req.body?.credentialConfigurationId || req.body?.credential || ''
+  const issuer = req.body?.issuer || 'Playground'
+  const isPlayground = issuer === 'Playground' ||
+                       configId.startsWith('Playground') ||
+                       configId.toLowerCase().includes('mdoc') ||
+                       configId.toLowerCase().includes('drivinglicense')
+
+  if (isPlayground) {
+    try {
+      console.log(`[wallet-bridge] Intercepted Playground credential download for wallet ${walletId}, config: ${configId}`)
+      const result = await handlePlaygroundIssuanceToMimoto(walletId, configId, issuer)
+      return res.status(200).json({ response: result })
+    } catch (err) {
+      console.error('[wallet-bridge] Error issuing credential into mimoto DB:', err)
+      return res.status(500).json({ error: 'Failed to issue credential into wallet', detail: String(err) })
+    }
+  }
+
+  next()
+})
+
+app.get('/v1/mimoto/wallets/:walletId/credentials/:credentialId', async (req, res, next) => {
+  const { walletId, credentialId } = req.params
+  const action = req.query.action as string | undefined
+
+  if (action === 'inline' || action === 'download') {
+    try {
+      const client = await getMimotoDbClient()
+      const dbRes = await client.query(
+        `SELECT id, credential_metadata FROM public.verifiable_credentials WHERE id = $1 AND wallet_id = $2`,
+        [credentialId, walletId]
+      )
+      await client.end().catch(() => {})
+
+      if (dbRes.rows.length > 0) {
+        const credType = dbRes.rows[0].credential_metadata?.credentialType || ''
+        const isMdoc = credType.includes('mDoc') || credType.includes('DrivingLicense') || credType.toLowerCase().includes('mdoc')
+        const isPlayground = credType.startsWith('Playground') || isMdoc
+        if (isPlayground) {
+          const filename = isMdoc ? 'PlaygroundDrivingLicense_mDoc.pdf' : `${credType}.pdf`
+          const pdfBuffer = isMdoc ? generateDrivingLicencePdf() : generateIdentityCredentialPdf(credType)
+          res.setHeader('Content-Type', 'application/pdf')
+          res.setHeader('Content-Disposition', action === 'download'
+            ? `attachment; filename="${filename}"`
+            : `inline; filename="${filename}"`)
+          return res.send(pdfBuffer)
+        }
+      }
+    } catch (err) {
+      console.warn('[wallet-bridge] PDF check error, falling back to proxy:', err)
+    }
+  }
+
+  next()
+})
+
 app.all('/v1/mimoto/*splat', async (req, res) => {
   try {
     const path = '/v1/mimoto' + splatPath(req)
@@ -384,6 +700,8 @@ app.all('/v1/mimoto/*splat', async (req, res) => {
       req.headers as Record<string, string>,
       req.body,
     )
+    const setCookie = result.headers?.get('set-cookie')
+    if (setCookie) res.setHeader('set-cookie', setCookie)
     if (typeof result.body === 'string') {
       res.status(result.status).type(result.contentType || 'text/plain').send(result.body)
     } else {
@@ -435,9 +753,12 @@ async function proxyRequest(
 ) {
   const url = `${targetBase}${path}`
 
+  const hopByHop = new Set(['host', 'connection', 'content-length', 'transfer-encoding'])
   const fetchHeaders: Record<string, string> = {}
-  for (const h of ['content-type', 'authorization', 'accept', 'accept-language']) {
-    if (headers[h]) fetchHeaders[h] = headers[h]
+  for (const [key, val] of Object.entries(headers)) {
+    if (!hopByHop.has(key.toLowerCase()) && typeof val === 'string') {
+      fetchHeaders[key] = val
+    }
   }
 
   const options: RequestInit = { method, headers: fetchHeaders }
@@ -462,6 +783,7 @@ async function proxyRequest(
   return {
     status: response.status,
     contentType: responseContentType,
+    headers: response.headers,
     body: isJson ? await response.json() : await response.text(),
   }
 }
@@ -513,26 +835,6 @@ for (const { prefix, target, label } of PROXIES) {
   })
 }
 
-// ── Inji Wallet Mimoto Proxy Bypass ──────────────────────────────────────────
-// Inji Wallet tries to hit the default Mimoto host on `/v1/mimoto/issuers`.
-// Since the local PC's port 8099 is blocked by the Windows Firewall for the phone,
-// we proxy `/v1/mimoto/*splat` through the Playground Backend (which is exposed via Ngrok).
-app.all('/v1/mimoto/*splat', async (req, res) => {
-  try {
-    const result = await proxyRequest(
-      ENDPOINTS.localMimoto, splatPath(req), req.method,
-      req.headers as Record<string, string>, req.body,
-    )
-    if (typeof result.body === 'string') {
-      res.status(result.status).type(result.contentType || 'text/plain').send(result.body)
-    } else {
-      res.status(result.status).json(result.body)
-    }
-  } catch (err) {
-    console.error('[proxy] Local Mimoto error:', err)
-    res.status(502).json({ error: 'Failed to reach local mimoto', detail: String(err) })
-  }
-})
 
 // ── Local Certify proxy with metadata rewriting ─────────────────────────────
 // Inji Certify embeds internal Docker hostnames and eSignet Collab URLs in its
@@ -806,20 +1108,6 @@ app.post('/api/flow/issue', async (req, res) => {
   }
 })
 
-// ── The playground's own OpenID4VCI issuer ──────────────────────────────────
-const playgroundIssuer = await createIssuer({ baseUrl: PUBLIC_BASE_URL, mountPath: ISSUER_MOUNT })
-app.use(ISSUER_MOUNT, playgroundIssuer.router)
-
-// OpenID4VCI says the well-known segment is inserted between the host and the
-// path of the issuer identifier, while nearly every wallet in practice appends
-// it to the end. Both are served, so a wallet works either way — and the
-// disagreement itself is worth recording in the interoperability report.
-app.get(`/.well-known/openid-credential-issuer${ISSUER_MOUNT}`, (_req, res) => {
-  res.json(playgroundIssuer.issuerMetadata())
-})
-app.get(`/.well-known/oauth-authorization-server${ISSUER_MOUNT}`, (_req, res) => {
-  res.json(playgroundIssuer.authorizationServerMetadata())
-})
 
 // ── walt.id OpenID4VCI external reference issuer ────────────────────────────
 const WALTID_ISSUER_MOUNT = '/api/external/waltid/issuer'

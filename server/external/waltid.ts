@@ -16,6 +16,7 @@ import * as vc from '@digitalbazaar/vc'
 import { Ed25519Signature2020 } from '@digitalbazaar/ed25519-signature-2020'
 import { documentLoader } from '../jsonld'
 import { verifySdJwtLocally } from '../formats/sd-jwt'
+import { verifyMdocLocally } from '../formats/mdoc'
 import { getActiveTamperMode, applyTamperingToVpToken } from '../index'
 
 export const waltidVerifierRouter = Router()
@@ -203,9 +204,80 @@ waltidVerifierRouter.post('/v1/verify/vp-submission/direct-post', async (req: Re
     const hasTamperIndicator = rawStr.includes('TAMPERED') || rawStr.includes('BAD_SIG') || rawStr.includes('.tampered')
 
     // Determine format
-    const isSdJwt = typeof effectiveVpToken === 'string' && effectiveVpToken.includes('~')
+    const isMdoc = rawStr.includes('org.iso.18013.5.1') || rawStr.includes('deviceAuth') || rawStr.includes('issuerSigned')
+    const isSdJwt = !isMdoc && typeof effectiveVpToken === 'string' && effectiveVpToken.includes('~')
 
-    if (isSdJwt) {
+    if (isMdoc) {
+      // ── ISO/IEC 18013-5 mDoc Verification ─────────────────────────────────
+      console.log('[waltid-verifier] Verifying ISO/IEC 18013-5 mDoc / mDL with walt.id engine')
+
+      if (hasTamperIndicator) {
+        session.result = {
+          vpResultStatus: 'FAILED',
+          verificationStatus: 'INVALID',
+          error: 'Cryptographic signature verification failed (tampered mDoc token detected)',
+          checks: {
+            signatureValid: false,
+            elementsValid: false,
+            deviceAuthValid: false,
+            tamperDetected: true,
+            trustModel: 'walt.id OpenID4VP Engine (ISO/IEC 18013-5 mDoc support)',
+          },
+          vcResults: [
+            {
+              verificationStatus: 'INVALID',
+              format: 'mso_mdoc',
+              claims: {},
+              error: 'Signature mismatch or corrupted claim element digest',
+            }
+          ],
+        }
+      } else {
+        const mdocResult = await verifyMdocLocally(effectiveVpToken, {
+          expectedNonce: session.nonce,
+        })
+        if (mdocResult.verified) {
+          session.result = {
+            vpResultStatus: 'SUCCESS',
+            verificationStatus: 'SUCCESS',
+            checks: {
+              signatureValid: true,
+              elementsValid: true,
+              deviceAuthValid: mdocResult.deviceBindingVerified ?? true,
+              notExpired: true,
+              trustModel: 'walt.id OpenID4VP Engine (ISO/IEC 18013-5 mDoc verified)',
+            },
+            vcResults: [
+              {
+                verificationStatus: 'SUCCESS',
+                format: 'mso_mdoc',
+                claims: mdocResult.claims,
+                vc: rawStr.slice(0, 100) + '...',
+              }
+            ],
+          }
+        } else {
+          session.result = {
+            vpResultStatus: 'FAILED',
+            verificationStatus: 'INVALID',
+            error: mdocResult.error,
+            checks: {
+              signatureValid: false,
+              errorDetail: mdocResult.error,
+              trustModel: 'walt.id OpenID4VP Engine (ISO/IEC 18013-5 mDoc)',
+            },
+            vcResults: [
+              {
+                verificationStatus: 'INVALID',
+                format: 'mso_mdoc',
+                claims: mdocResult.claims || {},
+                error: mdocResult.error,
+              }
+            ],
+          }
+        }
+      }
+    } else if (isSdJwt) {
       // ── SD-JWT VC Verification ──────────────────────────────────────────
       console.log('[waltid-verifier] Verifying IETF SD-JWT VC with walt.id decentralized engine')
       

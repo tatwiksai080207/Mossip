@@ -57,6 +57,15 @@ const playgroundSdJwt: CredentialType = {
   vct: 'https://inji-playground.mosip.dev/credentials/identity',
 }
 
+const playgroundMdoc: CredentialType = {
+  id: 'PlaygroundDrivingLicense_mDoc',
+  name: 'Playground Driving Licence (mDoc / mDL)',
+  format: 'mso_mdoc',
+  proofTypes: ['ES256'],
+  credentialTypeName: 'DrivingLicenseCredential',
+  doctype: 'org.iso.18013.5.1.mDL',
+}
+
 const waltIdLdp: CredentialType = {
   id: 'waltid-identity-ldp-vcdm11',
   name: 'walt.id Identity (W3C VC 1.1)',
@@ -87,6 +96,15 @@ const waltIdSdJwt: CredentialType = {
   vct: 'https://walt.id/credentials/identity',
 }
 
+const waltIdMdoc: CredentialType = {
+  id: 'waltid-drivinglicense-mdoc',
+  name: 'walt.id Driving Licence (mDoc / mDL)',
+  format: 'mso_mdoc',
+  proofTypes: ['ES256'],
+  credentialTypeName: 'DrivingLicenseCredential',
+  doctype: 'org.iso.18013.5.1.mDL',
+}
+
 export const issuers: IssuerConfig[] = [
   {
     id: 'certify-playground',
@@ -94,15 +112,15 @@ export const issuers: IssuerConfig[] = [
     description: 'Internal OpenID4VCI mock issuer — supports headless pre-authorized_code flow',
     host: 'http://localhost:3001/api/playground-issuer',
     env: 'mock',
-    credentialTypes: [playgroundLdp, playgroundLdp20, playgroundSdJwt],
+    credentialTypes: [playgroundLdp, playgroundLdp20, playgroundSdJwt, playgroundMdoc],
   },
   {
     id: 'issuer-waltid',
     name: 'walt.id Issuer',
-    description: 'External reference issuer (OpenID4VCI) — issues W3C VCs & IETF SD-JWT VCs with pre-authorized_code flow',
+    description: 'External reference issuer (OpenID4VCI) — issues W3C VCs, SD-JWT VCs & ISO mDocs with pre-authorized_code flow',
     host: 'http://localhost:3001/api/external/waltid/issuer',
     env: 'external',
-    credentialTypes: [waltIdLdp, waltIdLdp20, waltIdSdJwt],
+    credentialTypes: [waltIdLdp, waltIdLdp20, waltIdSdJwt, waltIdMdoc],
   },
   {
     id: 'certify-local',

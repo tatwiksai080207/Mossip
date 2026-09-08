@@ -51,11 +51,20 @@ window._env_ = {
       checkAutoSelect();
     });
 
-    // Intercept XHR responses from Mimoto to catch wallet_locked or 401 on presentation verification
+    // Intercept XHR responses from Mimoto to catch wallet_locked or 401 on presentation verification,
+    // and route mDoc issuance and preview through Playground BFF (port 3001)
     var origOpen = XMLHttpRequest.prototype.open;
     var origSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.open = function(method, url) {
+      this._method = method;
       this._url = url;
+      if (url && typeof url === 'string') {
+        if (method === 'POST' && url.indexOf('/wallets/') !== -1 && url.indexOf('/credentials') !== -1) {
+          url = url.replace('http://localhost:8099', 'http://localhost:3001');
+        } else if (method === 'GET' && url.indexOf('/credentials/') !== -1 && url.indexOf('action=') !== -1) {
+          url = url.replace('http://localhost:8099', 'http://localhost:3001');
+        }
+      }
       return origOpen.apply(this, arguments);
     };
     XMLHttpRequest.prototype.send = function() {

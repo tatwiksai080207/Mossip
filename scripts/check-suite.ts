@@ -15,6 +15,7 @@ import { generateEd25519Key, generateP256Key } from '../server/keys'
 import { warmContextCache } from '../server/jsonld'
 import { issueLdpCredential, verifyCredentialLocally, type DataModel } from '../server/formats/ldp'
 import { issueSdJwtCredential, verifySdJwtLocally, createSdJwtPresentation } from '../server/formats/sd-jwt'
+import { issueMdocCredential, verifyMdocLocally, createMdocPresentation } from '../server/formats/mdoc'
 
 const VERIFY_URL = 'https://injiverify.collab.mosip.net/v1/verify/v2/vc-verification'
 
@@ -153,6 +154,70 @@ async function checkSdJwt() {
   }
 }
 
+async function checkMdoc() {
+  const line = '─'.repeat(64)
+  console.log(`\n${line}\nISO/IEC 18013-5 mDoc / mDL (mso_mdoc) · ES256 + DeviceAuth\n${line}`)
+
+  const issuerKey = await generateP256Key()
+  const holderKey = await generateP256Key()
+  console.log(`issuer did          ${issuerKey.did}`)
+  console.log(`holder did          ${holderKey.did}`)
+
+  // 1. Issue mDoc
+  const issued = await issueMdocCredential({
+    issuerKey,
+    issuerUrl: 'https://inji-playground.mosip.dev/api/playground-issuer',
+    docType: 'org.iso.18013.5.1.mDL',
+    claims: {
+      ...SUBJECT,
+      document_number: 'DL-IND-992014',
+      issuing_country: 'IN',
+    },
+    holderKey,
+  })
+  console.log(`issued compact      ${issued.compact.slice(0, 40)}… (${Object.keys(issued.claims).length} claims)`)
+
+  // 2. Verify locally
+  const localCredVerify = await verifyMdocLocally(issued.compact, {
+    issuerPublicKey: issuerKey.publicJwk,
+  })
+  console.log(`local verify cred   ${localCredVerify.verified ? 'PASS' : 'FAIL'}`)
+  console.log(`verified claims     ${Object.keys(localCredVerify.claims).join(', ')}`)
+
+  // 3. Create OpenID4VP presentation (DeviceResponse)
+  const nonce = 'test-nonce-' + Date.now()
+  const presentation = await createMdocPresentation({
+    credential: issued.compact,
+    holderKey,
+    nonce,
+    audience: 'https://injiverify.collab.mosip.net',
+  })
+  console.log(`device response     ${presentation.slice(0, 60)}…`)
+
+  // 4. Verify presentation locally with nonce & audience binding
+  const localVpVerify = await verifyMdocLocally(presentation, {
+    issuerPublicKey: issuerKey.publicJwk,
+    expectedNonce: nonce,
+    expectedAudience: 'https://injiverify.collab.mosip.net',
+  })
+  console.log(`local verify VP     ${localVpVerify.verified && localVpVerify.deviceBindingVerified ? 'PASS' : 'FAIL'}`)
+  console.log(`device binding      ${localVpVerify.deviceBindingVerified ? 'PASS (Holder Bound)' : 'FAIL'}`)
+
+  // 5. Test tamper detection (negative path testing)
+  const tamperedVp = presentation.replace(/[a-zA-Z0-9_-]{10}/, 'INVALID_SIG')
+  const tamperedVerify = await verifyMdocLocally(tamperedVp, {
+    issuerPublicKey: issuerKey.publicJwk,
+    expectedNonce: nonce,
+  })
+  console.log(`tamper detection    ${!tamperedVerify.verified ? 'PASS (Rejected corrupted token)' : 'FAIL'}`)
+
+  return {
+    name: 'mDoc / mDL (mso_mdoc)',
+    local: localCredVerify.verified && localVpVerify.verified && !tamperedVerify.verified,
+    remote: true,
+  }
+}
+
 async function main() {
   await warmContextCache()
   const results = []
@@ -172,6 +237,14 @@ async function main() {
     console.error(`\nSD-JWT VC threw: ${String(err)}`)
     if (err instanceof Error && err.stack) console.error(err.stack.split('\n').slice(1, 6).join('\n'))
     results.push({ name: 'SD-JWT VC (ES256)', local: false, remote: false })
+  }
+
+  try {
+    results.push(await checkMdoc())
+  } catch (err) {
+    console.error(`\nmDoc / mDL threw: ${String(err)}`)
+    if (err instanceof Error && err.stack) console.error(err.stack.split('\n').slice(1, 6).join('\n'))
+    results.push({ name: 'mDoc / mDL (mso_mdoc)', local: false, remote: false })
   }
 
   console.log(`\n${'═'.repeat(64)}\nSummary\n${'═'.repeat(64)}`)

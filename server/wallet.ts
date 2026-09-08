@@ -18,6 +18,7 @@ import * as jose from 'jose'
 import { generateP256Key, generateEd25519Key, type PlaygroundKey } from './keys'
 import { signPresentation } from './formats/ldp'
 import { createSdJwtPresentation } from './formats/sd-jwt'
+import { createMdocPresentation } from './formats/mdoc'
 
 const PRE_AUTH_GRANT = 'urn:ietf:params:oauth:grant-type:pre-authorized_code'
 const AUTH_CODE_GRANT = 'authorization_code'
@@ -465,6 +466,9 @@ export async function createWallet(): Promise<Wallet> {
         // ignore parse error
       }
     }
+    if (!rawTypes && format === 'mso_mdoc') {
+      rawTypes = ['DrivingLicenseCredential', 'org.iso.18013.5.1.mDL']
+    }
     const credential: HeldCredential = {
       id: `cred-${Date.now()}-${held.size + 1}`,
       format,
@@ -534,12 +538,55 @@ export async function createWallet(): Promise<Wallet> {
       res.status(404).json({ error: 'No such credential in the wallet', available: [...held.keys()] })
       return
     }
-    if (target.format !== 'ldp_vc' && target.format !== 'vc+sd-jwt') {
+    if (target.format !== 'ldp_vc' && target.format !== 'vc+sd-jwt' && target.format !== 'mso_mdoc') {
       res.status(400).json({ error: `Presenting ${target.format} is not implemented yet` })
       return
     }
 
     try {
+      if (target.format === 'mso_mdoc') {
+        let vp = await createMdocPresentation({
+          credential: target.credential as any,
+          holderKey: key, // P-256 key matching holder
+          nonce: String(nonce),
+          audience: clientId ? String(clientId) : undefined,
+        })
+        if (tamper === 'signature') {
+          try {
+            const vpObj = JSON.parse(vp)
+            if (vpObj.documents?.[0]?.issuerSigned?.issuerAuth?.signature) {
+              vpObj.documents[0].issuerSigned.issuerAuth.signature =
+                vpObj.documents[0].issuerSigned.issuerAuth.signature.slice(0, -10) + 'BAD_SIG_99'
+            }
+            if (vpObj.documents?.[0]?.deviceSigned?.deviceAuth?.deviceSignature) {
+              vpObj.documents[0].deviceSigned.deviceAuth.deviceSignature =
+                vpObj.documents[0].deviceSigned.deviceAuth.deviceSignature.slice(0, -10) + 'BAD_DEV_99'
+            }
+            vp = JSON.stringify(vpObj)
+          } catch {
+            vp = vp.replace(/[a-zA-Z0-9_-]{10}$/, 'BAD_SIG_99')
+          }
+        } else if (tamper === 'expired') {
+          try {
+            const vpObj = JSON.parse(vp)
+            if (vpObj.documents?.[0]?.issuerSigned?.issuerAuth?.mso?.validityInfo) {
+              vpObj.documents[0].issuerSigned.issuerAuth.mso.validityInfo.validUntil = '2020-01-01T00:00:00Z'
+            }
+            vp = JSON.stringify(vpObj)
+          } catch {
+            vp = vp + '.tampered'
+          }
+        }
+        res.json({
+          vp_token: vp,
+          holderDid: key.did,
+          credentialId: target.id,
+          format: 'mso_mdoc',
+          tampered: Boolean(tamper),
+        })
+        return
+      }
+
       if (target.format === 'vc+sd-jwt') {
         let vp = await createSdJwtPresentation({
           credential: String(target.credential),

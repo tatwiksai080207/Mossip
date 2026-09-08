@@ -20,6 +20,7 @@ import * as jose from 'jose'
 import { generateEd25519Key, resolveDid, didKeyDocument, type PlaygroundKey } from './keys'
 import { issueLdpCredential, type DataModel } from './formats/ldp'
 import { issueSdJwtCredential } from './formats/sd-jwt'
+import { issueMdocCredential } from './formats/mdoc'
 
 const PRE_AUTH_GRANT = 'urn:ietf:params:oauth:grant-type:pre-authorized_code'
 
@@ -61,6 +62,12 @@ export const CREDENTIAL_CONFIGS: CredentialConfig[] = [
     format: 'vc+sd-jwt',
     vcType: 'PlaygroundIdentityCredential',
     displayName: 'Playground Identity (SD-JWT VC)',
+  },
+  {
+    id: 'PlaygroundDrivingLicense_mDoc',
+    format: 'mso_mdoc',
+    vcType: 'DrivingLicenseCredential',
+    displayName: 'Playground Driving Licence (mDoc / mDL)',
   },
 ]
 
@@ -218,6 +225,42 @@ function credentialConfigurationsSupported(): Record<string, unknown> {
       }
       continue
     }
+    if (cfg.format === 'mso_mdoc') {
+      out[cfg.id] = {
+        format: 'mso_mdoc',
+        scope: cfg.id,
+        doctype: 'org.iso.18013.5.1.mDL',
+        cryptographic_binding_methods_supported: ['jwk', 'did:key', 'cose_key'],
+        credential_signing_alg_values_supported: ['ES256'],
+        proof_types_supported: {
+          jwt: { proof_signing_alg_values_supported: ['ES256', 'EdDSA'] },
+        },
+        claims: {
+          'org.iso.18013.5.1': {
+            family_name: { display: [{ name: 'Family Name', locale: 'en' }] },
+            given_name: { display: [{ name: 'Given Name', locale: 'en' }] },
+            birth_date: { display: [{ name: 'Birth Date', locale: 'en' }] },
+            issue_date: { display: [{ name: 'Issue Date', locale: 'en' }] },
+            expiry_date: { display: [{ name: 'Expiry Date', locale: 'en' }] },
+            issuing_country: { display: [{ name: 'Issuing Country', locale: 'en' }] },
+            issuing_authority: { display: [{ name: 'Issuing Authority', locale: 'en' }] },
+            document_number: { display: [{ name: 'Document Number', locale: 'en' }] },
+            driving_privileges: { display: [{ name: 'Driving Privileges', locale: 'en' }] },
+          },
+        },
+        display: [{
+          name: cfg.displayName,
+          locale: 'en',
+          background_color: '#1e293b',
+          text_color: '#ffffff',
+          logo: {
+            url: 'https://api.collab.mosip.net/inji/mosip-logo.png',
+            alt_text: 'logo',
+          },
+        }],
+      }
+      continue
+    }
     out[cfg.id] = {
       format: cfg.format,
       scope: cfg.id,
@@ -269,7 +312,7 @@ export async function createIssuer(opts: { baseUrl: string; mountPath: string })
   const router = Router()
 
   const getBaseUrl = (req?: Request) => {
-    if (req?.headers?.host && !req.headers.host.includes('inji-playground')) {
+    if (req?.headers?.host) {
       const proto = (req.headers['x-forwarded-proto'] as string) || 'http'
       return `${proto}://${req.headers.host}`
     }
@@ -319,7 +362,7 @@ export async function createIssuer(opts: { baseUrl: string; mountPath: string })
   router.post('/offer', (req: Request, res: Response) => {
     sweep()
     const { configurationId, subjectId = 'playground-holder-1', requireTxCode = false } = req.body ?? {}
-    const cfg = CREDENTIAL_CONFIGS.find(c => c.id === configurationId) ?? CREDENTIAL_CONFIGS[0]
+    const cfg = CREDENTIAL_CONFIGS.find(c => c.id === configurationId || c.vcType === configurationId) ?? CREDENTIAL_CONFIGS[0]
     if (!SUBJECTS[subjectId]) {
       return fail(res, 400, 'invalid_request', `Unknown subjectId ${subjectId}; known: ${Object.keys(SUBJECTS).join(', ')}`)
     }
@@ -472,6 +515,22 @@ export async function createIssuer(opts: { baseUrl: string; mountPath: string })
 
       return res.json({
         credential: sdJwt.compact,
+        c_nonce: mintNonce(auth.token),
+        c_nonce_expires_in: NONCE_TTL_S,
+      })
+    }
+
+    if (cfg.format === 'mso_mdoc') {
+      const mdoc = await issueMdocCredential({
+        issuerKey: key,
+        issuerUrl: identifier,
+        claims: SUBJECTS[auth.record.subjectId] ?? SUBJECTS['playground-holder-1'],
+        holderDid,
+        holderKey: holderJwk ? ({ publicJwk: holderJwk } as any) : undefined,
+      })
+
+      return res.json({
+        credential: mdoc.compact,
         c_nonce: mintNonce(auth.token),
         c_nonce_expires_in: NONCE_TTL_S,
       })

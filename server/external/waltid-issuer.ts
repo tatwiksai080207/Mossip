@@ -17,6 +17,7 @@ import crypto from 'crypto'
 import { generateEd25519Key, resolveDid, didKeyDocument, type PlaygroundKey } from '../keys'
 import { issueLdpCredential, type DataModel } from '../formats/ldp'
 import { issueSdJwtCredential } from '../formats/sd-jwt'
+import { issueMdocCredential } from '../formats/mdoc'
 
 const PRE_AUTH_GRANT = 'urn:ietf:params:oauth:grant-type:pre-authorized_code'
 const ACCESS_TOKEN_TTL_S = 300
@@ -25,7 +26,7 @@ const OFFER_TTL_S = 600
 
 export interface WaltIdCredentialConfig {
   id: string
-  format: 'ldp_vc' | 'vc+sd-jwt'
+  format: 'ldp_vc' | 'vc+sd-jwt' | 'mso_mdoc'
   vcType: string
   dataModel?: DataModel
   displayName: string
@@ -53,6 +54,12 @@ export const WALTID_CREDENTIAL_CONFIGS: WaltIdCredentialConfig[] = [
     vcType: 'PlaygroundIdentityCredential',
     displayName: 'walt.id Identity (SD-JWT VC)',
     vct: 'https://walt.id/credentials/identity',
+  },
+  {
+    id: 'waltid-drivinglicense-mdoc',
+    format: 'mso_mdoc',
+    vcType: 'DrivingLicenseCredential',
+    displayName: 'walt.id Driving Licence (mDoc / mDL)',
   },
 ]
 
@@ -203,6 +210,43 @@ function credentialConfigurationsSupported(): Record<string, unknown> {
       continue
     }
 
+    if (cfg.format === 'mso_mdoc') {
+      out[cfg.id] = {
+        format: 'mso_mdoc',
+        scope: cfg.id,
+        doctype: 'org.iso.18013.5.1.mDL',
+        cryptographic_binding_methods_supported: ['jwk', 'did:key', 'cose_key'],
+        credential_signing_alg_values_supported: ['ES256'],
+        proof_types_supported: {
+          jwt: { proof_signing_alg_values_supported: ['ES256', 'EdDSA'] },
+        },
+        claims: {
+          'org.iso.18013.5.1': {
+            family_name: { display: [{ name: 'Family Name', locale: 'en' }] },
+            given_name: { display: [{ name: 'Given Name', locale: 'en' }] },
+            birth_date: { display: [{ name: 'Birth Date', locale: 'en' }] },
+            issue_date: { display: [{ name: 'Issue Date', locale: 'en' }] },
+            expiry_date: { display: [{ name: 'Expiry Date', locale: 'en' }] },
+            issuing_country: { display: [{ name: 'Issuing Country', locale: 'en' }] },
+            issuing_authority: { display: [{ name: 'Issuing Authority', locale: 'en' }] },
+            document_number: { display: [{ name: 'Document Number', locale: 'en' }] },
+            driving_privileges: { display: [{ name: 'Driving Privileges', locale: 'en' }] },
+          },
+        },
+        display: [{
+          name: cfg.displayName,
+          locale: 'en',
+          background_color: '#312e81',
+          text_color: '#ffffff',
+          logo: {
+            url: 'https://walt.id/favicon.ico',
+            alt_text: 'walt.id logo'
+          }
+        }],
+      }
+      continue
+    }
+
     out[cfg.id] = {
       format: cfg.format,
       scope: cfg.id,
@@ -253,7 +297,7 @@ export async function createWaltIdIssuer(opts: { baseUrl: string; mountPath: str
   const identifier = `${defaultBaseUrl}${mountPath}`
 
   const getBaseUrl = (req?: Request) => {
-    if (req?.headers?.host && !req.headers.host.includes('inji-playground')) {
+    if (req?.headers?.host) {
       const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http'
       return `${proto}://${req.headers.host}`
     }
@@ -303,7 +347,7 @@ export async function createWaltIdIssuer(opts: { baseUrl: string; mountPath: str
   router.post('/offer', (req: Request, res: Response) => {
     sweep()
     const { configurationId, subjectId = 'waltid-holder-1' } = req.body ?? {}
-    const cfg = WALTID_CREDENTIAL_CONFIGS.find(c => c.id === configurationId) ?? WALTID_CREDENTIAL_CONFIGS[0]
+    const cfg = WALTID_CREDENTIAL_CONFIGS.find(c => c.id === configurationId || c.vcType === configurationId) ?? WALTID_CREDENTIAL_CONFIGS[0]
     const baseUrl = getBaseUrl(req)
     const id = `${baseUrl}${mountPath}`
 
@@ -462,6 +506,22 @@ export async function createWaltIdIssuer(opts: { baseUrl: string; mountPath: str
 
       return res.json({
         credential: sdJwt.compact,
+        c_nonce: mintNonce(auth.token),
+        c_nonce_expires_in: NONCE_TTL_S,
+      })
+    }
+
+    if (cfg.format === 'mso_mdoc') {
+      const mdoc = await issueMdocCredential({
+        issuerKey: key,
+        issuerUrl: id,
+        claims: SUBJECTS[auth.record.subjectId] ?? SUBJECTS['waltid-holder-1'],
+        holderDid,
+        holderKey: holderJwk ? ({ publicJwk: holderJwk } as any) : undefined,
+      })
+
+      return res.json({
+        credential: mdoc.compact,
         c_nonce: mintNonce(auth.token),
         c_nonce_expires_in: NONCE_TTL_S,
       })

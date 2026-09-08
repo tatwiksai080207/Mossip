@@ -108,7 +108,9 @@ export async function createCredentialOffer(
     })
   }
 
-  const configId = credType.credentialTypeName ?? credType.id
+  const configId = (issuer.id === 'certify-playground' || issuer.id === 'issuer-waltid' || issuer.env === 'external')
+    ? (credType.id ?? credType.credentialTypeName)
+    : (credType.credentialTypeName ?? credType.id)
 
   if (issuer.id === 'certify-playground' || issuer.id === 'issuer-waltid' || issuer.env === 'external') {
     // Fetch a real offer from the issuer that includes a valid pre-authorized_code
@@ -421,7 +423,8 @@ export async function submitVPResponse(
 
   // The verifier expects the submission as application/x-www-form-urlencoded.
   const submitParams = new URLSearchParams()
-  const isSdJwt = presFormat === 'vc+sd-jwt' || (typeof vp_token === 'string' && vp_token.includes('~'))
+  const isMdoc = presFormat === 'mso_mdoc' || (typeof vp_token === 'string' && (vp_token.includes('org.iso.18013.5.1') || vp_token.includes('DeviceResponse')))
+  const isSdJwt = !isMdoc && (presFormat === 'vc+sd-jwt' || (typeof vp_token === 'string' && vp_token.includes('~')))
 
   if (verifier.env === 'local' || verifier.env === 'external') {
     submitParams.set('vp_token', typeof vp_token === 'string' ? vp_token : JSON.stringify(vp_token))
@@ -431,7 +434,7 @@ export async function submitVPResponse(
       descriptor_map: [
         {
           id: (session.dcqlQuery.credentials?.[0]?.id || 'credential_1'),
-          format: isSdJwt ? "vc+sd-jwt" : "ldp_vp",
+          format: isMdoc ? "mso_mdoc" : (isSdJwt ? "vc+sd-jwt" : "ldp_vp"),
           path: "$"
         }
       ]
