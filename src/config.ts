@@ -57,6 +57,36 @@ const playgroundSdJwt: CredentialType = {
   vct: 'https://inji-playground.mosip.dev/credentials/identity',
 }
 
+const waltIdLdp: CredentialType = {
+  id: 'waltid-identity-ldp-vcdm11',
+  name: 'walt.id Identity (W3C VC 1.1)',
+  format: 'ldp_vc',
+  proofTypes: ['Ed25519Signature2020'],
+  credentialTypeName: 'waltid-identity-ldp-vcdm11',
+  vcTypes: ['VerifiableCredential', 'PlaygroundIdentityCredential'],
+  dataModel: '1.1',
+}
+
+const waltIdLdp20: CredentialType = {
+  id: 'waltid-identity-ldp-vcdm20',
+  name: 'walt.id Identity (W3C VC 2.0)',
+  format: 'ldp_vc',
+  proofTypes: ['Ed25519Signature2020'],
+  credentialTypeName: 'waltid-identity-ldp-vcdm20',
+  vcTypes: ['VerifiableCredential', 'PlaygroundIdentityCredential'],
+  dataModel: '2.0',
+}
+
+const waltIdSdJwt: CredentialType = {
+  id: 'waltid-identity-sdjwt',
+  name: 'walt.id Identity (SD-JWT VC)',
+  format: 'vc+sd-jwt',
+  proofTypes: ['ES256'],
+  credentialTypeName: 'waltid-identity-sdjwt',
+  vcTypes: ['PlaygroundIdentityCredential'],
+  vct: 'https://walt.id/credentials/identity',
+}
+
 export const issuers: IssuerConfig[] = [
   {
     id: 'certify-playground',
@@ -65,6 +95,14 @@ export const issuers: IssuerConfig[] = [
     host: 'http://localhost:3001/api/playground-issuer',
     env: 'mock',
     credentialTypes: [playgroundLdp, playgroundLdp20, playgroundSdJwt],
+  },
+  {
+    id: 'issuer-waltid',
+    name: 'walt.id Issuer',
+    description: 'External reference issuer (OpenID4VCI) — issues W3C VCs & IETF SD-JWT VCs with pre-authorized_code flow',
+    host: 'http://localhost:3001/api/external/waltid/issuer',
+    env: 'external',
+    credentialTypes: [waltIdLdp, waltIdLdp20, waltIdSdJwt],
   },
   {
     id: 'certify-local',

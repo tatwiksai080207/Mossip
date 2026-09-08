@@ -17,7 +17,7 @@ function App() {
     tamperMode, setTamperMode,
   } = useStore()
 
-  const [tunnelUrl, setTunnelUrl] = useState<string>('https://01b2-119-161-98-68.ngrok-free.app')
+  const [tunnelUrl, setTunnelUrl] = useState<string>('https://e6d4-119-161-98-68.ngrok-free.app')
 
   useEffect(() => {
     fetch('/api/tunnel')
@@ -199,7 +199,11 @@ function App() {
                   Directly download the credential offer into your local web wallet.
                 </p>
                 {(() => {
-                  const mimotoIssuerId = selectedIssuer?.id === 'certify-local' ? 'Farmer' : (selectedIssuer?.id === 'certify-mock' ? 'MockMdl' : 'Playground')
+                  const mimotoIssuerId = selectedIssuer?.id === 'certify-local' 
+                    ? 'Farmer' 
+                    : (selectedIssuer?.id === 'certify-mock' 
+                      ? 'MockMdl' 
+                      : (selectedIssuer?.id === 'issuer-waltid' ? 'WaltId' : 'Playground'))
                   const targetCredId = selectedCredType?.id || selectedCredType?.credentialTypeName || 'PlaygroundIdentityCredential'
                   const rawOffer = new URL(offerUri.replace('openid-credential-offer://', 'http://dummy')).searchParams.get('credential_offer') || ''
                   const directWalletIssuanceUrl = `http://localhost:3004/user/issuers/${mimotoIssuerId}?credential_id=${encodeURIComponent(targetCredId)}&auto_download=true&credential_offer=${encodeURIComponent(rawOffer)}`

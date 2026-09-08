@@ -7,6 +7,7 @@ import { createIssuer } from './issuer'
 import { createWallet } from './wallet'
 import { oidcRouter } from './oidc'
 import { waltidVerifierRouter } from './external/waltid'
+import { createWaltIdIssuer } from './external/waltid-issuer'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -15,7 +16,7 @@ const PORT = Number(process.env.PORT || 3001)
 
 // Override when a tunnel is fronting the BFF, so credential offers and QR codes
 // carry a URL a phone can actually reach.
-let activeTunnelUrl = process.env.PUBLIC_BASE_URL || 'https://01b2-119-161-98-68.ngrok-free.app'
+let activeTunnelUrl = process.env.PUBLIC_BASE_URL || 'https://e6d4-119-161-98-68.ngrok-free.app'
 
 export function getPublicBaseUrl(req?: express.Request): string {
   if (req) {
@@ -682,6 +683,7 @@ async function assertAllowedIssuerHost(host: string) {
   if (host === ENDPOINTS.issuer) return
   if (host === PLAYGROUND_ISSUER_ID || host === 'http://localhost:3001/api/playground-issuer') return
   if (host === 'http://localhost:3001/api/local-certify' || host === `${PUBLIC_BASE_URL}/api/local-certify`) return
+  if (host.includes('/api/external/waltid/issuer')) return
   const registry = await loadRegistry()
   if (!registry.some(i => i.credentialIssuerHost === host)) {
     throw new Error(`Issuer host not in Mimoto registry: ${host}`)
@@ -817,6 +819,18 @@ app.get(`/.well-known/openid-credential-issuer${ISSUER_MOUNT}`, (_req, res) => {
 })
 app.get(`/.well-known/oauth-authorization-server${ISSUER_MOUNT}`, (_req, res) => {
   res.json(playgroundIssuer.authorizationServerMetadata())
+})
+
+// ── walt.id OpenID4VCI external reference issuer ────────────────────────────
+const WALTID_ISSUER_MOUNT = '/api/external/waltid/issuer'
+const waltIdIssuer = await createWaltIdIssuer({ baseUrl: PUBLIC_BASE_URL, mountPath: WALTID_ISSUER_MOUNT })
+app.use(WALTID_ISSUER_MOUNT, waltIdIssuer.router)
+
+app.get(`/.well-known/openid-credential-issuer${WALTID_ISSUER_MOUNT}`, (_req, res) => {
+  res.json(waltIdIssuer.issuerMetadata(_req))
+})
+app.get(`/.well-known/oauth-authorization-server${WALTID_ISSUER_MOUNT}`, (_req, res) => {
+  res.json(waltIdIssuer.authorizationServerMetadata(_req))
 })
 
 // ── The playground's holder wallet ──────────────────────────────────────────

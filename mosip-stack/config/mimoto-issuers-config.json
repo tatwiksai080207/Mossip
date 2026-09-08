@@ -80,6 +80,33 @@
       "credential_issuer_host": "http://inji-playground:3001/api/playground-issuer",
       "enabled": "true",
       "wellknown_endpoint": "http://inji-playground:3001/api/playground-issuer/.well-known/openid-credential-issuer"
-    }    
+    },
+    {
+      "credential_issuer": "http://localhost:3001/api/external/waltid/issuer",
+      "issuer_id": "WaltId",
+      "protocol": "OpenId4VCI",
+      "display": [
+        {
+          "name": "walt.id External Issuer",
+          "logo": {
+            "url": "https://api.collab.mosip.net/inji/mosip-logo.png",
+            "alt_text": "waltid-logo"
+          },
+          "title": "walt.id External Issuer",
+          "description": "Download OpenID4VCI Credentials from walt.id",
+          "language": "en"
+        }
+      ],
+      "client_id": "wallet-demo",
+      "redirect_uri": "io.mosip.residentapp.inji://oauthredirect",
+      "token_endpoint": "http://localhost:8099/v1/mimoto/get-token/WaltId",
+      "authorization_audience": "http://inji-playground:3001/api/external/waltid/issuer/token",
+      "proxy_token_endpoint": "http://inji-playground:3001/api/external/waltid/issuer/token",
+      "client_alias": "oidc",
+      "qr_code_type": "EmbeddedVC",
+      "credential_issuer_host": "http://inji-playground:3001/api/external/waltid/issuer",
+      "enabled": "true",
+      "wellknown_endpoint": "http://inji-playground:3001/api/external/waltid/issuer/.well-known/openid-credential-issuer"
+    }
   ]
 }

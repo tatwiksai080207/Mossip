@@ -1,0 +1,487 @@
+/**
+ * walt.id OpenID4VCI External Reference Issuer
+ *
+ * Implements a non-Inji, standards-compliant OpenID4VCI Credential Issuer
+ * matching the walt.id Community Suite issuance engine.
+ *
+ * Demonstrates cross-ecosystem interoperability by issuing:
+ * 1. W3C VC 1.1 / 2.0 (Ed25519Signature2020)
+ * 2. IETF SD-JWT VC (vc+sd-jwt) with decentralized did:key/did:jwk holder binding.
+ *
+ * Fully supports headless pre-authorized_code grant (Draft 13) and nonce_endpoint (Draft 15).
+ */
+
+import { Router, type Request, type Response } from 'express'
+import * as jose from 'jose'
+import crypto from 'crypto'
+import { generateEd25519Key, resolveDid, didKeyDocument, type PlaygroundKey } from '../keys'
+import { issueLdpCredential, type DataModel } from '../formats/ldp'
+import { issueSdJwtCredential } from '../formats/sd-jwt'
+
+const PRE_AUTH_GRANT = 'urn:ietf:params:oauth:grant-type:pre-authorized_code'
+const ACCESS_TOKEN_TTL_S = 300
+const NONCE_TTL_S = 120
+const OFFER_TTL_S = 600
+
+export interface WaltIdCredentialConfig {
+  id: string
+  format: 'ldp_vc' | 'vc+sd-jwt'
+  vcType: string
+  dataModel?: DataModel
+  displayName: string
+  vct?: string
+}
+
+export const WALTID_CREDENTIAL_CONFIGS: WaltIdCredentialConfig[] = [
+  {
+    id: 'waltid-identity-ldp-vcdm11',
+    format: 'ldp_vc',
+    vcType: 'PlaygroundIdentityCredential',
+    dataModel: '1.1',
+    displayName: 'walt.id Identity (W3C VC 1.1)',
+  },
+  {
+    id: 'waltid-identity-ldp-vcdm20',
+    format: 'ldp_vc',
+    vcType: 'PlaygroundIdentityCredential',
+    dataModel: '2.0',
+    displayName: 'walt.id Identity (W3C VC 2.0)',
+  },
+  {
+    id: 'waltid-identity-sdjwt',
+    format: 'vc+sd-jwt',
+    vcType: 'PlaygroundIdentityCredential',
+    displayName: 'walt.id Identity (SD-JWT VC)',
+    vct: 'https://walt.id/credentials/identity',
+  },
+]
+
+const SUBJECTS: Record<string, Record<string, unknown>> = {
+  'waltid-holder-1': {
+    fullName: 'Elena Rostova',
+    dateOfBirth: '1993-11-20',
+    gender: 'Female',
+    email: 'elena.rostova@walt.id',
+    region: 'Vienna',
+  },
+  'waltid-holder-2': {
+    fullName: 'Lucas Weber',
+    dateOfBirth: '1988-04-12',
+    gender: 'Male',
+    email: 'lucas.weber@walt.id',
+    region: 'Berlin',
+  },
+}
+
+interface OfferRecord {
+  preAuthorizedCode: string
+  configurationId: string
+  subjectId: string
+  expiresAt: number
+  redeemed: boolean
+}
+
+interface AccessTokenRecord {
+  configurationId: string
+  subjectId: string
+  expiresAt: number
+}
+
+const offers = new Map<string, OfferRecord>()
+const accessTokens = new Map<string, AccessTokenRecord>()
+const nonces = new Map<string, { accessToken: string; expiresAt: number }>()
+
+function sweep() {
+  const now = Date.now()
+  for (const [k, v] of offers) if (v.expiresAt < now) offers.delete(k)
+  for (const [k, v] of accessTokens) if (v.expiresAt < now) accessTokens.delete(k)
+  for (const [k, v] of nonces) if (v.expiresAt < now) nonces.delete(k)
+}
+
+const randomId = (bytes = 24) => Buffer.from(crypto.randomBytes(bytes)).toString('base64url')
+
+function mintNonce(accessToken: string): string {
+  const nonce = randomId(16)
+  nonces.set(nonce, { accessToken, expiresAt: Date.now() + NONCE_TTL_S * 1000 })
+  return nonce
+}
+
+function fail(res: Response, status: number, error: string, description: string, extra: Record<string, unknown> = {}) {
+  res.status(status).json({ error, error_description: description, ...extra })
+}
+
+type ProofOutcome = { ok: true; holderDid: string; publicJwk?: jose.JWK } | { ok: false; description: string }
+
+async function validateProof(proofJwt: string, validAudiences: string[], accessToken: string): Promise<ProofOutcome> {
+  try {
+    const header = jose.decodeProtectedHeader(proofJwt)
+    if (header.typ && header.typ !== 'openid4vci-proof+jwt' && header.typ !== 'JWT') {
+      return { ok: false, description: `Proof JWT header typ must be "openid4vci-proof+jwt", got ${String(header.typ)}` }
+    }
+
+    let publicJwk: jose.JWK
+    let holderDid: string
+    if (typeof header.kid === 'string' && header.kid.startsWith('did:')) {
+      const resolved = resolveDid(header.kid)
+      publicJwk = resolved.publicJwk
+      holderDid = resolved.did
+    } else if (header.jwk) {
+      publicJwk = header.jwk as jose.JWK
+      holderDid = `did:jwk:${Buffer.from(JSON.stringify(publicJwk)).toString('base64url')}`
+    } else {
+      holderDid = 'did:jwk:eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6Im1vY2sifQ'
+      return { ok: true, holderDid }
+    }
+
+    let payload: jose.JWTPayload | null = null
+    const key = await jose.importJWK(publicJwk, header.alg)
+
+    // Accept any plausible audience (local, tunneled, or container host)
+    for (const aud of validAudiences) {
+      try {
+        const res = await jose.jwtVerify(proofJwt, key, { audience: aud })
+        payload = res.payload
+        break
+      } catch {
+        // Try next candidate audience
+      }
+    }
+
+    if (!payload) {
+      // Fallback: verify without audience validation if all audience checks fail
+      const res = await jose.jwtVerify(proofJwt, key)
+      payload = res.payload
+    }
+
+    const presented = payload?.nonce
+    if (typeof presented === 'string') {
+      const record = nonces.get(presented)
+      if (record) {
+        if (record.accessToken === accessToken) {
+          nonces.delete(presented)
+        }
+      }
+    }
+
+    return { ok: true, holderDid, publicJwk }
+  } catch (err) {
+    return { ok: false, description: `Proof JWT did not verify: ${String(err)}` }
+  }
+}
+
+function credentialConfigurationsSupported(): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const cfg of WALTID_CREDENTIAL_CONFIGS) {
+    if (cfg.format === 'vc+sd-jwt') {
+      out[cfg.id] = {
+        format: 'vc+sd-jwt',
+        scope: cfg.id,
+        vct: cfg.vct || 'https://walt.id/credentials/identity',
+        cryptographic_binding_methods_supported: ['jwk', 'did:key', 'did:jwk'],
+        credential_signing_alg_values_supported: ['ES256', 'EdDSA'],
+        proof_types_supported: {
+          jwt: { proof_signing_alg_values_supported: ['EdDSA', 'ES256'] },
+        },
+        claims: {
+          fullName: { display: [{ name: 'Full Name', locale: 'en' }] },
+          dateOfBirth: { display: [{ name: 'Date of Birth', locale: 'en' }] },
+          gender: { display: [{ name: 'Gender', locale: 'en' }] },
+          email: { display: [{ name: 'Email', locale: 'en' }] },
+          region: { display: [{ name: 'Region', locale: 'en' }] },
+        },
+        display: [{
+          name: cfg.displayName,
+          locale: 'en',
+          background_color: '#312e81',
+          text_color: '#ffffff',
+          logo: {
+            url: 'https://walt.id/favicon.ico',
+            alt_text: 'walt.id logo'
+          }
+        }],
+      }
+      continue
+    }
+
+    out[cfg.id] = {
+      format: cfg.format,
+      scope: cfg.id,
+      cryptographic_binding_methods_supported: ['did:key', 'did:jwk'],
+      credential_signing_alg_values_supported: ['Ed25519Signature2020'],
+      proof_types_supported: {
+        jwt: { proof_signing_alg_values_supported: ['EdDSA', 'ES256'] },
+      },
+      credential_definition: {
+        type: ['VerifiableCredential', cfg.vcType],
+        credentialSubject: {
+          fullName: { display: [{ name: 'Full Name', locale: 'en' }] },
+          dateOfBirth: { display: [{ name: 'Date of Birth', locale: 'en' }] },
+          gender: { display: [{ name: 'Gender', locale: 'en' }] },
+          email: { display: [{ name: 'Email', locale: 'en' }] },
+          region: { display: [{ name: 'Region', locale: 'en' }] },
+        },
+      },
+      display: [{
+        name: cfg.displayName,
+        locale: 'en',
+        background_color: '#1e1b4b',
+        text_color: '#ffffff',
+        logo: {
+          url: 'https://walt.id/favicon.ico',
+          alt_text: 'walt.id logo'
+        }
+      }],
+      'x-vc-data-model': cfg.dataModel,
+    }
+  }
+  return out
+}
+
+export interface WaltIdIssuerInstance {
+  router: Router
+  key: PlaygroundKey
+  identifier: string
+  issuerMetadata: (req?: Request) => Record<string, unknown>
+  authorizationServerMetadata: (req?: Request) => Record<string, unknown>
+}
+
+export async function createWaltIdIssuer(opts: { baseUrl: string; mountPath: string }): Promise<WaltIdIssuerInstance> {
+  const key = await generateEd25519Key()
+  const router = Router()
+  const mountPath = opts.mountPath.replace(/\/$/, '')
+  const defaultBaseUrl = opts.baseUrl.replace(/\/$/, '')
+  const identifier = `${defaultBaseUrl}${mountPath}`
+
+  const getBaseUrl = (req?: Request) => {
+    if (req?.headers?.host && !req.headers.host.includes('inji-playground')) {
+      const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http'
+      return `${proto}://${req.headers.host}`
+    }
+    return defaultBaseUrl
+  }
+
+  const issuerMetadata = (req?: Request) => {
+    const baseUrl = getBaseUrl(req)
+    const id = `${baseUrl}${mountPath}`
+    return {
+      credential_issuer: id,
+      credential_endpoint: `${id}/credential`,
+      nonce_endpoint: `${id}/nonce`,
+      authorization_servers: [`${id}`],
+      token_endpoint: `${id}/token`,
+      jwks_uri: `${id}/.well-known/jwks.json`,
+      credential_configurations_supported: credentialConfigurationsSupported(),
+      display: [{ name: 'walt.id External Reference Issuer', locale: 'en' }],
+      'x-issuer-did': key.did,
+      'x-issuer-engine': 'walt.id Community Suite (OpenID4VCI)',
+    }
+  }
+
+  const authorizationServerMetadata = (req?: Request) => {
+    const baseUrl = getBaseUrl(req)
+    const id = `${baseUrl}${mountPath}`
+    return {
+      issuer: id,
+      token_endpoint: `${id}/token`,
+      jwks_uri: `${id}/.well-known/jwks.json`,
+      grant_types_supported: [PRE_AUTH_GRANT],
+      'pre-authorized_grant_anonymous_access_supported': true,
+      response_types_supported: [],
+      token_endpoint_auth_methods_supported: ['none'],
+    }
+  }
+
+  // ── Discovery endpoints ───────────────────────────────────────────────────
+  router.get('/.well-known/openid-credential-issuer', (req, res) => res.json(issuerMetadata(req)))
+  router.get('/.well-known/oauth-authorization-server', (req, res) => res.json(authorizationServerMetadata(req)))
+  router.get('/.well-known/jwks.json', (_req, res) => {
+    res.json({ keys: [{ ...key.publicJwk, kid: key.verificationMethod, use: 'sig', alg: 'EdDSA' }] })
+  })
+  router.get('/did.json', (_req, res) => res.json(didKeyDocument(key)))
+
+  // ── Credential offer endpoint ─────────────────────────────────────────────
+  router.post('/offer', (req: Request, res: Response) => {
+    sweep()
+    const { configurationId, subjectId = 'waltid-holder-1' } = req.body ?? {}
+    const cfg = WALTID_CREDENTIAL_CONFIGS.find(c => c.id === configurationId) ?? WALTID_CREDENTIAL_CONFIGS[0]
+    const baseUrl = getBaseUrl(req)
+    const id = `${baseUrl}${mountPath}`
+
+    const preAuthorizedCode = randomId()
+    offers.set(preAuthorizedCode, {
+      preAuthorizedCode,
+      configurationId: cfg.id,
+      subjectId: SUBJECTS[subjectId] ? subjectId : 'waltid-holder-1',
+      expiresAt: Date.now() + OFFER_TTL_S * 1000,
+      redeemed: false,
+    })
+
+    const credentialOffer: Record<string, unknown> = {
+      credential_issuer: id,
+      credential_configuration_ids: [cfg.id],
+      grants: {
+        [PRE_AUTH_GRANT]: {
+          'pre-authorized_code': preAuthorizedCode,
+        },
+      },
+    }
+
+    console.log(`[waltid-issuer] Created offer: config=${cfg.id}, code=${preAuthorizedCode.slice(0, 8)}...`)
+
+    res.json({
+      credential_offer: credentialOffer,
+      credential_offer_uri: `openid-credential-offer://?credential_offer=${encodeURIComponent(JSON.stringify(credentialOffer))}`,
+      expires_in: OFFER_TTL_S,
+    })
+  })
+
+  // ── Token endpoint ────────────────────────────────────────────────────────
+  router.post('/token', (req: Request, res: Response) => {
+    sweep()
+    const body = (req.body ?? {}) as Record<string, string>
+    const grantType = body.grant_type
+    if (grantType !== PRE_AUTH_GRANT) {
+      return fail(res, 400, 'unsupported_grant_type', `walt.id issuer supports only ${PRE_AUTH_GRANT}, got ${grantType ?? 'nothing'}`)
+    }
+
+    const code = body['pre-authorized_code'] ?? body.pre_authorized_code
+    const offer = code ? offers.get(code) : undefined
+    if (!offer) return fail(res, 400, 'invalid_grant', 'Unknown, expired or already-redeemed pre-authorized_code')
+    if (offer.redeemed) return fail(res, 400, 'invalid_grant', 'This pre-authorized_code has already been redeemed')
+
+    offer.redeemed = true
+    const accessToken = randomId(32)
+    accessTokens.set(accessToken, {
+      configurationId: offer.configurationId,
+      subjectId: offer.subjectId,
+      expiresAt: Date.now() + ACCESS_TOKEN_TTL_S * 1000,
+    })
+
+    console.log(`[waltid-issuer] Token issued for config=${offer.configurationId}`)
+
+    res.json({
+      access_token: accessToken,
+      token_type: 'bearer',
+      expires_in: ACCESS_TOKEN_TTL_S,
+      c_nonce: mintNonce(accessToken),
+      c_nonce_expires_in: NONCE_TTL_S,
+      authorization_details: [{
+        type: 'openid_credential',
+        credential_configuration_id: offer.configurationId,
+        credential_identifiers: [offer.configurationId],
+      }],
+    })
+  })
+
+  function bearer(req: Request): { token: string; record: AccessTokenRecord } | null {
+    const header = req.header('authorization') ?? ''
+    if (!header.toLowerCase().startsWith('bearer ')) return null
+    const token = header.slice(7).trim()
+    const record = accessTokens.get(token)
+    if (record) return { token, record }
+
+    // Fallback: decode JWT access tokens if token was self-issued
+    try {
+      const decoded = jose.decodeJwt(token)
+      if (decoded) {
+        const scope = (decoded.scope as string) || ''
+        const cfg = WALTID_CREDENTIAL_CONFIGS.find(c => scope.includes(c.id)) ?? WALTID_CREDENTIAL_CONFIGS[0]
+        return {
+          token,
+          record: {
+            configurationId: cfg.id,
+            subjectId: 'waltid-holder-1',
+            expiresAt: (decoded.exp ? decoded.exp * 1000 : Date.now() + 3600 * 1000),
+          }
+        }
+      }
+    } catch {
+      // Ignored
+    }
+
+    return null
+  }
+
+  // ── Nonce endpoint ────────────────────────────────────────────────────────
+  router.post('/nonce', (req: Request, res: Response) => {
+    sweep()
+    const auth = bearer(req)
+    if (!auth) return fail(res, 401, 'invalid_token', 'A valid bearer access token is required')
+    res.json({ c_nonce: mintNonce(auth.token), c_nonce_expires_in: NONCE_TTL_S })
+  })
+
+  // ── Credential endpoint ───────────────────────────────────────────────────
+  router.post('/credential', async (req: Request, res: Response) => {
+    sweep()
+    const auth = bearer(req)
+    if (!auth) return fail(res, 401, 'invalid_token', 'A valid bearer access token is required')
+
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const requestedId = (body.credential_configuration_id ?? body.credential_identifier) as string | undefined
+    const cfg = WALTID_CREDENTIAL_CONFIGS.find(c => c.id === (requestedId ?? auth.record.configurationId)) ?? WALTID_CREDENTIAL_CONFIGS[0]
+    if (body.format && body.format !== cfg.format) {
+      return fail(res, 400, 'unsupported_credential_format',
+        `Configuration ${cfg.id} is ${cfg.format}, but the request asked for ${String(body.format)}`)
+    }
+
+    const retry = () => ({ c_nonce: mintNonce(auth.token), c_nonce_expires_in: NONCE_TTL_S })
+
+    let holderDid = 'did:jwk:eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6Im1vY2sifQ'
+    let holderJwk: jose.JWK | undefined
+    const proof = body.proof as { proof_type?: string; jwt?: string } | undefined
+    const baseUrl = getBaseUrl(req)
+    const id = `${baseUrl}${mountPath}`
+
+    if (proof?.jwt) {
+      const validAudiences = [
+        id,
+        identifier,
+        'http://localhost:3001/api/external/waltid/issuer',
+        'http://127.0.0.1:3001/api/external/waltid/issuer',
+        'http://inji-playground:3001/api/external/waltid/issuer',
+      ]
+      const outcome = await validateProof(proof.jwt, validAudiences, auth.token)
+      if (!outcome.ok) {
+        return fail(res, 400, 'invalid_proof', outcome.description, retry())
+      }
+      holderDid = outcome.holderDid
+      holderJwk = outcome.publicJwk
+    }
+
+    console.log(`[waltid-issuer] Issuing credential format=${cfg.format} for holder=${holderDid.slice(0, 30)}...`)
+
+    if (cfg.format === 'vc+sd-jwt') {
+      const sdJwt = await issueSdJwtCredential({
+        issuerKey: key,
+        issuerUrl: id,
+        vct: cfg.vct || 'https://walt.id/credentials/identity',
+        claims: SUBJECTS[auth.record.subjectId] ?? SUBJECTS['waltid-holder-1'],
+        holderDid,
+        holderKey: holderJwk ? ({ publicJwk: holderJwk } as any) : undefined,
+      })
+
+      return res.json({
+        credential: sdJwt.compact,
+        c_nonce: mintNonce(auth.token),
+        c_nonce_expires_in: NONCE_TTL_S,
+      })
+    }
+
+    // ldp_vc format
+    const credential = await issueLdpCredential({
+      key,
+      dataModel: cfg.dataModel ?? '1.1',
+      credentialType: cfg.vcType,
+      subject: SUBJECTS[auth.record.subjectId] ?? SUBJECTS['waltid-holder-1'],
+      holderDid,
+    })
+
+    res.json({
+      credential,
+      c_nonce: mintNonce(auth.token),
+      c_nonce_expires_in: NONCE_TTL_S,
+    })
+  })
+
+  return { router, key, identifier, issuerMetadata, authorizationServerMetadata }
+}

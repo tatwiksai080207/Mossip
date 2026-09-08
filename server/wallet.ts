@@ -82,7 +82,7 @@ function resolveCandidateUrls(targetUrl: string): string[] {
   const list = [targetUrl]
   try {
     const parsed = new URL(targetUrl)
-    if (parsed.pathname.includes('/api/playground-issuer') || parsed.pathname.includes('/api/local-certify') || parsed.pathname.includes('/api/oidc')) {
+    if (parsed.pathname.includes('/api/playground-issuer') || parsed.pathname.includes('/api/local-certify') || parsed.pathname.includes('/api/oidc') || parsed.pathname.includes('/api/external/waltid')) {
       list.push(`http://127.0.0.1:${PORT}${parsed.pathname}${parsed.search}`)
       list.push(`http://localhost:${PORT}${parsed.pathname}${parsed.search}`)
     }

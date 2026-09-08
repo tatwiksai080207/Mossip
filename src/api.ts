@@ -110,9 +110,12 @@ export async function createCredentialOffer(
 
   const configId = credType.credentialTypeName ?? credType.id
 
-  if (issuer.id === 'certify-playground') {
-    // Fetch a real offer from our playground issuer that includes a valid pre-authorized_code
-    const offerRes = await postJson('/api/playground-issuer/offer', {
+  if (issuer.id === 'certify-playground' || issuer.id === 'issuer-waltid' || issuer.env === 'external') {
+    // Fetch a real offer from the issuer that includes a valid pre-authorized_code
+    const offerEndpoint = issuer.id === 'issuer-waltid' || issuer.env === 'external'
+      ? '/api/external/waltid/issuer/offer'
+      : '/api/playground-issuer/offer'
+    const offerRes = await postJson(offerEndpoint, {
       configurationId: configId,
     })
     
@@ -123,7 +126,7 @@ export async function createCredentialOffer(
           ...credential_offer,
           _offer_uri: credential_offer_uri,
           _constructed_by: 'issuer',
-          _reason: 'Fetched from the internal Playground Issuer /offer endpoint.',
+          _reason: `Fetched from the ${issuer.name} /offer endpoint.`,
         },
         source: 'live',
       }

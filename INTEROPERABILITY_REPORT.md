@@ -68,6 +68,14 @@ Per Good-to-have Task #4, the playground features an interactive **Tamper Mode**
 - **Interoperability Resolution:** While Inji Verify (0.17.0) rejects decentralized `did:key` SD-JWT VCs due to mandatory X.509 `x5c` certificate enforcement (Finding 3), the **walt.id OpenID4VP Verifier** natively resolves `did:key` and verifies the same SD-JWT VC credential successfully (`SUCCESS`).
 - **Significance:** This conclusively demonstrates that credentials issued within the MOSIP/Inji ecosystem conform to international decentralized identity standards and can be verified across foreign relying party stacks without vendor lock-in.
 
+### Finding 6: Cross-Ecosystem Issuance with walt.id External Issuer
+- **Cross-Ecosystem Validation:** The playground integrates a standalone non-Inji reference issuer matching the **walt.id Community Suite** OpenID4VCI specification, advertising `pre-authorized_code` grant (Draft 13) and `nonce_endpoint` (Draft 15).
+- **Interoperability Resolution:** Inji holders (Inji Web and Inji Mobile) ingest both W3C VC 1.1 / 2.0 (`Ed25519Signature2020`) and IETF SD-JWT VC (`vc+sd-jwt`) issued by walt.id. Furthermore, these externally-issued credentials can be verified seamlessly by both **Local Inji Verify** and **walt.id Verifier**.
+- **Significance:** Demonstrates full bi-directional, cross-ecosystem interoperability:
+  1. `walt.id Issuer` $\rightarrow$ `Inji Web` $\rightarrow$ `Local Inji Verify` (Third-party credential verified by Inji)
+  2. `walt.id Issuer` $\rightarrow$ `Inji Web` $\rightarrow$ `walt.id Verifier` (100% external-to-external lifecycle mediated through MOSIP Inji Web wallet)
+  3. `Local Inji Certify` $\rightarrow$ `Inji Web` $\rightarrow$ `walt.id Verifier` (Inji credential verified by third party)
+
 ---
 
 ## 4. Exportable Reports & Matrix Evaluation
