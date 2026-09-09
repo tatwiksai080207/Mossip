@@ -23,12 +23,14 @@ interface PlaygroundStore {
   oauthUrl: string | null
   history: TestRun[]
   tamperMode: 'none' | 'signature' | 'expired'
+  selectedStepId: FlowStepInfo['id'] | null
 
   selectIssuer: (issuer: IssuerConfig) => void
   selectWallet: (wallet: WalletConfig) => void
   selectVerifier: (verifier: VerifierConfig) => void
   selectCredType: (ct: CredentialType) => void
   setTamperMode: (mode: 'none' | 'signature' | 'expired') => void
+  selectStep: (id: FlowStepInfo['id'] | null) => void
   runFlow: () => Promise<void>
   resumeOAuthFlow: (code: string) => void
   clearHistory: () => void
@@ -47,8 +49,13 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
   oauthUrl: null,
   history: [],
   tamperMode: 'none',
+  selectedStepId: null,
 
   _resumeResolver: null as ((code: string) => void) | null,
+
+  selectStep: (id) => set((state) => ({
+    selectedStepId: state.selectedStepId === id ? null : id,
+  })),
 
   selectIssuer: (issuer) => {
     set({
@@ -80,7 +87,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       body: JSON.stringify({ tamperMode }),
     }).catch(err => console.error('Failed to sync tamper mode on runFlow:', err))
 
-    set({ isRunning: true })
+    set({ isRunning: true, selectedStepId: null })
     api.resetVpSession()
 
     const initial: FlowStepInfo[] = FLOW_STEPS.map(s => ({

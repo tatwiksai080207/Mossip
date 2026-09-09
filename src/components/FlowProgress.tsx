@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useStore } from '../store'
 import type { StepStatus } from '../types'
 
@@ -21,42 +21,69 @@ function statusColor(status: StepStatus) {
 }
 
 export default function FlowProgress() {
-  const { steps, isRunning, pausedStep, oauthUrl } = useStore()
+  const { steps, isRunning, pausedStep, oauthUrl, selectedStepId, selectStep } = useStore()
   const [expandedStep, setExpandedStep] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (selectedStepId) {
+      setExpandedStep(selectedStepId)
+      const el = document.getElementById(`flow-step-${selectedStepId}`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+    }
+  }, [selectedStepId])
 
   if (steps.length === 0) return null
 
   return (
     <div className="border border-slate-800 rounded-lg">
-      <div className="px-4 py-3 border-b border-slate-800">
-        <h3 className="text-sm font-medium text-slate-300">Flow Progress</h3>
-        <p className="text-xs text-slate-500 mt-0.5">Click a completed step to inspect its payload</p>
+      <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-medium text-slate-300">Flow Progress</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Click a step or diagram arrow to inspect its payload</p>
+        </div>
+        {selectedStepId && (
+          <button
+            onClick={() => selectStep(null)}
+            className="text-[11px] text-slate-400 hover:text-slate-200 px-2 py-0.5 rounded bg-slate-800 border border-slate-700 transition-colors"
+          >
+            Clear selection
+          </button>
+        )}
       </div>
 
       <div className="divide-y divide-slate-800/50">
-        {steps.map((step) => (
-          <div key={step.id}>
-            <button
-              onClick={() => {
-                if ((step.status === 'done' || step.status === 'error') && !!step.payload) {
-                  setExpandedStep(expandedStep === step.id ? null : step.id)
-                }
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-left ${
-                (step.status === 'done' || step.status === 'error') && !!step.payload ? 'cursor-pointer hover:bg-slate-800/30' : ''
-              } ${step.status === 'running' ? 'bg-slate-800/20' : ''}`}
+        {steps.map((step) => {
+          const isSelected = selectedStepId === step.id
+          return (
+            <div
+              key={step.id}
+              id={`flow-step-${step.id}`}
+              className={`transition-colors ${isSelected ? 'bg-sky-950/30 border-l-2 border-l-sky-400' : ''}`}
             >
-              <span className={`font-mono text-base ${statusColor(step.status)} ${step.status === 'running' ? 'step-running' : ''}`}>
-                {statusIcon(step.status)}
-              </span>
-              <span className={
-                step.status === 'done' ? 'text-slate-300' :
-                step.status === 'running' ? 'text-white' :
-                step.status === 'error' ? 'text-red-300' :
-                'text-slate-500'
-              }>
-                {step.label}
-              </span>
+              <button
+                onClick={() => {
+                  selectStep(expandedStep === step.id ? null : step.id)
+                  if ((step.status === 'done' || step.status === 'error') && !!step.payload) {
+                    setExpandedStep(expandedStep === step.id ? null : step.id)
+                  }
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-left ${
+                  (step.status === 'done' || step.status === 'error') && !!step.payload ? 'cursor-pointer hover:bg-slate-800/30' : ''
+                } ${step.status === 'running' ? 'bg-slate-800/20' : ''}`}
+              >
+                <span className={`font-mono text-base ${statusColor(step.status)} ${step.status === 'running' ? 'step-running' : ''}`}>
+                  {statusIcon(step.status)}
+                </span>
+                <span className={
+                  step.status === 'done' ? (isSelected ? 'text-sky-300 font-medium' : 'text-slate-300') :
+                  step.status === 'running' ? 'text-white' :
+                  step.status === 'error' ? 'text-red-300' :
+                  'text-slate-500'
+                }>
+                  {step.label}
+                </span>
               {step.status === 'running' && pausedStep !== step.id && (
                 <span className="text-xs text-blue-400 ml-auto">in progress</span>
               )}
@@ -106,19 +133,31 @@ export default function FlowProgress() {
               )}
             </button>
 
-            {expandedStep === step.id && !!step.payload && (() => {
-              const p = step.payload as Record<string, unknown>
-              return (
-                <div className="px-4 pb-3">
-                  <pre className="bg-slate-900 border border-slate-800 rounded-md p-3 text-xs text-slate-400 overflow-x-auto font-mono leading-relaxed">
-                    {JSON.stringify(p, null, 2)}
+            {expandedStep === step.id && !!step.payload && (
+              <div className="px-4 pb-3">
+                <div className="border border-slate-800 rounded-md bg-slate-900 overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-1.5 bg-slate-950/60 border-b border-slate-800 text-[11px] text-slate-400">
+                    <span className="font-mono">Payload Preview</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigator.clipboard.writeText(JSON.stringify(step.payload, null, 2))
+                      }}
+                      className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors text-[10px]"
+                    >
+                      Copy JSON
+                    </button>
+                  </div>
+                  <pre className="p-3 text-xs text-slate-400 overflow-x-auto overflow-y-auto max-h-72 font-mono leading-relaxed">
+                    {JSON.stringify(step.payload as Record<string, unknown>, null, 2)}
                   </pre>
                 </div>
-              )
-            })()}
+              </div>
+            )}
           </div>
-        ))}
-      </div>
+        )
+      })}
+    </div>
 
       {!isRunning && steps.some(s => s.status === 'done' || s.status === 'error') && (
         <div className="px-4 py-3 border-t border-slate-800">

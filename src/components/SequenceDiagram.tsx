@@ -1,129 +1,491 @@
+import { useState, useEffect, useRef } from 'react'
+import mermaid from 'mermaid'
 import { useStore } from '../store'
-import type { StepStatus } from '../types'
+import type { FlowStep, FlowStepInfo, StepStatus } from '../types'
 
-// Each step maps to a message between two participants
-const STEP_MESSAGES: { id: string; from: number; to: number; label: string }[] = [
-  { id: 'issuer-metadata', from: 1, to: 0, label: 'Fetch .well-known Metadata' },
-  { id: 'credential-offer', from: 0, to: 1, label: 'Credential Offer' },
-  { id: 'token-exchange', from: 1, to: 0, label: 'Token Request → Response' },
-  { id: 'credential-issuance', from: 0, to: 1, label: 'Issue Credential' },
-  { id: 'vp-request', from: 2, to: 1, label: 'VP Authorization Request' },
-  { id: 'vp-response', from: 1, to: 2, label: 'VP Token Response' },
-  { id: 'verification', from: 2, to: 2, label: 'Verify Presentation' },
-]
+let mermaidInitialized = false
+function initMermaid() {
+  if (mermaidInitialized) return
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: {
+      darkMode: true,
+      background: 'transparent',
+      primaryColor: '#1e293b',
+      primaryTextColor: '#f8fafc',
+      primaryBorderColor: '#334155',
+      lineColor: '#64748b',
+      secondaryColor: '#0f172a',
+      tertiaryColor: '#1e293b',
+      noteBkgColor: '#1e293b',
+      noteTextColor: '#cbd5e1',
+      noteBorderColor: '#475569',
+      actorBkg: '#0f172a',
+      actorBorder: '#38bdf8',
+      actorTextColor: '#f8fafc',
+      actorLineColor: '#334155',
+      signalColor: '#64748b',
+      signalTextColor: '#94a3b8',
+      labelBoxBkgColor: '#1e293b',
+      labelBoxBorderColor: '#334155',
+      labelTextColor: '#f8fafc',
+      loopTextColor: '#cbd5e1',
+      activationBorderColor: '#38bdf8',
+      activationBkgColor: '#0369a1',
+      sequenceNumberColor: '#38bdf8',
+    },
+    sequence: {
+      showSequenceNumbers: true,
+      actorMargin: 50,
+      messageMargin: 35,
+      boxMargin: 8,
+      useMaxWidth: true,
+    },
+    securityLevel: 'loose',
+  })
+  mermaidInitialized = true
+}
 
-const PARTICIPANTS = ['Issuer', 'Wallet', 'Verifier']
+function sanitizeName(name: string): string {
+  return name.replace(/[^\w\s-]/g, '').trim() || 'Entity'
+}
 
-function getColor(status: StepStatus) {
-  switch (status) {
-    case 'done': return { line: 'bg-green-500/50', text: 'text-green-400', arrow: 'text-green-400' }
-    case 'running': return { line: 'bg-blue-500/50', text: 'text-blue-400', arrow: 'text-blue-400' }
-    case 'error': return { line: 'bg-red-500/50', text: 'text-red-400', arrow: 'text-red-400' }
-    default: return { line: 'bg-slate-700', text: 'text-slate-600', arrow: 'text-slate-600' }
+function mapTextToStep(text: string): FlowStep | null {
+  const lower = text.toLowerCase()
+  if (lower.includes('metadata')) return 'issuer-metadata'
+  if (lower.includes('offer')) return 'credential-offer'
+  if (lower.includes('token request')) return 'token-exchange'
+  if (lower.includes('issue credential') || lower.includes('stored')) return 'credential-issuance'
+  if (lower.includes('authorization request') || lower.includes('vp authorization')) return 'vp-request'
+  if (lower.includes('vp token') || lower.includes('direct post') || lower.includes('tampered payload')) return 'vp-response'
+  if (lower.includes('verif') || lower.includes('cryptographic') || lower.includes('integrity check') || lower.includes('status:')) return 'verification'
+  return null
+}
+
+function generateFullFlowDSL(params: {
+  issuerName: string
+  walletName: string
+  verifierName: string
+  credFormat: string
+  steps: FlowStepInfo[]
+  tamperMode: string
+}): string {
+  const { issuerName, walletName, verifierName, credFormat, steps, tamperMode } = params
+
+  const getStepStatus = (id: FlowStep) => steps.find(s => s.id === id)?.status || 'pending'
+  const getIcon = (st: StepStatus) => {
+    if (st === 'done') return ' ✓'
+    if (st === 'running') return ' ◌ [Active]'
+    if (st === 'error') return ' ✗ [Failed]'
+    return ''
   }
+
+  const s1 = getStepStatus('issuer-metadata')
+  const s2 = getStepStatus('credential-offer')
+  const s3 = getStepStatus('token-exchange')
+  const s4 = getStepStatus('credential-issuance')
+  const s5 = getStepStatus('vp-request')
+  const s6 = getStepStatus('vp-response')
+  const s7 = getStepStatus('verification')
+
+  const cleanIssuer = sanitizeName(issuerName)
+  const cleanWallet = sanitizeName(walletName)
+  const cleanVerifier = sanitizeName(verifierName)
+
+  let dsl = `sequenceDiagram
+  autonumber
+  participant I as ${cleanIssuer}
+  participant W as ${cleanWallet}
+  participant V as ${cleanVerifier}
+
+  rect rgb(15, 23, 42)
+  Note over I,W: Phase 1: OpenID4VCI (Credential Issuance)
+  W->>I: 1. Fetch Metadata (.well-known)${getIcon(s1)}
+  I-->>W: 2. Credential Offer (${credFormat})${getIcon(s2)}
+  W->>I: 3. Token Request (OAuth / DPoP)${getIcon(s3)}
+  I-->>W: 4. Issue Credential Payload${getIcon(s4)}
+  end
+`
+  if (s4 === 'done') {
+    dsl += `  Note over W: Credential Securely In Wallet (${credFormat})\n`
+  }
+
+  dsl += `
+  rect rgb(15, 23, 42)
+  Note over W,V: Phase 2: OpenID4VP (Presentation & Verification)
+  V->>W: 5. VP Authorization Request (DCQL)${getIcon(s5)}
+`
+  if (tamperMode !== 'none') {
+    dsl += `  Note over W,V: [Negative Test] ${tamperMode === 'signature' ? 'Mutated Signature' : 'Corrupted Token'}\n`
+    if (s6 === 'done' || s6 === 'running') {
+      dsl += `  W-->>V: 6. Send Tampered VP Token${getIcon(s6)}\n`
+    } else {
+      dsl += `  W-->>V: 6. VP Token Response${getIcon(s6)}\n`
+    }
+    if (s7 === 'done') {
+      dsl += `  V->>V: 7. Presentation Rejected (Test Passed ✓)\n`
+    } else if (s7 === 'error') {
+      dsl += `  V-xV: 7. Verification Failed (Negative Assertion Met ✓)\n`
+    } else {
+      dsl += `  V->>V: 7. Cryptographic Verification & Tamper Check${getIcon(s7)}\n`
+    }
+  } else {
+    dsl += `  W-->>V: 6. VP Token Response (Holder Binding)${getIcon(s6)}\n`
+    if (s7 === 'done') {
+      dsl += `  V->>V: 7. Verification Success (Signature & Claims Valid ✓)\n`
+    } else if (s7 === 'error') {
+      dsl += `  V-xV: 7. Verification Failed ✗\n`
+    } else {
+      dsl += `  V->>V: 7. Verify Signature & Status List${getIcon(s7)}\n`
+    }
+  }
+  dsl += `  end\n`
+
+  return dsl
+}
+
+function generateVpFocusedDSL(params: {
+  walletName: string
+  verifierName: string
+  credFormat: string
+  steps: FlowStepInfo[]
+  tamperMode: string
+}): string {
+  const { walletName, verifierName, credFormat, steps, tamperMode } = params
+  const s5 = steps.find(s => s.id === 'vp-request')?.status || 'pending'
+  const s6 = steps.find(s => s.id === 'vp-response')?.status || 'pending'
+  const s7 = steps.find(s => s.id === 'verification')?.status || 'pending'
+
+  const cleanWallet = sanitizeName(walletName)
+  const cleanVerifier = sanitizeName(verifierName)
+
+  const getIcon = (st: StepStatus) => {
+    if (st === 'done') return ' ✓'
+    if (st === 'running') return ' ◌ [Active]'
+    if (st === 'error') return ' ✗ [Failed]'
+    return ''
+  }
+
+  let dsl = `sequenceDiagram
+  autonumber
+  participant V as ${cleanVerifier}
+  participant W as ${cleanWallet}
+  participant C as Crypto & VP Engine
+
+  rect rgb(15, 23, 42)
+  Note over V,C: OpenID4VP Protocol Exchange (Task #3)
+  V->>W: 1. Authorization Request (request_uri & DCQL)${getIcon(s5)}
+  Note over W: Parse DCQL query & match format (${credFormat})
+  
+  W->>C: 2. Request Selective Disclosures & Nonce Binding
+  C-->>W: 3. Return Signed VP Token & Disclosures (${credFormat})
+`
+  if (tamperMode !== 'none') {
+    dsl += `  Note over W,C: [Negative Test] Corrupted ${tamperMode}
+  W->>V: 4. Direct Post VP Token (Tampered Payload)${getIcon(s6)}
+  V->>C: 5. Verify Cryptographic Integrity
+  C-->>V: 6. Integrity Check: INVALID (Tamper Detected)${getIcon(s7)}
+`
+  } else {
+    dsl += `  W->>V: 4. Direct Post VP Token Response${getIcon(s6)}
+  V->>C: 5. Verify Cryptographic Signature & Issuer Trust
+  C-->>V: 6. Status: Presentation Valid & Revocation Checked ✓${getIcon(s7)}
+`
+  }
+  dsl += `  end\n`
+
+  return dsl
 }
 
 export default function SequenceDiagram() {
-  const { steps, isRunning, selectedCredType } = useStore()
+  const {
+    steps,
+    isRunning,
+    selectedIssuer,
+    selectedWallet,
+    selectedVerifier,
+    selectedCredType,
+    tamperMode,
+    selectedStepId,
+    selectStep,
+  } = useStore()
+
+  const [viewMode, setViewMode] = useState<'full' | 'openid4vp' | 'code'>('full')
+  const [copied, setCopied] = useState(false)
+  const [renderError, setRenderError] = useState<string | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const issuerName = selectedIssuer?.name || 'Issuer'
+  const walletName = selectedWallet?.name || 'Wallet'
+  const verifierName = selectedVerifier?.name || 'Verifier'
+  const credFormat = selectedCredType?.format || 'vc+sd-jwt'
+
+  const mermaidDSL = viewMode === 'openid4vp'
+    ? generateVpFocusedDSL({ walletName, verifierName, credFormat, steps, tamperMode })
+    : generateFullFlowDSL({ issuerName, walletName, verifierName, credFormat, steps, tamperMode })
+
+  useEffect(() => {
+    initMermaid()
+  }, [])
+
+  // Render Mermaid diagram whenever state or view mode changes
+  useEffect(() => {
+    if (viewMode === 'code' || !containerRef.current) return
+
+    let isMounted = true
+    const uniqueId = `mermaid-svg-${Date.now()}`
+
+    setRenderError(null)
+
+      mermaid.render(uniqueId, mermaidDSL)
+      .then(({ svg }) => {
+        // Clean up temporary DOM container created by Mermaid
+        const tempDiv = document.getElementById(`d${uniqueId}`)
+        if (tempDiv) tempDiv.remove()
+
+        if (!isMounted || !containerRef.current) return
+        containerRef.current.innerHTML = svg
+
+        // Post-process SVG elements to bind click handlers and add live status styling
+        const svgEl = containerRef.current.querySelector('svg')
+        if (!svgEl) return
+
+        svgEl.style.maxWidth = '100%'
+        svgEl.style.height = 'auto'
+
+        // Map messages and attach interactions
+        const textElements = Array.from(svgEl.querySelectorAll('text.messageText'))
+        const allLines = Array.from(svgEl.querySelectorAll('line'))
+
+        textElements.forEach((textEl, idx) => {
+          const content = textEl.textContent || ''
+          const stepId = mapTextToStep(content)
+          if (!stepId) return
+
+          const stepInfo = steps.find(s => s.id === stepId)
+          const isSelected = selectedStepId === stepId
+
+          // Find adjacent line element
+          let lineEl: SVGLineElement | null = null
+          const lineByClass = svgEl.querySelector(`line.messageLine${idx}`) as SVGLineElement | null
+          if (lineByClass) {
+            lineEl = lineByClass
+          } else {
+            // Find closest line by Y coordinate
+            const textY = textEl.getBoundingClientRect().top
+            let minDiff = Infinity
+            allLines.forEach((l) => {
+              const diff = Math.abs(l.getBoundingClientRect().top - textY)
+              if (diff < minDiff) {
+                minDiff = diff
+                lineEl = l
+              }
+            })
+          }
+
+          // Group elements for styling & clicking
+          const targets = [textEl, lineEl].filter(Boolean) as SVGElement[]
+
+          targets.forEach((el) => {
+            el.style.cursor = 'pointer'
+            el.classList.add('mermaid-interactive')
+
+            // Apply live status classes
+            if (stepInfo?.status === 'running') {
+              el.classList.add('mermaid-running')
+              if (el.tagName.toLowerCase() === 'line') {
+                el.style.stroke = '#38bdf8'
+                el.style.strokeWidth = '3px'
+                el.style.strokeDasharray = '6 3'
+                el.style.animation = 'mermaidFlowDash 0.8s linear infinite'
+              } else {
+                el.style.fill = '#38bdf8'
+                el.style.fontWeight = 'bold'
+              }
+            } else if (stepInfo?.status === 'done') {
+              el.classList.add('mermaid-done')
+              if (el.tagName.toLowerCase() === 'line') {
+                el.style.stroke = '#10b981'
+                el.style.strokeWidth = '2px'
+              } else {
+                el.style.fill = '#a7f3d0'
+              }
+            } else if (stepInfo?.status === 'error') {
+              el.classList.add('mermaid-error')
+              if (el.tagName.toLowerCase() === 'line') {
+                el.style.stroke = '#ef4444'
+                el.style.strokeWidth = '2px'
+              } else {
+                el.style.fill = '#fca5a5'
+              }
+            }
+
+            // Apply selected step highlight
+            if (isSelected) {
+              if (el.tagName.toLowerCase() === 'line') {
+                el.style.stroke = '#38bdf8'
+                el.style.strokeWidth = '4px'
+                el.style.filter = 'drop-shadow(0 0 6px rgba(56, 189, 248, 0.9))'
+              } else {
+                el.style.fill = '#38bdf8'
+                el.style.fontWeight = 'bold'
+                el.style.filter = 'drop-shadow(0 0 4px rgba(56, 189, 248, 0.8))'
+              }
+            }
+
+            // Click listener
+            el.onclick = (e) => {
+              e.stopPropagation()
+              selectStep(stepId)
+            }
+          })
+        })
+      })
+      .catch((err) => {
+        if (!isMounted) return
+        console.error('Mermaid render error:', err)
+        setRenderError(err?.message || 'Failed to render sequence diagram')
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [mermaidDSL, steps, selectedStepId, selectStep])
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(mermaidDSL)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   if (steps.length === 0) return null
 
   return (
-    <div className="border border-slate-800 rounded-lg p-4">
-      <div className="flex items-center gap-2 mb-4">
-        <h3 className="text-sm font-medium text-slate-300">Protocol Sequence</h3>
-        {selectedCredType && (
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 border border-slate-600">
-            {selectedCredType.format}
-          </span>
+    <div className="border border-slate-800 rounded-lg p-4 bg-slate-900/40 flex flex-col">
+      {/* Dynamic Keyframe Style */}
+      <style>{`
+        @keyframes mermaidFlowDash {
+          from { stroke-dashoffset: 18; }
+          to { stroke-dashoffset: 0; }
+        }
+        .mermaid-interactive {
+          transition: all 0.2s ease-in-out;
+        }
+        .mermaid-interactive:hover {
+          filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.9));
+        }
+      `}</style>
+
+      {/* Top Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-800">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+            <h3 className="text-sm font-semibold text-slate-200">Protocol Sequence Diagram</h3>
+          </div>
+          {selectedCredType && (
+            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-800 text-sky-400 border border-slate-700">
+              {selectedCredType.format}
+            </span>
+          )}
+          {isRunning && (
+            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 animate-pulse">
+              Live Exchange
+            </span>
+          )}
+          {tamperMode !== 'none' && (
+            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              Negative: {tamperMode}
+            </span>
+          )}
+        </div>
+
+        {/* View Mode Switcher */}
+        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+          <button
+            onClick={() => setViewMode('full')}
+            className={`text-xs px-2.5 py-1 rounded transition-colors ${
+              viewMode === 'full'
+                ? 'bg-blue-600 text-white font-medium shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Full Lifecycle
+          </button>
+          <button
+            onClick={() => setViewMode('openid4vp')}
+            className={`text-xs px-2.5 py-1 rounded transition-colors ${
+              viewMode === 'openid4vp'
+                ? 'bg-blue-600 text-white font-medium shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            OpenID4VP Focus
+          </button>
+          <button
+            onClick={() => setViewMode('code')}
+            className={`text-xs px-2.5 py-1 rounded transition-colors ${
+              viewMode === 'code'
+                ? 'bg-blue-600 text-white font-medium shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Mermaid Code
+          </button>
+        </div>
+      </div>
+
+      {/* Main Diagram and Code View (Both preserved without DOM unmount flickering) */}
+      <div className={viewMode === 'code' ? 'block' : 'hidden'}>
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-xs text-slate-400">Mermaid Sequence DSL (Markdown compatible)</span>
+          <button
+            onClick={handleCopyCode}
+            className="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition-colors flex items-center gap-1.5"
+          >
+            {copied ? 'Copied' : 'Copy DSL'}
+          </button>
+        </div>
+        <pre className="bg-slate-950 border border-slate-800 rounded-lg p-4 text-xs font-mono text-slate-300 overflow-x-auto leading-relaxed max-h-[420px]">
+          {mermaidDSL}
+        </pre>
+      </div>
+
+      <div className={viewMode === 'code' ? 'hidden' : 'block'}>
+        {renderError ? (
+          <div className="p-6 text-center text-red-400 bg-red-950/20 border border-red-800/40 rounded-lg text-xs font-mono">
+            Failed to render Mermaid SVG: {renderError}
+          </div>
+        ) : (
+          <div
+            ref={containerRef}
+            className="overflow-x-auto min-h-[320px] max-h-[640px] overflow-y-auto flex justify-center items-start py-2 transition-opacity duration-300"
+          />
         )}
       </div>
 
-      {/* Participant headers */}
-      <div className="grid grid-cols-3 mb-3">
-        {PARTICIPANTS.map((p) => (
-          <div key={p} className="text-center">
-            <span className="inline-block px-3 py-1.5 bg-slate-800 rounded text-xs font-medium text-slate-300">
-              {p}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Messages */}
-      <div className="relative">
-        {/* Vertical lifelines */}
-        <div className="grid grid-cols-3 absolute inset-0 pointer-events-none">
-          {PARTICIPANTS.map((p) => (
-            <div key={p} className="flex justify-center">
-              <div className="w-px bg-slate-800/60 h-full" />
-            </div>
-          ))}
+      {/* Bottom Status & Interactivity Hint */}
+      <div className="mt-4 pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-400">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" /> Done
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" /> Active
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-red-400" /> Error/Tamper
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-slate-600" /> Pending
+          </span>
         </div>
 
-        {/* Arrows */}
-        <div className="relative space-y-0.5">
-          {steps.map((step) => {
-            const msg = STEP_MESSAGES.find(m => m.id === step.id)
-            if (!msg) return null
-
-            const colors = getColor(step.status)
-            const isSelf = msg.from === msg.to
-            const goesRight = msg.from < msg.to
-
-            if (isSelf) {
-              return (
-                <div key={step.id} className="grid grid-cols-3 py-2">
-                  {/* Empty cols before the participant */}
-                  {Array.from({ length: msg.from }).map((_, i) => <div key={i} />)}
-                  <div className="flex items-center justify-center">
-                    <span className={`text-[11px] px-2 py-1 rounded border border-slate-700 ${colors.text}`}>
-                      ↻ {msg.label}
-                    </span>
-                  </div>
-                </div>
-              )
-            }
-
-            const leftCol = Math.min(msg.from, msg.to)
-            const rightCol = Math.max(msg.from, msg.to)
-
-            return (
-              <div key={step.id} className={`py-2.5 ${step.status === 'running' ? 'bg-slate-800/20 rounded' : ''}`}>
-                <div className="flex items-center px-4">
-                  {/* Label positioned on the sending side */}
-                  <div className="flex-1 flex items-center" style={{
-                    paddingLeft: `${(leftCol / 3) * 100}%`,
-                    paddingRight: `${((2 - rightCol) / 3) * 100}%`,
-                  }}>
-                    {goesRight ? (
-                      <div className="flex items-center w-full gap-1">
-                        <span className={`text-[11px] shrink-0 ${colors.text}`}>{msg.label}</span>
-                        <div className={`flex-1 h-px ${colors.line}`} />
-                        <span className={`text-sm ${colors.arrow}`}>→</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center w-full gap-1">
-                        <span className={`text-sm ${colors.arrow}`}>←</span>
-                        <div className={`flex-1 h-px ${colors.line}`} />
-                        <span className={`text-[11px] shrink-0 ${colors.text}`}>{msg.label}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+        <div className="text-slate-500">
+          Click any arrow or step in the diagram to inspect its payload in Flow Progress
         </div>
       </div>
-
-      {/* Legend */}
-      {!isRunning && steps.some(s => s.status === 'done') && (
-        <div className="mt-3 pt-3 border-t border-slate-800 flex gap-4 text-[10px] text-slate-500">
-          <span>OpenID4VCI: steps 1–4</span>
-          <span>OpenID4VP: steps 5–7</span>
-        </div>
-      )}
     </div>
   )
 }

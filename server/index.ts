@@ -602,9 +602,6 @@ async function handlePlaygroundIssuanceToMimoto(walletId: string, credentialConf
   }
 }
 
-// Backward compatibility alias
-const handleMdocIssuanceToMimoto = handlePlaygroundIssuanceToMimoto
-
 // Direct wallet bridge endpoints
 app.post('/api/wallet-bridge/mimoto-credential', async (req, res) => {
   try {
