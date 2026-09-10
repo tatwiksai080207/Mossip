@@ -3,9 +3,12 @@ import mermaid from 'mermaid'
 import { useStore } from '../store'
 import type { FlowStep, FlowStepInfo, StepStatus } from '../types'
 
-let mermaidInitialized = false
-function initMermaid() {
-  if (mermaidInitialized) return
+interface SequenceDiagramProps {
+  isExpanded?: boolean
+  onToggleExpand?: () => void
+}
+
+function initMermaid(isExpanded: boolean = false) {
   mermaid.initialize({
     startOnLoad: false,
     theme: 'base',
@@ -37,14 +40,15 @@ function initMermaid() {
     },
     sequence: {
       showSequenceNumbers: true,
-      actorMargin: 50,
-      messageMargin: 35,
-      boxMargin: 8,
-      useMaxWidth: true,
+      actorMargin: isExpanded ? 150 : 100,
+      messageMargin: 38,
+      boxMargin: 10,
+      boxTextMargin: 6,
+      noteMargin: 12,
+      useMaxWidth: false,
     },
     securityLevel: 'loose',
   })
-  mermaidInitialized = true
 }
 
 function sanitizeName(name: string): string {
@@ -198,7 +202,7 @@ function generateVpFocusedDSL(params: {
   return dsl
 }
 
-export default function SequenceDiagram() {
+export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: SequenceDiagramProps = {}) {
   const {
     steps,
     isRunning,
@@ -226,8 +230,8 @@ export default function SequenceDiagram() {
     : generateFullFlowDSL({ issuerName, walletName, verifierName, credFormat, steps, tamperMode })
 
   useEffect(() => {
-    initMermaid()
-  }, [])
+    initMermaid(isExpanded)
+  }, [isExpanded])
 
   // Render Mermaid diagram whenever state or view mode changes
   useEffect(() => {
@@ -237,8 +241,9 @@ export default function SequenceDiagram() {
     const uniqueId = `mermaid-svg-${Date.now()}`
 
     setRenderError(null)
+    initMermaid(isExpanded)
 
-      mermaid.render(uniqueId, mermaidDSL)
+    mermaid.render(uniqueId, mermaidDSL)
       .then(({ svg }) => {
         // Clean up temporary DOM container created by Mermaid
         const tempDiv = document.getElementById(`d${uniqueId}`)
@@ -251,8 +256,13 @@ export default function SequenceDiagram() {
         const svgEl = containerRef.current.querySelector('svg')
         if (!svgEl) return
 
+        // Make SVG responsive and scale cleanly to fill the available width
+        svgEl.removeAttribute('height')
+        svgEl.setAttribute('width', '100%')
+        svgEl.style.width = '100%'
         svgEl.style.maxWidth = '100%'
         svgEl.style.height = 'auto'
+        svgEl.style.display = 'block'
 
         // Map messages and attach interactions
         const textElements = Array.from(svgEl.querySelectorAll('text.messageText'))
@@ -351,7 +361,7 @@ export default function SequenceDiagram() {
     return () => {
       isMounted = false
     }
-  }, [mermaidDSL, steps, selectedStepId, selectStep])
+  }, [mermaidDSL, steps, selectedStepId, selectStep, isExpanded])
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(mermaidDSL)
@@ -362,7 +372,7 @@ export default function SequenceDiagram() {
   if (steps.length === 0) return null
 
   return (
-    <div className="border border-slate-800 rounded-lg p-4 bg-slate-900/40 flex flex-col">
+    <div className="border border-slate-800 rounded-lg p-4 bg-slate-900/40 flex flex-col w-full">
       {/* Dynamic Keyframe Style */}
       <style>{`
         @keyframes mermaidFlowDash {
@@ -401,38 +411,59 @@ export default function SequenceDiagram() {
           )}
         </div>
 
-        {/* View Mode Switcher */}
-        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
-          <button
-            onClick={() => setViewMode('full')}
-            className={`text-xs px-2.5 py-1 rounded transition-colors ${
-              viewMode === 'full'
-                ? 'bg-blue-600 text-white font-medium shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Full Lifecycle
-          </button>
-          <button
-            onClick={() => setViewMode('openid4vp')}
-            className={`text-xs px-2.5 py-1 rounded transition-colors ${
-              viewMode === 'openid4vp'
-                ? 'bg-blue-600 text-white font-medium shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            OpenID4VP Focus
-          </button>
-          <button
-            onClick={() => setViewMode('code')}
-            className={`text-xs px-2.5 py-1 rounded transition-colors ${
-              viewMode === 'code'
-                ? 'bg-blue-600 text-white font-medium shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Mermaid Code
-          </button>
+        {/* Toolbar Actions */}
+        <div className="flex items-center gap-2">
+          {/* View Mode Switcher */}
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+            <button
+              onClick={() => setViewMode('full')}
+              className={`text-xs px-2.5 py-1 rounded transition-colors ${
+                viewMode === 'full'
+                  ? 'bg-blue-600 text-white font-medium shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Full Lifecycle
+            </button>
+            <button
+              onClick={() => setViewMode('openid4vp')}
+              className={`text-xs px-2.5 py-1 rounded transition-colors ${
+                viewMode === 'openid4vp'
+                  ? 'bg-blue-600 text-white font-medium shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              OpenID4VP Focus
+            </button>
+            <button
+              onClick={() => setViewMode('code')}
+              className={`text-xs px-2.5 py-1 rounded transition-colors ${
+                viewMode === 'code'
+                  ? 'bg-blue-600 text-white font-medium shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Mermaid Code
+            </button>
+          </div>
+
+          {/* Expand / Split View Toggle */}
+          {onToggleExpand && (
+            <button
+              onClick={onToggleExpand}
+              title={isExpanded ? 'Switch to side-by-side view' : 'Expand diagram across full screen width'}
+              className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 shadow-sm"
+            >
+              <svg className="w-3.5 h-3.5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {isExpanded ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9L4 4m0 0l5 0m-5 0l0 5M15 9l5-5m0 0l-5 0m5 0l0 5M9 15l-5 5m0 0l5 0m-5 0l0-5M15 15l5 5m0 0l-5 0m5 0l0-5" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                )}
+              </svg>
+              <span className="font-medium">{isExpanded ? 'Side-by-Side' : 'Full Width'}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -460,7 +491,7 @@ export default function SequenceDiagram() {
         ) : (
           <div
             ref={containerRef}
-            className="overflow-x-auto min-h-[320px] max-h-[640px] overflow-y-auto flex justify-center items-start py-2 transition-opacity duration-300"
+            className={`overflow-x-auto ${isExpanded ? 'min-h-[460px] max-h-[850px]' : 'min-h-[380px] max-h-[750px]'} overflow-y-auto flex justify-center items-start py-2 transition-all duration-300 w-full`}
           />
         )}
       </div>

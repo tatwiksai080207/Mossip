@@ -18,6 +18,7 @@ function App() {
   } = useStore()
 
   const [tunnelUrl, setTunnelUrl] = useState<string>('https://e6d4-119-161-98-68.ngrok-free.app')
+  const [diagramExpanded, setDiagramExpanded] = useState<boolean>(false)
 
   useEffect(() => {
     fetch('/api/tunnel')
@@ -91,7 +92,7 @@ function App() {
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <Header />
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="max-w-[1720px] mx-auto px-4 sm:px-8 py-8">
         <div className="mb-6">
           <h2 className="text-xl font-semibold mb-1">Test Configuration</h2>
           <p className="text-sm text-slate-400">
@@ -155,7 +156,9 @@ function App() {
         {tamperMode !== 'none' && (
           <div className="mb-6 border border-amber-500/40 bg-amber-500/10 rounded-lg px-4 py-2.5 flex items-center justify-between text-xs text-amber-300">
             <div className="flex items-center gap-2">
-              <span className="font-bold">⚠️ Negative Testing Enabled:</span>
+              <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold uppercase tracking-wider">
+                Negative Testing Enabled
+              </span>
               <span>Presentation will be deliberately modified ({tamperMode === 'signature' ? 'invalid cryptographic signature' : 'corrupted token payload'}) to verify rejection by Inji Verify.</span>
             </div>
             <button onClick={() => setTamperMode('none')} className="text-amber-400 hover:underline">Reset to Normal</button>
@@ -163,10 +166,21 @@ function App() {
         )}
 
         {steps.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-            <FlowProgress />
-            <SequenceDiagram />
-          </div>
+          diagramExpanded ? (
+            <div className="space-y-6">
+              <SequenceDiagram isExpanded={diagramExpanded} onToggleExpand={() => setDiagramExpanded(false)} />
+              <FlowProgress />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+              <div className="xl:col-span-4 order-2 xl:order-1">
+                <FlowProgress />
+              </div>
+              <div className="xl:col-span-8 order-1 xl:order-2">
+                <SequenceDiagram isExpanded={diagramExpanded} onToggleExpand={() => setDiagramExpanded(true)} />
+              </div>
+            </div>
+          )
         ) : (
           <FlowProgress />
         )}

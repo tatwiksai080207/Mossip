@@ -55,7 +55,7 @@ export default function TestReport({ issuer, wallet, verifier, credentialType, s
       content = `# Verifiable Credentials Interoperability Test Report
 
 **Generated:** ${timestamp}  
-**Overall Result:** ${allPassed ? '✅ PASS' : '❌ FAIL'}  
+**Overall Result:** ${allPassed ? 'PASS' : 'FAIL'}  
 **Credential Format Under Test:** \`${credentialType.format}\` (${credentialType.name})  
 **Signature Suite / Alg:** \`${credentialType.proofTypes.join(', ')}\`  
 
