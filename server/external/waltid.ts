@@ -149,8 +149,8 @@ waltidVerifierRouter.post('/v1/verify/vp-submission/direct-post', async (req: Re
   try {
     const body = req.body ?? {}
     const vpTokenRaw = body.vp_token
-    const state = body.state || (typeof body.presentation_submission === 'string' 
-      ? JSON.parse(body.presentation_submission).id 
+    const state = body.state || (typeof body.presentation_submission === 'string'
+      ? JSON.parse(body.presentation_submission).id
       : undefined)
 
     console.log(`[waltid-verifier] Received presentation submission, state=${state}`)
@@ -280,7 +280,7 @@ waltidVerifierRouter.post('/v1/verify/vp-submission/direct-post', async (req: Re
     } else if (isSdJwt) {
       // ── SD-JWT VC Verification ──────────────────────────────────────────
       console.log('[waltid-verifier] Verifying IETF SD-JWT VC with walt.id decentralized engine')
-      
+
       if (hasTamperIndicator) {
         session.result = {
           vpResultStatus: 'FAILED',
@@ -384,10 +384,10 @@ waltidVerifierRouter.post('/v1/verify/vp-submission/direct-post', async (req: Re
       } else {
         // Verify via @digitalbazaar/vc
         try {
-          const vcs = Array.isArray(vpObj.verifiableCredential) 
-            ? vpObj.verifiableCredential 
+          const vcs = Array.isArray(vpObj.verifiableCredential)
+            ? vpObj.verifiableCredential
             : [vpObj.verifiableCredential || vpObj]
-          
+
           let allVcsValid = true
           const vcResultsList = []
 

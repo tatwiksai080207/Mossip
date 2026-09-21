@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import mermaid from 'mermaid'
 import { useStore } from '../store'
-import type { FlowStep, FlowStepInfo, StepStatus } from '../types'
+import type { FlowStep, FlowStepInfo, StepStatus, NetworkEvent } from '../types'
 
 interface SequenceDiagramProps {
   isExpanded?: boolean
@@ -74,8 +74,9 @@ function generateFullFlowDSL(params: {
   credFormat: string
   steps: FlowStepInfo[]
   tamperMode: string
+  networkEvents: NetworkEvent[]
 }): string {
-  const { issuerName, walletName, verifierName, credFormat, steps, tamperMode } = params
+  const { issuerName, walletName, verifierName, credFormat, steps, tamperMode, networkEvents } = params
 
   const getStepStatus = (id: FlowStep) => steps.find(s => s.id === id)?.status || 'pending'
   const getIcon = (st: StepStatus) => {
@@ -146,6 +147,21 @@ function generateFullFlowDSL(params: {
   }
   dsl += `  end\n`
 
+  if (networkEvents && networkEvents.length > 0) {
+    dsl += `\n  rect rgb(30, 41, 59)\n  Note over I,V: Live Network Trace\n`
+    networkEvents.forEach(evt => {
+      let from = 'I'
+      let to = 'V'
+      if (evt.url.includes('verify')) { from = 'W'; to = 'V' }
+      else if (evt.url.includes('wallet')) { from = 'V'; to = 'W' }
+      else { from = 'W'; to = 'I' }
+      
+      const cleanPath = evt.path || new URL(evt.url).pathname
+      dsl += `  ${from}->>${to}: ${evt.method} ${cleanPath} [${evt.status}] ⏱${evt.latencyMs}ms 📦${evt.payloadSize}\n`
+    })
+    dsl += `  end\n`
+  }
+
   return dsl
 }
 
@@ -213,6 +229,7 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
     tamperMode,
     selectedStepId,
     selectStep,
+    networkEvents,
   } = useStore()
 
   const [viewMode, setViewMode] = useState<'full' | 'openid4vp' | 'code'>('full')
@@ -227,7 +244,15 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
 
   const mermaidDSL = viewMode === 'openid4vp'
     ? generateVpFocusedDSL({ walletName, verifierName, credFormat, steps, tamperMode })
-    : generateFullFlowDSL({ issuerName, walletName, verifierName, credFormat, steps, tamperMode })
+    : generateFullFlowDSL({
+        issuerName,
+        walletName,
+        verifierName,
+        credFormat,
+        steps,
+        tamperMode,
+        networkEvents,
+      })
 
   useEffect(() => {
     initMermaid(isExpanded)

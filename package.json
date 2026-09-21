@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "tsx server/index.ts",
+    "server": "tsx watch server/index.ts",
     "dev:all": "npm run server & npm run dev",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
@@ -32,6 +32,7 @@
     "react-qr-code": "^2.2.0",
     "react-router-dom": "^7.18.2",
     "tailwindcss": "^4.3.3",
+    "ws": "^8.21.3",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
@@ -41,6 +42,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.1.0",
     "oxlint": "^1.79.0",
     "tsx": "^4.23.12",

@@ -177,13 +177,18 @@ export async function createWallet(): Promise<Wallet> {
   const presentationKey = await generateEd25519Key()
   const held = new Map<string, HeldCredential>()
 
-  async function buildProofJwt(audience: string, nonce: string | undefined): Promise<string> {
-    // Always uses the P-256 issuance key for the OID4VCI credential request proof.
+  async function buildProofJwt(audience: string, nonce: string | undefined, format?: string): Promise<string> {
+    // For ldp_vc, we must use the Ed25519 key so the credential is bound to the Ed25519 DID.
+    // Otherwise the presentation (which requires Ed25519Signature2020) will fail holder binding.
+    const isEd = format === 'ldp_vc'
+    const signingKey = isEd ? presentationKey : key
+    const alg = isEd ? 'EdDSA' : 'ES256'
+
     return new jose.SignJWT(nonce ? { nonce } : {})
-      .setProtectedHeader({ alg: 'ES256', typ: 'openid4vci-proof+jwt', jwk: key.publicJwk })
+      .setProtectedHeader({ alg, typ: 'openid4vci-proof+jwt', jwk: signingKey.publicJwk })
       .setAudience(audience)
       .setIssuedAt()
-      .sign(key.privateKey)
+      .sign(signingKey.privateKey)
   }
 
   async function acceptOffer(
@@ -271,7 +276,7 @@ export async function createWallet(): Promise<Wallet> {
             code: opts.authCode!,
             client_id: opts.clientId || 'mock_client_id',
             redirect_uri: 'http://localhost:3001/callback',
-            wallet_jwk: JSON.stringify(key.publicJwk),
+            wallet_jwk: JSON.stringify(format === 'ldp_vc' ? presentationKey.publicJwk : key.publicJwk),
           }).toString()
         })
         
@@ -375,11 +380,11 @@ export async function createWallet(): Promise<Wallet> {
       (metadata._internal_credential_issuer as string | undefined)
       ?? (metadata.credential_issuer as string | undefined)
       ?? offer.credential_issuer
-    const proofJwt = await buildProofJwt(proofAudience, cNonce)
+    const proofJwt = await buildProofJwt(proofAudience, cNonce, format)
     record('proof', 'ok', {
-      alg: 'ES256',
+      alg: format === 'ldp_vc' ? 'EdDSA' : 'ES256',
       typ: 'openid4vci-proof+jwt',
-      kid: key.verificationMethod,
+      kid: format === 'ldp_vc' ? presentationKey.verificationMethod : key.verificationMethod,
       aud: proofAudience,
       internal_issuer_used: Boolean(metadata._internal_credential_issuer),
       nonce_bound: Boolean(cNonce),
@@ -431,7 +436,7 @@ export async function createWallet(): Promise<Wallet> {
 
     if (!credRes.ok && credBody?.error === 'invalid_proof' && typeof credBody?.c_nonce === 'string') {
       console.log('[wallet] Retrying with new c_nonce:', credBody.c_nonce)
-      const newProofJwt = await buildProofJwt(proofAudience, credBody.c_nonce)
+      const newProofJwt = await buildProofJwt(proofAudience, credBody.c_nonce, format)
       request.proof = { proof_type: 'jwt', jwt: newProofJwt }
       console.log('[wallet] retry payload:', JSON.stringify(request, null, 2))
       credRes = await fetchWithFallback(credentialEndpoint, {
@@ -476,7 +481,7 @@ export async function createWallet(): Promise<Wallet> {
       credentialConfigurationId: configurationId,
       credential: raw,
       types: Array.isArray(rawTypes) ? rawTypes as string[] : (rawTypes ? [rawTypes as unknown as string] : ['VerifiableCredential']),
-      holderDid: key.did,
+      holderDid: format === 'ldp_vc' ? presentationKey.did : key.did,
       receivedAt: Date.now(),
     }
     held.set(credential.id, credential)

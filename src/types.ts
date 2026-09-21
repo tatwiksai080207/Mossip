@@ -59,6 +59,16 @@ export interface TestRunConfig {
   tamperMode?: 'none' | 'signature' | 'expired'
 }
 
+export interface NetworkEvent {
+  method: string
+  url: string
+  path: string
+  status: number
+  latencyMs: number
+  payloadSize: string
+  timestamp: number
+}
+
 // Steps in the flow
 export type FlowStep =
   | 'issuer-metadata'

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import * as api from './api'
-import type { IssuerConfig, WalletConfig, VerifierConfig, CredentialType, FlowStepInfo, StepStatus, TestRun } from './types'
+import type { IssuerConfig, WalletConfig, VerifierConfig, CredentialType, FlowStepInfo, StepStatus, TestRun, NetworkEvent } from './types'
 
 const FLOW_STEPS: { id: FlowStepInfo['id']; label: string }[] = [
   { id: 'issuer-metadata', label: 'Issuer Metadata Discovery' },
@@ -24,6 +24,7 @@ interface PlaygroundStore {
   history: TestRun[]
   tamperMode: 'none' | 'signature' | 'expired'
   selectedStepId: FlowStepInfo['id'] | null
+  networkEvents: NetworkEvent[]
 
   selectIssuer: (issuer: IssuerConfig) => void
   selectWallet: (wallet: WalletConfig) => void
@@ -36,6 +37,8 @@ interface PlaygroundStore {
   clearHistory: () => void
   continueVerification: () => Promise<void>
   checkVerificationResult: () => Promise<void>
+  addNetworkEvent: (event: Omit<NetworkEvent, 'timestamp'>) => void
+  clearNetworkEvents: () => void
 }
 
 export const useStore = create<PlaygroundStore>((set, get) => ({
@@ -50,12 +53,19 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
   history: [],
   tamperMode: 'none',
   selectedStepId: null,
+  networkEvents: [],
 
   _resumeResolver: null as ((code: string) => void) | null,
 
   selectStep: (id) => set((state) => ({
     selectedStepId: state.selectedStepId === id ? null : id,
   })),
+
+  addNetworkEvent: (event) => set((state) => ({
+    networkEvents: [...state.networkEvents, { ...event, timestamp: Date.now() }]
+  })),
+
+  clearNetworkEvents: () => set({ networkEvents: [] }),
 
   selectIssuer: (issuer) => {
     set({
@@ -87,7 +97,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       body: JSON.stringify({ tamperMode }),
     }).catch(err => console.error('Failed to sync tamper mode on runFlow:', err))
 
-    set({ isRunning: true, selectedStepId: null })
+    set({ isRunning: true, steps: [], pausedStep: null, oauthUrl: null, networkEvents: [], selectedStepId: null })
     api.resetVpSession()
 
     const initial: FlowStepInfo[] = FLOW_STEPS.map(s => ({

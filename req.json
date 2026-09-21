@@ -1,0 +1,1 @@
+{"clientId":"localhost-verifier","transactionId":"txn-123","nonce":"nonce123","presentationDefinition":{"id":"presentation_definition","input_descriptors":[{"id":"DrivingLicenseCredential","format":{"mso_mdoc":{"alg":["ES256","ES384","EdDSA"]}},"constraints":{"fields":[{"path":["$.mdoc.doctype"]}]}}]}}

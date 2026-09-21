@@ -120,7 +120,7 @@ export async function createCredentialOffer(
     const offerRes = await postJson(offerEndpoint, {
       configurationId: configId,
     })
-    
+
     if (offerRes.res.ok) {
       const { credential_offer, credential_offer_uri } = offerRes.data as Record<string, any>
       return {
@@ -174,7 +174,7 @@ async function runIssueFlow(issuer: IssuerConfig, credType: CredentialType, auth
   // we rebuild the offer here using the same function step 2 uses.
   const offerStep = await createCredentialOffer(issuer, credType)
   const payload = offerStep.payload as Record<string, unknown>
-  
+
   const offer = {
     credential_issuer: payload.credential_issuer,
     credential_configuration_ids: payload.credential_configuration_ids,
@@ -191,35 +191,35 @@ async function runIssueFlow(issuer: IssuerConfig, credType: CredentialType, auth
       const authServers = (metadata.payload as any).authorization_servers as string[] | undefined
       if (authServers && authServers.length > 0) {
         const authServerUrl = authServers[0]
-        
+
         // Fetch the authorization server metadata to find the authorization endpoint
         const asMetadataRes = await fetch(`${authServerUrl}/.well-known/openid-configuration`)
         if (asMetadataRes.ok) {
           const asMetadata = await asMetadataRes.json()
           const authEndpoint = asMetadata.authorization_endpoint
-          
+
           if (authEndpoint) {
             const url = new URL(authEndpoint)
             url.searchParams.set('client_id', issuer.clientId || 'mpartner-default-mimoto-mosipid-oidc')
             url.searchParams.set('response_type', 'code')
             url.searchParams.set('redirect_uri', 'http://localhost:3001/callback')
             url.searchParams.set('scope', 'openid')
-            
+
             const err = new Error('OAuthPauseRequired') as any
             err.oauthUrl = url.toString()
             throw err
           }
         } else {
-           // Fallback if discovery fails
-           const url = new URL(`${authServerUrl}/authorize`)
-           url.searchParams.set('client_id', issuer.clientId || 'mpartner-default-mimoto-mosipid-oidc')
-           url.searchParams.set('response_type', 'code')
-           url.searchParams.set('redirect_uri', 'http://localhost:3001/callback')
-           url.searchParams.set('scope', 'openid')
-           
-           const err = new Error('OAuthPauseRequired') as any
-           err.oauthUrl = url.toString()
-           throw err
+          // Fallback if discovery fails
+          const url = new URL(`${authServerUrl}/authorize`)
+          url.searchParams.set('client_id', issuer.clientId || 'mpartner-default-mimoto-mosipid-oidc')
+          url.searchParams.set('response_type', 'code')
+          url.searchParams.set('redirect_uri', 'http://localhost:3001/callback')
+          url.searchParams.set('scope', 'openid')
+
+          const err = new Error('OAuthPauseRequired') as any
+          err.oauthUrl = url.toString()
+          throw err
         }
       }
     }
@@ -322,12 +322,15 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
               "vc+sd-jwt": {
                 "sd-jwt_alg_values": ["RS256", "ES256", "ES256K", "EdDSA"],
                 "kb-jwt_alg_values": ["RS256", "ES256", "ES256K", "EdDSA"]
+              },
+              mso_mdoc: {
+                alg: ["ES256", "ES384", "EdDSA"]
               }
             },
             constraints: {
               fields: [
                 {
-                  path: credType.format === 'vc+sd-jwt' ? ["$.vct"] : ["$.type"]
+                  path: credType.format === 'mso_mdoc' ? ["$.mdoc.doctype"] : (credType.format === 'vc+sd-jwt' ? ["$.vct"] : ["$.type"])
                 }
               ]
             }
@@ -409,7 +412,7 @@ export async function submitVPResponse(
 
   // 2. Submit it to the Verifier's responseUri (direct_post)
   let responseUri = session.responseUri || `${verifier.host || '/api/verifier'}/v1/verify/${verifier.env === 'local' ? 'vp-submission/direct-post' : 'v2/vp-submission/direct-post'}`
-  
+
   if (responseUri.startsWith('http://') || responseUri.startsWith('https://')) {
     try {
       const url = new URL(responseUri)
@@ -454,7 +457,7 @@ export async function submitVPResponse(
   console.log('Final responseUri being fetched:', responseUri)
   console.log('Fetch options method:', 'POST')
   console.log('Fetch params:', Array.from(submitParams.entries()))
-  
+
   let submitRes;
   try {
     submitRes = await safeFetch(responseUri, {
@@ -466,7 +469,7 @@ export async function submitVPResponse(
     console.error('Fetch caught an exception:', err)
     throw err;
   }
-  
+
   const submitData = await readBody(submitRes)
 
   if (!submitRes.ok) {
@@ -477,8 +480,8 @@ export async function submitVPResponse(
     })
   }
 
-  return { 
-    payload: { 
+  return {
+    payload: {
       _action: 'Submitted Verifiable Presentation to verifier',
       vp_token,
       holderDid,
@@ -486,8 +489,8 @@ export async function submitVPResponse(
       format: presFormat,
       tampered: Boolean(tampered),
       _verifier_response: submitData,
-    }, 
-    source: 'live' 
+    },
+    source: 'live'
   }
 }
 
@@ -529,9 +532,9 @@ export async function verifyPresentation(
   const vcResults = resultObj?.vcResults as Array<{ verificationStatus?: string; vc?: string }> | undefined
   const credResults = resultObj?.credentialResults as Array<{ allChecksSuccessful?: boolean; schemaAndSignatureCheck?: { valid?: boolean } }> | undefined
 
-  const isRejected = 
-    vpStatus === 'FAILED' || 
-    vpStatus === 'INVALID' || 
+  const isRejected =
+    vpStatus === 'FAILED' ||
+    vpStatus === 'INVALID' ||
     resultObj?.allChecksSuccessful === false ||
     vcResults?.some(v => v.verificationStatus === 'INVALID') ||
     credResults?.some(c => c.allChecksSuccessful === false || c.schemaAndSignatureCheck?.valid === false)

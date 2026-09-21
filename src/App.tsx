@@ -26,7 +26,7 @@ function App() {
       .then(d => {
         if (d?.tunnelUrl) setTunnelUrl(d.tunnelUrl)
       })
-      .catch(() => {})
+      .catch(() => { })
   }, [])
 
   useEffect(() => {
@@ -38,6 +38,25 @@ function App() {
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
   }, [resumeOAuthFlow])
+
+  useEffect(() => {
+    // Only connect WebSocket in the main window, not the callback popup
+    if (window.location.pathname === '/callback') return
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`)
+    
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        if (data.type === 'network_event') {
+          useStore.getState().addNetworkEvent(data)
+        }
+      } catch (err) { }
+    }
+    
+    return () => ws.close()
+  }, [])
 
   if (window.location.pathname === '/callback') {
     const code = new URLSearchParams(window.location.search).get('code')
@@ -113,11 +132,10 @@ function App() {
             <span className="text-slate-600">→</span>
             <span>{selectedVerifier?.name || '—'}</span>
             {selectedCredType && (
-              <span className={`ml-2 px-2 py-0.5 rounded text-xs font-mono uppercase font-semibold border ${
-                selectedCredType.format === 'vc+sd-jwt'
+              <span className={`ml-2 px-2 py-0.5 rounded text-xs font-mono uppercase font-semibold border ${selectedCredType.format === 'vc+sd-jwt'
                   ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
                   : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-              }`}>
+                }`}>
                 {selectedCredType.format} ({selectedCredType.name})
               </span>
             )}
@@ -142,11 +160,10 @@ function App() {
             <button
               disabled={!canRun}
               onClick={runFlow}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                canRun
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${canRun
                   ? 'bg-blue-600 text-white hover:bg-blue-500'
                   : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-              }`}
+                }`}
             >
               {isRunning ? 'Running...' : 'Run Test'}
             </button>
@@ -196,7 +213,7 @@ function App() {
                 <div className="bg-white p-4 rounded-xl mb-6">
                   <QRCode value={offerUri} size={256} />
                 </div>
-                
+
                 <div className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-lg p-4 mb-4">
                   <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wider">Raw Deep Link (For Copy/Pasting)</p>
                   <code className="text-xs text-green-400 break-all">{offerUri}</code>
@@ -213,10 +230,10 @@ function App() {
                   Directly download the credential offer into your local web wallet.
                 </p>
                 {(() => {
-                  const mimotoIssuerId = selectedIssuer?.id === 'certify-local' 
-                    ? 'Farmer' 
-                    : (selectedIssuer?.id === 'certify-mock' 
-                      ? 'MockMdl' 
+                  const mimotoIssuerId = selectedIssuer?.id === 'certify-local'
+                    ? 'Farmer'
+                    : (selectedIssuer?.id === 'certify-mock'
+                      ? 'MockMdl'
                       : (selectedIssuer?.id === 'issuer-waltid' ? 'WaltId' : 'Playground'))
                   const targetCredId = selectedCredType?.id || selectedCredType?.credentialTypeName || 'PlaygroundIdentityCredential'
                   const rawOffer = new URL(offerUri.replace('openid-credential-offer://', 'http://dummy')).searchParams.get('credential_offer') || ''
@@ -224,14 +241,14 @@ function App() {
                   return (
                     <>
                       <div className="flex flex-col sm:flex-row items-center gap-3 mt-2 mb-3">
-                        <a 
+                        <a
                           href={directWalletIssuanceUrl}
                           target="_blank" rel="noreferrer"
                           className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
                         >
                           Open & Directly Download in Wallet (Port 3004)
                         </a>
-                        <a 
+                        <a
                           href="http://localhost:3004"
                           target="_blank" rel="noreferrer"
                           className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors border border-slate-700"
@@ -283,14 +300,14 @@ function App() {
                   Present your credential directly using your local Inji Web wallet.
                 </p>
                 <div className="flex flex-col sm:flex-row items-center gap-3 mt-2 mb-3">
-                  <a 
+                  <a
                     href={`http://localhost:3004/user/authorize?client_id=${encodeURIComponent(vpClientId || '')}&response_type=vp_token&response_mode=direct_post&request_uri=${encodeURIComponent(requestUri || '')}`}
                     target="_blank" rel="noreferrer"
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
                   >
                     Present from Local Web Wallet (Port 3004)
                   </a>
-                  <a 
+                  <a
                     href="http://localhost:3004"
                     target="_blank" rel="noreferrer"
                     className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors border border-slate-700"
@@ -303,7 +320,7 @@ function App() {
                 </p>
               </>
             )}
-            
+
             <div className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-lg p-4 mb-4">
               <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wider">Raw Deep Link (For Copy/Pasting)</p>
               <code className="text-xs text-blue-400 break-all">{vpRequestDeepLink}</code>

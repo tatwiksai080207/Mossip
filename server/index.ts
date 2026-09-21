@@ -1,4 +1,5 @@
 import express from 'express'
+import { WebSocketServer, WebSocket } from 'ws'
 import cors from 'cors'
 import crypto from 'crypto'
 import pg from 'pg'
@@ -170,7 +171,7 @@ function tamperVc(vc: any, mode: 'none' | 'signature' | 'expired'): any {
       try {
         const parsed = JSON.parse(trimmed)
         return JSON.stringify(tamperVc(parsed, mode))
-      } catch {}
+      } catch { }
     } else if (trimmed.includes('.')) {
       if (mode === 'signature') {
         return trimmed.slice(0, -10) + 'TAMPERED99'
@@ -598,7 +599,7 @@ async function handlePlaygroundIssuanceToMimoto(walletId: string, credentialConf
 
     return { credentialId: credId }
   } finally {
-    await client.end().catch(() => {})
+    await client.end().catch(() => { })
   }
 }
 
@@ -634,9 +635,9 @@ app.post('/v1/mimoto/wallets/:walletId/credentials', async (req, res, next) => {
   const configId = req.body?.credentialConfigurationId || req.body?.credential || ''
   const issuer = req.body?.issuer || 'Playground'
   const isPlayground = issuer === 'Playground' ||
-                       configId.startsWith('Playground') ||
-                       configId.toLowerCase().includes('mdoc') ||
-                       configId.toLowerCase().includes('drivinglicense')
+    configId.startsWith('Playground') ||
+    configId.toLowerCase().includes('mdoc') ||
+    configId.toLowerCase().includes('drivinglicense')
 
   if (isPlayground) {
     try {
@@ -663,7 +664,7 @@ app.get('/v1/mimoto/wallets/:walletId/credentials/:credentialId', async (req, re
         `SELECT id, credential_metadata FROM public.verifiable_credentials WHERE id = $1 AND wallet_id = $2`,
         [credentialId, walletId]
       )
-      await client.end().catch(() => {})
+      await client.end().catch(() => { })
 
       if (dbRes.rows.length > 0) {
         const credType = dbRes.rows[0].credential_metadata?.credentialType || ''
@@ -771,17 +772,39 @@ async function proxyRequest(
     }
   }
 
+  const startTime = Date.now()
   const response = await fetch(url, options)
+  const latencyMs = Date.now() - startTime
   const responseContentType = response.headers.get('content-type') || ''
   const isJson = responseContentType.includes('json')
 
-  console.log(`[proxy] ${method} ${url} → ${response.status}`)
+  let bodyText = await response.text()
+  let parsedBody: any = bodyText
+  if (isJson && bodyText) {
+    try {
+      parsedBody = JSON.parse(bodyText)
+    } catch { }
+  }
+  const payloadSize = (bodyText.length / 1024).toFixed(1) + 'KB'
+
+  console.log(`[proxy] ${method} ${url} → ${response.status} (${latencyMs}ms, ${payloadSize})`)
+  
+  if (typeof broadcastNetworkEvent !== 'undefined') {
+    broadcastNetworkEvent({
+      method,
+      url,
+      path,
+      status: response.status,
+      latencyMs,
+      payloadSize,
+    })
+  }
 
   return {
     status: response.status,
     contentType: responseContentType,
     headers: response.headers,
-    body: isJson ? await response.json() : await response.text(),
+    body: parsedBody,
   }
 }
 
@@ -878,8 +901,8 @@ function rewriteLocalCertifyMetadata(body: Record<string, unknown>, req?: expres
     result.authorization_servers = (result.authorization_servers as string[]).map(
       (url: string) =>
         url.replace(COLLAB_ESIGNET_PATTERN, playgroundOidcUri)
-           .replace('http://inji-playground:3001/api/oidc', playgroundOidcUri)
-           .replace('http://localhost:3001/api/oidc', playgroundOidcUri)
+          .replace('http://inji-playground:3001/api/oidc', playgroundOidcUri)
+          .replace('http://localhost:3001/api/oidc', playgroundOidcUri)
     )
   }
 
@@ -1152,7 +1175,7 @@ app.get('/*splat', (_req, res) => {
   res.sendFile(path.join(distPath, 'index.html'))
 })
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`[bff] Playground BFF running on http://localhost:${PORT}`)
   for (const { prefix, target } of PROXIES) console.log(`  ${prefix} → ${target}`)
   console.log(`[issuer] ${playgroundIssuer.identifier}`)
@@ -1160,3 +1183,20 @@ app.listen(PORT, () => {
   console.log(`[wallet] holder did (issuance/P-256) ${playgroundWallet.key.did}`)
   console.log(`[wallet] holder did (presentation/Ed25519) ${playgroundWallet.presentationKey.did}`)
 })
+
+export const wss = new WebSocketServer({ server, path: '/ws' })
+const connectedClients = new Set<WebSocket>()
+
+wss.on('connection', (ws) => {
+  connectedClients.add(ws)
+  ws.on('close', () => connectedClients.delete(ws))
+})
+
+export function broadcastNetworkEvent(event: any) {
+  const message = JSON.stringify({ type: 'network_event', ...event })
+  for (const client of connectedClients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message)
+    }
+  }
+}
