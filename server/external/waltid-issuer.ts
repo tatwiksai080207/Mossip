@@ -307,11 +307,12 @@ export async function createWaltIdIssuer(opts: { baseUrl: string; mountPath: str
   const issuerMetadata = (req?: Request) => {
     const baseUrl = getBaseUrl(req)
     const id = `${baseUrl}${mountPath}`
+    const publicId = `${defaultBaseUrl}${mountPath}`
     return {
       credential_issuer: id,
       credential_endpoint: `${id}/credential`,
       nonce_endpoint: `${id}/nonce`,
-      authorization_servers: [`${id}`],
+      authorization_servers: [publicId],
       token_endpoint: `${id}/token`,
       jwks_uri: `${id}/.well-known/jwks.json`,
       credential_configurations_supported: credentialConfigurationsSupported(),

@@ -315,22 +315,36 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
         input_descriptors: [
           {
             id: configId,
-            format: {
-              ldp_vc: {
-                proof_type: ["Ed25519Signature2018", "Ed25519Signature2020", "RsaSignature2018"]
-              },
-              "vc+sd-jwt": {
-                "sd-jwt_alg_values": ["RS256", "ES256", "ES256K", "EdDSA"],
-                "kb-jwt_alg_values": ["RS256", "ES256", "ES256K", "EdDSA"]
-              },
-              mso_mdoc: {
-                alg: ["ES256", "ES384", "EdDSA"]
-              }
-            },
+            format: credType.format === 'mso_mdoc'
+              ? {
+                  mso_mdoc: {
+                    alg: ["ES256", "ES384", "EdDSA"]
+                  }
+                }
+              : credType.format === 'vc+sd-jwt'
+              ? {
+                  "vc+sd-jwt": {
+                    "sd-jwt_alg_values": ["RS256", "ES256", "ES256K", "EdDSA"],
+                    "kb-jwt_alg_values": ["RS256", "ES256", "ES256K", "EdDSA"]
+                  }
+                }
+              : {
+                  ldp_vc: {
+                    proof_type: ["Ed25519Signature2018", "Ed25519Signature2020", "RsaSignature2018"]
+                  }
+                },
             constraints: {
               fields: [
                 {
-                  path: credType.format === 'mso_mdoc' ? ["$.mdoc.doctype"] : (credType.format === 'vc+sd-jwt' ? ["$.vct"] : ["$.type"])
+                  path: credType.format === 'mso_mdoc' ? ["$.mdoc.doctype"] : (credType.format === 'vc+sd-jwt' ? ["$.vct"] : ["$.type"]),
+                  filter: {
+                    type: "string",
+                    pattern: credType.format === 'mso_mdoc'
+                      ? (credType.doctype || credType.id)
+                      : credType.format === 'vc+sd-jwt'
+                      ? (credType.vct || credType.id)
+                      : (credType.credentialTypeName || credType.id)
+                  }
                 }
               ]
             }
@@ -386,8 +400,7 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
 // nothing genuine to present. Report that plainly instead of inventing a VP.
 
 export async function submitVPResponse(
-  verifier: VerifierConfig,
-  opts: { tamper?: 'none' | 'signature' | 'expired' } = {},
+  verifier: VerifierConfig
 ): Promise<StepResult> {
   const session = currentVpSession
   if (!session) {
@@ -397,8 +410,7 @@ export async function submitVPResponse(
   // 1. Ask the wallet to sign a Verifiable Presentation using the verifier's nonce.
   const { res: presentRes, data: presentData } = await postJson('/api/wallet/present', {
     nonce: session.nonce,
-    clientId: 'injiverify.collab.mosip.net/',
-    tamper: opts.tamper && opts.tamper !== 'none' ? opts.tamper : undefined,
+    clientId: 'injiverify.collab.mosip.net/'
   })
   if (!presentRes.ok) {
     throw new StepError('Failed to sign Verifiable Presentation', {
@@ -495,8 +507,7 @@ export async function submitVPResponse(
 }
 
 export async function verifyPresentation(
-  verifier: VerifierConfig,
-  opts: { isTampered?: boolean } = {},
+  verifier: VerifierConfig
 ): Promise<StepResult> {
   const session = currentVpSession
   if (!session) {
@@ -540,33 +551,11 @@ export async function verifyPresentation(
     credResults?.some(c => c.allChecksSuccessful === false || c.schemaAndSignatureCheck?.valid === false)
 
   if (isRejected) {
-    if (opts.isTampered) {
-      // In a negative test, verifier rejection proves cryptographic enforcement!
-      return {
-        payload: {
-          ...(typeof data === 'object' && data !== null ? data : {}),
-          _negative_test_outcome: 'PASSED (Verifier correctly rejected the tampered presentation)',
-          _tamper_detected: true,
-        },
-        source: 'live'
-      }
-    }
-
-    // In a normal test run, rejection means the verification failed!
     throw new StepError(`Inji Verify rejected the presentation (status: ${vpStatus || 'FAILED'})`, {
       _vp_result_status: vpStatus,
       _verification_results: vcResults || credResults,
       _response: data,
       _interop_finding: 'Inji Verify currently requires an X.509 certificate chain (x5c) for SD-JWT VC rather than decentralized did:key/did:jwk.',
-    })
-  }
-
-  if (opts.isTampered) {
-    throw new StepError(`Negative test failed: Inji Verify accepted the tampered presentation (status: ${vpStatus || 'SUCCESS'}) instead of rejecting it.`, {
-      _vp_result_status: vpStatus,
-      _verification_results: vcResults || credResults,
-      _response: data,
-      _negative_test_outcome: 'FAILED (Expected Inji Verify to reject the presentation, but it accepted it)',
     })
   }
 

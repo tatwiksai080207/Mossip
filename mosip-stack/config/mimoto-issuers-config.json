@@ -19,9 +19,9 @@
       "client_id": "wallet-demo",
       "redirect_uri": "io.mosip.residentapp.inji://oauthredirect",
       "token_endpoint": "http://localhost:8099/v1/mimoto/get-token/Farmer",
-      "authorization_audience": "https://esignet-mock.collab.mosip.net/v1/esignet/oauth/v2/token",
-      "proxy_token_endpoint": "https://esignet-mock.collab.mosip.net/v1/esignet/oauth/v2/token",
-      "client_alias": "wallet-demo-client",
+      "authorization_audience": "http://host.docker.internal:3001/api/oidc/token",
+      "proxy_token_endpoint": "http://host.docker.internal:3001/api/oidc/token",
+      "client_alias": "oidc",
       "qr_code_type": "EmbeddedVC",
       "credential_issuer_host": "http://certify-nginx",
       "enabled": "true",
@@ -46,16 +46,16 @@
       "client_id": "wallet-demo",
       "redirect_uri": "io.mosip.residentapp.inji://oauthredirect",
       "token_endpoint": "http://localhost:8099/v1/mimoto/get-token/MockMdl",
-      "authorization_audience": "https://esignet-mock.collab.mosip.net/v1/esignet/oauth/v2/token",
-      "proxy_token_endpoint": "https://esignet-mock.collab.mosip.net/v1/esignet/oauth/v2/token",
-      "client_alias": "wallet-demo-client",
+      "authorization_audience": "http://host.docker.internal:3001/api/oidc/token",
+      "proxy_token_endpoint": "http://host.docker.internal:3001/api/oidc/token",
+      "client_alias": "oidc",
       "qr_code_type": "EmbeddedVC",
       "credential_issuer_host": "http://certify-nginx",
       "enabled": "true",
       "wellknown_endpoint": "http://certify-nginx/.well-known/openid-credential-issuer"
     },
     {
-      "credential_issuer": "http://localhost:3001/api/playground-issuer",
+      "credential_issuer": "http://host.docker.internal:3001/api/playground-issuer",
       "issuer_id": "Playground",
       "protocol": "OpenId4VCI",
       "display": [
@@ -73,16 +73,16 @@
       "client_id": "wallet-demo",
       "redirect_uri": "io.mosip.residentapp.inji://oauthredirect",
       "token_endpoint": "http://localhost:8099/v1/mimoto/get-token/Playground",
-      "authorization_audience": "http://inji-playground:3001/api/oidc/token",
-      "proxy_token_endpoint": "http://inji-playground:3001/api/oidc/token",
+      "authorization_audience": "http://host.docker.internal:3001/api/oidc/token",
+      "proxy_token_endpoint": "http://host.docker.internal:3001/api/oidc/token",
       "client_alias": "oidc",
       "qr_code_type": "EmbeddedVC",
-      "credential_issuer_host": "http://inji-playground:3001/api/playground-issuer",
+      "credential_issuer_host": "http://host.docker.internal:3001/api/playground-issuer",
       "enabled": "true",
-      "wellknown_endpoint": "http://inji-playground:3001/api/playground-issuer/.well-known/openid-credential-issuer"
+      "wellknown_endpoint": "http://host.docker.internal:3001/api/playground-issuer/.well-known/openid-credential-issuer"
     },
     {
-      "credential_issuer": "http://localhost:3001/api/external/waltid/issuer",
+      "credential_issuer": "http://host.docker.internal:3001/api/external/waltid/issuer",
       "issuer_id": "WaltId",
       "protocol": "OpenId4VCI",
       "display": [
@@ -100,13 +100,13 @@
       "client_id": "wallet-demo",
       "redirect_uri": "io.mosip.residentapp.inji://oauthredirect",
       "token_endpoint": "http://localhost:8099/v1/mimoto/get-token/WaltId",
-      "authorization_audience": "http://inji-playground:3001/api/external/waltid/issuer/token",
-      "proxy_token_endpoint": "http://inji-playground:3001/api/external/waltid/issuer/token",
+      "authorization_audience": "http://host.docker.internal:3001/api/external/waltid/issuer/token",
+      "proxy_token_endpoint": "http://host.docker.internal:3001/api/external/waltid/issuer/token",
       "client_alias": "oidc",
       "qr_code_type": "EmbeddedVC",
-      "credential_issuer_host": "http://inji-playground:3001/api/external/waltid/issuer",
+      "credential_issuer_host": "http://host.docker.internal:3001/api/external/waltid/issuer",
       "enabled": "true",
-      "wellknown_endpoint": "http://inji-playground:3001/api/external/waltid/issuer/.well-known/openid-credential-issuer"
+      "wellknown_endpoint": "http://host.docker.internal:3001/api/external/waltid/issuer/.well-known/openid-credential-issuer"
     }
   ]
 }

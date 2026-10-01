@@ -3,7 +3,7 @@ window._env_ = {
   DEFAULT_TITLE: "Inji Web",
   DEFAULT_FAVICON: "favicon.ico",
   DEFAULT_THEME: "light",
-  MIMOTO_URL: "http://localhost:8099/v1/mimoto",
+  MIMOTO_URL: "http://localhost:3004/v1/mimoto",
   GOOGLE_CLIENT_ID: "297624953605-pdbaemggubg5jkp7nabefddp4kcftu9r.apps.googleusercontent.com"
 };
 
@@ -51,6 +51,49 @@ window._env_ = {
       checkAutoSelect();
     });
 
+    // Intercept window.open so authorization URLs pointing to internal Docker hostnames are rewritten to localhost
+    var origWindowOpen = window.open;
+    window.open = function(url, target, features) {
+      if (typeof url === 'string') {
+        url = url.replace(/host\.docker\.internal/g, 'localhost')
+                 .replace(/inji-playground:3001/g, 'localhost:3001')
+                 .replace(/inji-playground/g, 'localhost');
+      }
+      return origWindowOpen.call(this, url, target, features);
+    };
+
+    // Intercept XMLHttpRequest response & responseText to rewrite internal Docker hostnames for Axios
+    var origResponseTextDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'responseText');
+    var origResponseDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'response');
+    if (origResponseTextDesc && origResponseTextDesc.get) {
+      Object.defineProperty(XMLHttpRequest.prototype, 'responseText', {
+        get: function() {
+          var val = origResponseTextDesc.get.call(this);
+          if (typeof val === 'string' && (val.includes('host.docker.internal') || val.includes('inji-playground'))) {
+            return val.replace(/host\.docker\.internal/g, 'localhost')
+                      .replace(/inji-playground:3001/g, 'localhost:3001')
+                      .replace(/inji-playground/g, 'localhost');
+          }
+          return val;
+        },
+        configurable: true
+      });
+    }
+    if (origResponseDesc && origResponseDesc.get) {
+      Object.defineProperty(XMLHttpRequest.prototype, 'response', {
+        get: function() {
+          var val = origResponseDesc.get.call(this);
+          if (typeof val === 'string' && (val.includes('host.docker.internal') || val.includes('inji-playground'))) {
+            return val.replace(/host\.docker\.internal/g, 'localhost')
+                      .replace(/inji-playground:3001/g, 'localhost:3001')
+                      .replace(/inji-playground/g, 'localhost');
+          }
+          return val;
+        },
+        configurable: true
+      });
+    }
+
     // Intercept XHR responses from Mimoto to catch wallet_locked or 401 on presentation verification,
     // and route mDoc issuance and preview through Playground BFF (port 3001)
     var origOpen = XMLHttpRequest.prototype.open;
@@ -59,15 +102,36 @@ window._env_ = {
       this._method = method;
       this._url = url;
       if (url && typeof url === 'string') {
-        if (method === 'POST' && url.indexOf('/wallets/') !== -1 && url.indexOf('/credentials') !== -1) {
-          url = url.replace('http://localhost:8099', 'http://localhost:3001');
-        } else if (method === 'GET' && url.indexOf('/credentials/') !== -1 && url.indexOf('action=') !== -1) {
-          url = url.replace('http://localhost:8099', 'http://localhost:3001');
+        if (method === 'POST' && url.indexOf('/wallets/') !== -1 && url.indexOf('/credentials') !== -1 && url.indexOf('/presentations') === -1) {
+          url = url.replace('http://localhost:3004', 'http://localhost:3001').replace('http://localhost:8099', 'http://localhost:3001');
+          if (url.startsWith('/v1/mimoto')) url = 'http://localhost:3001' + url;
+        } else if (method === 'GET' && url.indexOf('/wallets/') !== -1 && url.indexOf('/credentials') !== -1 && url.indexOf('/presentations') === -1) {
+          url = url.replace('http://localhost:3004', 'http://localhost:3001').replace('http://localhost:8099', 'http://localhost:3001');
+          if (url.startsWith('/v1/mimoto')) url = 'http://localhost:3001' + url;
+        } else if (url.indexOf('/v2/issuers') !== -1) {
+          url = url.replace('/v2/issuers', '/issuers');
         }
+        url = url.replace('host.docker.internal', 'localhost');
+        url = url.replace('certify-nginx', 'localhost:8091');
+        arguments[1] = url;
       }
       return origOpen.apply(this, arguments);
     };
     XMLHttpRequest.prototype.send = function() {
+      try {
+        this.setRequestHeader('Accept-Language', 'en');
+      } catch(e) {}
+      
+      // When Inji Web sends an OpenID4VP presentation verification request to Mimoto,
+      // Mimoto (running inside Docker) needs to fetch request_uri from host.docker.internal:3001,
+      // NOT localhost:3001 which refuses connection inside the container.
+      if (arguments[0] && typeof arguments[0] === 'string' && this._url && this._url.indexOf('/presentations') !== -1) {
+        arguments[0] = arguments[0].replace(/localhost%3A3001/g, 'host.docker.internal%3A3001')
+                                   .replace(/127\.0\.0\.1%3A3001/g, 'host.docker.internal%3A3001')
+                                   .replace(/localhost:3001/g, 'host.docker.internal:3001')
+                                   .replace(/127\.0\.0\.1:3001/g, 'host.docker.internal:3001');
+      }
+
       this.addEventListener('load', function() {
         try {
           if (this._url && this._url.indexOf('/presentations') !== -1) {
@@ -94,6 +158,103 @@ window._env_ = {
       });
       return origSend.apply(this, arguments);
     };
+
+    var origSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+    XMLHttpRequest.prototype.setRequestHeader = function(header, value) {
+      if (header.toLowerCase() === 'accept-language') {
+        value = 'en'; // Force 2-letter ISO code for Mimoto
+      }
+      return origSetHeader.call(this, header, value);
+    };
+    
+    var origFetch = window.fetch;
+    window.fetch = function() {
+      let url = '';
+      let isRequestObj = false;
+      if (arguments[0] && typeof arguments[0] === 'string') {
+        url = arguments[0];
+      } else if (arguments[0] && typeof arguments[0] === 'object' && arguments[0].url) {
+        url = arguments[0].url;
+        isRequestObj = true;
+      }
+      
+      // Enforce Accept-Language for fetch API
+      var config = arguments[1] || {};
+      if (config.headers instanceof Headers) {
+        config.headers.set('Accept-Language', 'en');
+      } else if (config.headers) {
+        config.headers['Accept-Language'] = 'en';
+      }
+
+      if (config && config.body && typeof config.body === 'string' && url.indexOf('/presentations') !== -1) {
+        config.body = config.body.replace(/localhost%3A3001/g, 'host.docker.internal%3A3001')
+                                 .replace(/127\.0\.0\.1%3A3001/g, 'host.docker.internal%3A3001')
+                                 .replace(/localhost:3001/g, 'host.docker.internal:3001')
+                                 .replace(/127\.0\.0\.1:3001/g, 'host.docker.internal:3001');
+      }
+      arguments[1] = config;
+      
+      if (url) {
+        if (url.indexOf('/wallets/') !== -1 && url.indexOf('/credentials') !== -1 && url.indexOf('/presentations') === -1) {
+          url = url.replace('http://localhost:3004', 'http://localhost:3001').replace('http://localhost:8099', 'http://localhost:3001');
+          if (url.startsWith('/v1/mimoto')) url = 'http://localhost:3001' + url;
+        } else if (url.indexOf('/v2/issuers') !== -1) {
+          url = url.replace('/v2/issuers', '/issuers');
+        }
+        url = url.replace('host.docker.internal', 'localhost');
+        url = url.replace('http://certify-nginx', 'http://localhost:3001/api/local-certify');
+        
+        if (isRequestObj) {
+           arguments[0] = new Request(url, arguments[0]);
+        } else {
+           arguments[0] = url;
+        }
+      }
+      const fetchPromise = origFetch.apply(this, arguments);
+      const modifiedPromise = fetchPromise.then(res => {
+          if (res.ok) {
+              // We must replace internal docker hostnames with localhost in the JSON responses (like /v2/issuers)
+              // so that Inji Web navigates to localhost for authorization endpoints instead of Docker's internal host.
+              return res.clone().text().then(text => {
+                  if (text.includes('host.docker.internal') || text.includes('inji-playground')) {
+                      text = text.replace(/host\.docker\.internal/g, 'localhost');
+                      text = text.replace(/inji-playground:3001/g, 'localhost:3001');
+                      text = text.replace(/inji-playground/g, 'localhost');
+                      return new Response(text, {
+                          status: res.status,
+                          statusText: res.statusText,
+                          headers: res.headers
+                      });
+                  }
+                  return res;
+              });
+          }
+          if (!res.ok) {
+              res.clone().text().then(text => {
+                  try {
+                      var errors = JSON.parse(localStorage.getItem('__inji_errors') || '[]');
+                      errors.push({ url: res.url, status: res.status, body: text, time: new Date().toISOString() });
+                      localStorage.setItem('__inji_errors', JSON.stringify(errors));
+                  } catch (e) {}
+              });
+          }
+          return res;
+      });
+      modifiedPromise.catch(err => {
+          try {
+              var errors = JSON.parse(localStorage.getItem('__inji_errors') || '[]');
+              errors.push({ url: arguments[0]?.url || arguments[0], status: 0, error: String(err), time: new Date().toISOString() });
+              localStorage.setItem('__inji_errors', JSON.stringify(errors));
+          } catch (e) {}
+      });
+      return modifiedPromise;
+    };
+
+    if (typeof window !== 'undefined' && window.localStorage && !window.localStorage.getItem('did_clear_stale_wallet_2')) {
+        window.localStorage.clear();
+        window.localStorage.setItem('did_clear_stale_wallet_2', 'true');
+        window.location.href = '/';
+    }
 
     var path = window.location.pathname;
     var search = window.location.search || '';
@@ -126,7 +287,7 @@ window._env_ = {
         try {
           var offerObj = JSON.parse(rawOffer);
           var issuerStr = offerObj.credential_issuer || '';
-          if (issuerStr.includes('farmer') || issuerStr.includes('Farmer')) {
+          if (issuerStr.includes('farmer') || issuerStr.includes('Farmer') || issuerStr.includes('local-certify')) {
             targetIssuerId = 'Farmer';
           } else if (issuerStr.includes('mock-mdl') || issuerStr.includes('MockMdl')) {
             targetIssuerId = 'MockMdl';

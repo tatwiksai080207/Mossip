@@ -23,6 +23,7 @@ interface PlaygroundStore {
   oauthUrl: string | null
   history: TestRun[]
   tamperMode: 'none' | 'signature' | 'expired'
+  runTamperMode: 'none' | 'signature' | 'expired'
   selectedStepId: FlowStepInfo['id'] | null
   networkEvents: NetworkEvent[]
 
@@ -41,6 +42,68 @@ interface PlaygroundStore {
   clearNetworkEvents: () => void
 }
 
+export function evaluateTestRun(steps: FlowStepInfo[], tamperMode: string): { passed: boolean; message: string } {
+  const allDone = steps.every(s => s.status === 'done' || (s.status === 'pending' && s.payload && (s.payload as any)._note))
+  
+  if (tamperMode === 'none') {
+    return {
+      passed: allDone,
+      message: allDone 
+        ? 'All steps completed successfully.' 
+        : `${steps.filter(s => s.status === 'done').length}/${steps.length} steps passed, ${steps.filter(s => s.status === 'error').length} failed.`
+    }
+  }
+
+  if (tamperMode === 'signature') {
+    const verificationStep = steps.find(s => s.id === 'verification')
+    if (verificationStep && verificationStep.status === 'error') {
+      return {
+        passed: true,
+        message: 'Negative Test Passed: Verifier successfully rejected the corrupt signature.'
+      }
+    }
+    if (allDone) {
+      return {
+        passed: false,
+        message: 'Negative Test Failed: Verifier incorrectly accepted the corrupt signature!'
+      }
+    }
+    return {
+      passed: false,
+      message: 'Negative Test Failed: Flow failed before the verification step could check the signature.'
+    }
+  }
+
+  if (tamperMode === 'expired') {
+    const vpResponseStep = steps.find(s => s.id === 'vp-response')
+    if (vpResponseStep && vpResponseStep.status === 'error') {
+       const payload = vpResponseStep.payload as any
+       if (payload && payload._http_status === 400) {
+         return {
+           passed: true,
+           message: 'Negative Test Passed: Verifier successfully rejected the malformed token at submission (HTTP 400).'
+         }
+       }
+       return {
+         passed: true,
+         message: 'Negative Test Passed: Verifier rejected the malformed token.'
+       }
+    }
+    if (allDone) {
+      return {
+         passed: false,
+         message: 'Negative Test Failed: Verifier incorrectly accepted the malformed token!'
+      }
+    }
+    return {
+      passed: false,
+      message: 'Negative Test Failed: Flow failed upstream for an unexpected reason.'
+    }
+  }
+
+  return { passed: false, message: 'Unknown test condition.' }
+}
+
 export const useStore = create<PlaygroundStore>((set, get) => ({
   selectedIssuer: null,
   selectedWallet: null,
@@ -52,6 +115,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
   oauthUrl: null,
   history: [],
   tamperMode: 'none',
+  runTamperMode: 'none',
   selectedStepId: null,
   networkEvents: [],
 
@@ -97,7 +161,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       body: JSON.stringify({ tamperMode }),
     }).catch(err => console.error('Failed to sync tamper mode on runFlow:', err))
 
-    set({ isRunning: true, steps: [], pausedStep: null, oauthUrl: null, networkEvents: [], selectedStepId: null })
+    set({ isRunning: true, steps: [], pausedStep: null, oauthUrl: null, networkEvents: [], selectedStepId: null, runTamperMode: tamperMode })
     api.resetVpSession()
 
     const initial: FlowStepInfo[] = FLOW_STEPS.map(s => ({
@@ -112,9 +176,11 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       'token-exchange': () => api.exchangeToken(selectedIssuer, selectedCredType),
       'credential-issuance': () => api.requestCredential(selectedIssuer, selectedCredType),
       'vp-request': () => api.createVPRequest(selectedCredType, selectedVerifier),
-      'vp-response': () => api.submitVPResponse(selectedVerifier, { tamper: get().tamperMode }),
-      'verification': () => api.verifyPresentation(selectedVerifier, { isTampered: get().tamperMode !== 'none' }),
+      'vp-response': () => api.submitVPResponse(selectedVerifier),
+      'verification': () => api.verifyPresentation(selectedVerifier),
     }
+
+    let manualWait = false;
 
     for (let i = 0; i < FLOW_STEPS.length; i++) {
       const stepId = FLOW_STEPS[i].id
@@ -136,6 +202,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
           set({ steps: get().steps.map((s, idx) =>
             idx > i ? { ...s, status: 'pending', payload: { _note: 'Manual mode: waiting for user to complete flow.' } } : s
           )})
+          manualWait = true;
           break;
         }
       } catch (err: unknown) {
@@ -178,24 +245,28 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       }
     }
 
-    // save to history
-    const finalSteps = get().steps
-    const allPassed = finalSteps.every(s => s.status === 'done')
-    const run: TestRun = {
-      id: `run-${Date.now()}`,
-      config: {
-        issuer: selectedIssuer,
-        wallet: selectedWallet,
-        verifier: selectedVerifier,
-        credentialType: selectedCredType,
-        tamperMode: get().tamperMode,
-      },
-      steps: finalSteps,
-      result: allPassed ? 'pass' : 'fail',
-      timestamp: Date.now(),
-    }
+    if (!manualWait) {
+      // save to history
+      const finalSteps = get().steps
+      const evaluation = evaluateTestRun(finalSteps, get().runTamperMode)
+      const run: TestRun = {
+        id: `run-${Date.now()}`,
+        config: {
+          issuer: selectedIssuer,
+          wallet: selectedWallet,
+          verifier: selectedVerifier,
+          credentialType: selectedCredType,
+          tamperMode: get().runTamperMode,
+        },
+        steps: finalSteps,
+        result: evaluation.passed ? 'pass' : 'fail',
+        timestamp: Date.now(),
+      }
 
-    set({ isRunning: false, history: [run, ...get().history] })
+      set({ isRunning: false, history: [run, ...get().history] })
+    } else {
+      set({ isRunning: false })
+    }
   },
 
   resumeOAuthFlow: (code: string) => {
@@ -259,7 +330,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
     )})
 
     try {
-      const result = await api.verifyPresentation(selectedVerifier, { isTampered: get().tamperMode !== 'none' })
+      const result = await api.verifyPresentation(selectedVerifier)
       const isManual = get().selectedWallet?.id === 'inji-web-manual' || get().selectedWallet?.id === 'inji-mobile'
       set({ steps: get().steps.map((s, idx) => {
         if (idx === verificationIdx) return { ...s, status: 'done', payload: result.payload, source: result.source }
@@ -279,9 +350,8 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       )})
     }
 
-    // save to history
     const finalSteps = get().steps
-    const allPassed = finalSteps.every(s => s.status === 'done' || (s.status === 'pending' && s.payload && (s.payload as any)._note))
+    const evaluation = evaluateTestRun(finalSteps, get().tamperMode)
     const run: TestRun = {
       id: `run-${Date.now()}`,
       config: {
@@ -291,7 +361,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
         credentialType: get().selectedCredType!,
       },
       steps: finalSteps,
-      result: allPassed ? 'pass' : 'fail',
+      result: evaluation.passed ? 'pass' : 'fail',
       timestamp: Date.now(),
     }
 

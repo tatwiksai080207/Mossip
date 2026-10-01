@@ -29,6 +29,9 @@ function getIssuerUri(req: any): string {
   if (host && !host.includes('localhost') && !host.includes('127.0.0.1') && !host.includes('host.docker.internal') && !host.includes('inji-playground')) {
     return `${proto}://${host}/api/oidc`
   }
+  if (host) {
+    return `${proto}://${host}/api/oidc`
+  }
   const tunnel = process.env.PUBLIC_BASE_URL
   if (tunnel) return `${tunnel.replace(/\/$/, '')}/api/oidc`
   return `${proto}://${host || 'localhost:3001'}/api/oidc`
@@ -36,9 +39,13 @@ function getIssuerUri(req: any): string {
 
 const discoveryHandler = (req: any, res: any) => {
   const issuer = getIssuerUri(req)
+  const tunnel = process.env.PUBLIC_BASE_URL
+  const authBase = (tunnel && !tunnel.includes('host.docker.internal') && !tunnel.includes('inji-playground'))
+    ? tunnel.replace(/\/$/, '')
+    : 'http://localhost:3001'
   res.json({
     issuer,
-    authorization_endpoint: `${issuer}/authorize`,
+    authorization_endpoint: `${authBase}/api/oidc/authorize`,
     token_endpoint: `${issuer}/token`,
     jwks_uri: `${issuer}/jwks`,
     response_types_supported: ['code'],

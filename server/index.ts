@@ -1,5 +1,4 @@
 import express from 'express'
-import { WebSocketServer, WebSocket } from 'ws'
 import cors from 'cors'
 import crypto from 'crypto'
 import pg from 'pg'
@@ -22,7 +21,7 @@ const PORT = Number(process.env.PORT || 3001)
 
 // Override when a tunnel is fronting the BFF, so credential offers and QR codes
 // carry a URL a phone can actually reach.
-let activeTunnelUrl = process.env.PUBLIC_BASE_URL || 'https://e6d4-119-161-98-68.ngrok-free.app'
+let activeTunnelUrl = process.env.PUBLIC_BASE_URL || 'http://localhost:3001'
 
 export function getPublicBaseUrl(req?: express.Request): string {
   if (req) {
@@ -40,6 +39,9 @@ export function getPublicBaseUrl(req?: express.Request): string {
     if (!isInternal) {
       activeTunnelUrl = `${proto}://${host}`
       return activeTunnelUrl
+    }
+    if (host) {
+      return `${proto}://${host}`
     }
   }
   if (activeTunnelUrl) return activeTunnelUrl.replace(/\/$/, '')
@@ -271,6 +273,13 @@ app.all('/v1/verify/*splat', async (req, res) => {
       ENDPOINTS.localVerifier, path, req.method,
       req.headers as Record<string, string>, body,
     )
+    if (path.includes('vp-submission/direct-post') && result.status >= 200 && result.status < 300) {
+      console.log(`[verifier-proxy] Submission succeeded! Providing redirect_uri to Playground`)
+      const respObj = (typeof result.body === 'object' && result.body !== null) ? { ...result.body } : {}
+      respObj.redirect_uri = respObj.redirect_uri || 'http://localhost:3000'
+      respObj.redirectUri = respObj.redirectUri || 'http://localhost:3000'
+      return res.status(result.status).json(respObj)
+    }
     if (typeof result.body === 'string') {
       res.status(result.status).type(result.contentType || 'text/plain').send(result.body)
     } else {
@@ -343,6 +352,13 @@ app.get('/v1/mimoto/verifiers', async (req, res) => {
       for (const v of verifiers) {
         if (v.client_id === 'localhost-verifier' || v.client_id?.includes('ngrok')) {
           v.jwks_uri = `${activeTunnelUrl}/api/verifier/jwks.json`
+          v.redirect_uris = [
+            'http://localhost:3000',
+            'http://localhost:3000/',
+            'http://host.docker.internal:3000',
+            `${activeTunnelUrl}`,
+          ]
+          v.redirect_uri = v.redirect_uris
           v.response_uris = [
             `${activeTunnelUrl}/v1/verify/v2/vp-submission/direct-post`,
             `${activeTunnelUrl}/v1/verify/vp-submission/direct-post`,
@@ -514,11 +530,80 @@ startxref
   return Buffer.from(content)
 }
 
+function generateFarmerCredentialPdf(details?: { 
+  name?: string
+  farmerId?: string
+  dob?: string
+  gender?: string
+  mobile?: string
+  state?: string
+  district?: string
+  landArea?: string
+}): Buffer {
+  const name = details?.name || 'Gorge Cooper'
+  const farmerId = details?.farmerId || '2154189532'
+  const dob = details?.dob || '25-05-1990'
+  const gender = details?.gender || 'Male'
+  const mobile = details?.mobile || '9876543210'
+  const state = details?.state || 'Karnataka'
+  const district = details?.district || 'Bangalore'
+  const landArea = details?.landArea || '3 hectares (Owner)'
+
+  const content = `%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj
+4 0 obj << /Length 340 >> stream
+BT
+/F1 20 Tf
+100 700 Td
+(Farmer Verifiable Credential) Tj
+/F1 12 Tf
+0 -30 Td
+(Farmer ID: ${farmerId}) Tj
+0 -20 Td
+(Name: ${name}) Tj
+0 -20 Td
+(Date of Birth: ${dob}) Tj
+0 -20 Td
+(Gender: ${gender}) Tj
+0 -20 Td
+(Mobile: ${mobile}) Tj
+0 -20 Td
+(State: ${state} - District: ${district}) Tj
+0 -20 Td
+(Land Area: ${landArea}) Tj
+0 -20 Td
+(Issuing Authority: Agriculture Department) Tj
+0 -20 Td
+(Format: W3C Verifiable Credential - JSON-LD) Tj
+0 -20 Td
+(Status: Verified & Valid) Tj
+ET
+endstream
+endobj
+5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000244 00000 n 
+0000000635 00000 n 
+trailer << /Size 6 /Root 1 0 R >>
+startxref
+710
+%%EOF`
+  return Buffer.from(content)
+}
+
 async function handlePlaygroundIssuanceToMimoto(walletId: string, credentialConfigurationId: string, issuerId = 'Playground') {
   const credType = credentialConfigurationId || 'PlaygroundIdentityCredential'
   const isMdoc = credType.includes('mDoc') || credType.includes('DrivingLicense') || credType.toLowerCase().includes('mdoc')
   const isSdJwt = credType.includes('SDJWT') || credType.includes('sd-jwt')
   const isVcdm2 = credType.includes('2.0') || credType.includes('VCDM2.0')
+  const isFarmer = credType.includes('Farmer') || credType.toLowerCase().includes('farmer') || issuerId === 'Farmer' || issuerId.toLowerCase().includes('farmer') || issuerId.toLowerCase().includes('agri')
 
   let compactCred = ''
   if (isMdoc) {
@@ -553,6 +638,31 @@ async function handlePlaygroundIssuanceToMimoto(walletId: string, credentialConf
       },
     })
     compactCred = sdjwt.compact
+  } else if (isFarmer) {
+    // W3C VC 1.1 or 2.0 for Farmer
+    const dataModel: DataModel = isVcdm2 ? '2.0' : '1.1'
+    const vc = await issueLdpCredential({
+      key: playgroundIssuer.key,
+      dataModel,
+      credentialType: 'FarmerCredential',
+      subject: {
+        fullName: 'Gorge Cooper',
+        farmerID: '2154189532',
+        mobileNumber: '9876543210',
+        dateOfBirth: '25-05-1990',
+        gender: 'Male',
+        state: 'Karnataka',
+        district: 'Bangalore',
+        villageOrTown: 'Koramangala',
+        postalCode: '453000',
+        landArea: '3 hectares',
+        landOwnershipType: 'Owner',
+        primaryCropType: 'Maize',
+        secondaryCropType: 'Rice',
+      },
+      holderDid: playgroundIssuer.key.did,
+    })
+    compactCred = JSON.stringify(vc)
   } else {
     // W3C VC 1.1 or 2.0
     const dataModel: DataModel = isVcdm2 ? '2.0' : '1.1'
@@ -574,9 +684,13 @@ async function handlePlaygroundIssuanceToMimoto(walletId: string, credentialConf
 
   const client = await getMimotoDbClient()
   try {
+    const actualIssuer = isFarmer ? 'Farmer' : (issuerId || 'Playground')
+    const actualCredType = isFarmer ? 'FarmerCredential' : credType
+    const format = isFarmer ? 'ldp_vc' : (isMdoc ? 'mso_mdoc' : (isSdJwt ? 'vc+sd-jwt' : 'jwt_vc_json'))
+
     const existing = await client.query(
-      `SELECT id FROM public.verifiable_credentials WHERE wallet_id = $1 AND credential_metadata->>'credentialType' = $2`,
-      [walletId, credType]
+      `SELECT id FROM public.verifiable_credentials WHERE wallet_id = $1 AND (credential_metadata->>'credentialType' = $2 OR credential_metadata->>'credentialConfigurationId' = $2)`,
+      [walletId, actualCredType]
     )
 
     let credId: string
@@ -586,15 +700,26 @@ async function handlePlaygroundIssuanceToMimoto(walletId: string, credentialConf
         `UPDATE public.verifiable_credentials SET credential = $1, updated_at = now() WHERE id = $2`,
         [compactCred, credId]
       )
-      console.log(`[wallet-bridge] Updated existing ${credType} ${credId} in wallet ${walletId}`)
+      console.log(`[wallet-bridge] Updated existing ${actualCredType} ${credId} in wallet ${walletId}`)
     } else {
       credId = crypto.randomUUID()
-      const metadata = JSON.stringify({ issuerId: issuerId || 'Playground', credentialType: credType })
+      const displayName = isFarmer ? 'Farmer Verifiable Credential' : (isMdoc ? 'Mobile Driving License' : 'Playground Identity Credential')
+      const logo = isFarmer ? 'https://mosip.github.io/inji-config/logos/agro-vertias-logo.png' : 'https://api.collab.mosip.net/inji/mosip-logo.png'
+
+      const metadata = JSON.stringify({ 
+        issuerId: actualIssuer, 
+        issuer: actualIssuer,
+        credentialType: actualCredType,
+        credentialConfigurationId: actualCredType,
+        credentialTypeDisplayName: displayName,
+        credentialTypeLogo: logo,
+        format
+      })
       await client.query(
         `INSERT INTO public.verifiable_credentials (id, wallet_id, credential, credential_metadata, created_at, updated_at) VALUES ($1, $2, $3, $4, now(), now())`,
         [credId, walletId, compactCred, metadata]
       )
-      console.log(`[wallet-bridge] Inserted new ${credType} ${credId} into wallet ${walletId}`)
+      console.log(`[wallet-bridge] Inserted new ${actualCredType} ${credId} into wallet ${walletId}`)
     }
 
     return { credentialId: credId }
@@ -622,8 +747,9 @@ app.post('/api/wallet-bridge/mimoto-credential', async (req, res) => {
 app.get('/api/wallet-bridge/credential-pdf', (req, res) => {
   const credType = (req.query.credType as string) || 'PlaygroundDrivingLicense_mDoc'
   const isMdoc = credType.includes('mDoc') || credType.includes('DrivingLicense') || credType.toLowerCase().includes('mdoc')
-  const pdfBuffer = isMdoc ? generateDrivingLicencePdf() : generateIdentityCredentialPdf(credType)
-  const filename = isMdoc ? 'PlaygroundDrivingLicense_mDoc.pdf' : `${credType}.pdf`
+  const isFarmer = credType.includes('Farmer') || credType.toLowerCase().includes('farmer')
+  const pdfBuffer = isMdoc ? generateDrivingLicencePdf() : (isFarmer ? generateFarmerCredentialPdf() : generateIdentityCredentialPdf(credType))
+  const filename = isMdoc ? 'PlaygroundDrivingLicense_mDoc.pdf' : (isFarmer ? 'FarmerCredential.pdf' : `${credType}.pdf`)
   res.setHeader('Content-Type', 'application/pdf')
   res.setHeader('Content-Disposition', `inline; filename="${filename}"`)
   res.send(pdfBuffer)
@@ -632,16 +758,20 @@ app.get('/api/wallet-bridge/credential-pdf', (req, res) => {
 // Mimoto proxy interceptors for wallet credentials
 app.post('/v1/mimoto/wallets/:walletId/credentials', async (req, res, next) => {
   const { walletId } = req.params
-  const configId = req.body?.credentialConfigurationId || req.body?.credential || ''
-  const issuer = req.body?.issuer || 'Playground'
-  const isPlayground = issuer === 'Playground' ||
+  const configId = req.body?.credentialConfigurationId || req.body?.credential || req.body?.credential_identifier || ''
+  const issuer = req.body?.issuer || req.body?.issuerId || 'Playground'
+  const isFarmer = issuer === 'Farmer' || issuer.toLowerCase().includes('farmer') || issuer.toLowerCase().includes('agri') || configId.toLowerCase().includes('farmer')
+  const isPlayground = issuer === 'Playground' || 
+    issuer.toLowerCase().includes('playground') ||
     configId.startsWith('Playground') ||
     configId.toLowerCase().includes('mdoc') ||
-    configId.toLowerCase().includes('drivinglicense')
+    configId.toLowerCase().includes('drivinglicense') ||
+    isFarmer
+  console.log(`[wallet-bridge] Interceptor hit! isPlayground=${isPlayground}, isFarmer=${isFarmer}, body:`, JSON.stringify(req.body))
 
-  if (isPlayground) {
+  if (isPlayground || isFarmer) {
     try {
-      console.log(`[wallet-bridge] Intercepted Playground credential download for wallet ${walletId}, config: ${configId}`)
+      console.log(`[wallet-bridge] Intercepted credential download for wallet ${walletId}, config: ${configId}, issuer: ${issuer}`)
       const result = await handlePlaygroundIssuanceToMimoto(walletId, configId, issuer)
       return res.status(200).json({ response: result })
     } catch (err) {
@@ -651,6 +781,44 @@ app.post('/v1/mimoto/wallets/:walletId/credentials', async (req, res, next) => {
   }
 
   next()
+})
+app.get('/v1/mimoto/wallets/:walletId/credentials', async (req, res, next) => {
+  const { walletId } = req.params
+  try {
+    const client = await getMimotoDbClient()
+    const dbRes = await client.query(
+      `SELECT id, credential_metadata FROM public.verifiable_credentials WHERE wallet_id = $1`,
+      [walletId]
+    )
+    await client.end().catch(() => { })
+
+    const credentials = dbRes.rows.map(row => {
+      let meta = row.credential_metadata
+      if (typeof meta === 'string') {
+        try { meta = JSON.parse(meta) } catch (e) { }
+      }
+      const credType = meta?.credentialType || meta?.credentialConfigurationId || ''
+      const isFarmer = credType.includes('Farmer') || meta?.issuerId === 'Farmer'
+      const isMdoc = credType.includes('mDoc') || credType.includes('DrivingLicense')
+
+      const displayName = meta?.credentialTypeDisplayName || 
+        (isFarmer ? 'Farmer Verifiable Credential' : (isMdoc ? 'Mobile Driving License' : 'Playground Identity Credential'))
+      const logo = meta?.credentialTypeLogo || 
+        (isFarmer ? 'https://mosip.github.io/inji-config/logos/agro-vertias-logo.png' : 'https://api.collab.mosip.net/inji/mosip-logo.png')
+
+      return {
+        credentialId: row.id,
+        ...(meta || {}),
+        credentialTypeDisplayName: displayName,
+        credentialTypeLogo: logo
+      }
+    })
+    
+    return res.status(200).json(credentials)
+  } catch (err) {
+    console.error('[wallet-bridge] Error fetching credentials list:', err)
+    return res.status(500).json({ error: 'Failed to fetch credentials list', detail: String(err) })
+  }
 })
 
 app.get('/v1/mimoto/wallets/:walletId/credentials/:credentialId', async (req, res, next) => {
@@ -669,10 +837,11 @@ app.get('/v1/mimoto/wallets/:walletId/credentials/:credentialId', async (req, re
       if (dbRes.rows.length > 0) {
         const credType = dbRes.rows[0].credential_metadata?.credentialType || ''
         const isMdoc = credType.includes('mDoc') || credType.includes('DrivingLicense') || credType.toLowerCase().includes('mdoc')
-        const isPlayground = credType.startsWith('Playground') || isMdoc
-        if (isPlayground) {
-          const filename = isMdoc ? 'PlaygroundDrivingLicense_mDoc.pdf' : `${credType}.pdf`
-          const pdfBuffer = isMdoc ? generateDrivingLicencePdf() : generateIdentityCredentialPdf(credType)
+        const isFarmer = credType.includes('Farmer') || credType.toLowerCase().includes('farmer')
+        const isSupported = credType.startsWith('Playground') || isMdoc || isFarmer
+        if (isSupported) {
+          const filename = isMdoc ? 'PlaygroundDrivingLicense_mDoc.pdf' : (isFarmer ? 'FarmerCredential.pdf' : `${credType}.pdf`)
+          const pdfBuffer = isMdoc ? generateDrivingLicencePdf() : (isFarmer ? generateFarmerCredentialPdf() : generateIdentityCredentialPdf(credType))
           res.setHeader('Content-Type', 'application/pdf')
           res.setHeader('Content-Disposition', action === 'download'
             ? `attachment; filename="${filename}"`
@@ -843,6 +1012,13 @@ for (const { prefix, target, label } of PROXIES) {
         target, sPath, req.method,
         req.headers as Record<string, string>, body,
       )
+      if (sPath.includes('vp-submission/direct-post') && result.status >= 200 && result.status < 300) {
+        console.log(`[verifier-proxy] (${label}) Submission succeeded! Providing redirect_uri to Playground`)
+        const respObj = (typeof result.body === 'object' && result.body !== null) ? { ...result.body } : {}
+        respObj.redirect_uri = respObj.redirect_uri || 'http://localhost:3000'
+        respObj.redirectUri = respObj.redirectUri || 'http://localhost:3000'
+        return res.status(result.status).json(respObj)
+      }
       if (typeof result.body === 'string') {
         res.status(result.status).type(result.contentType || 'text/plain').send(result.body)
       } else {
@@ -1183,20 +1359,3 @@ const server = app.listen(PORT, () => {
   console.log(`[wallet] holder did (issuance/P-256) ${playgroundWallet.key.did}`)
   console.log(`[wallet] holder did (presentation/Ed25519) ${playgroundWallet.presentationKey.did}`)
 })
-
-export const wss = new WebSocketServer({ server, path: '/ws' })
-const connectedClients = new Set<WebSocket>()
-
-wss.on('connection', (ws) => {
-  connectedClients.add(ws)
-  ws.on('close', () => connectedClients.delete(ws))
-})
-
-export function broadcastNetworkEvent(event: any) {
-  const message = JSON.stringify({ type: 'network_event', ...event })
-  for (const client of connectedClients) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message)
-    }
-  }
-}

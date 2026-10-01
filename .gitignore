@@ -14,3 +14,11 @@ inji_ecosystem_flow.md
 *.jar
 images.html
 mosip-stack/data/
+scratch/
+BOOT-INF/
+EncryptionDecryptionUtil_patched.class
+main.js
+patched_classes/
+staging/
+mosip-stack/test-download.cjs
+

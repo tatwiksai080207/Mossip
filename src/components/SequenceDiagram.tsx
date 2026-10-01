@@ -226,7 +226,7 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
     selectedWallet,
     selectedVerifier,
     selectedCredType,
-    tamperMode,
+    runTamperMode: tamperMode,
     selectedStepId,
     selectStep,
     networkEvents,

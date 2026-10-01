@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { useStore } from '../store'
-import type { StepStatus, FlowStepInfo, IssuerConfig, VerifierConfig, CredentialType } from '../types'
+import { useStore, evaluateTestRun } from '../store'
+import type { StepStatus } from '../types'
 
 function statusIcon(status: StepStatus) {
   switch (status) {
@@ -20,78 +20,9 @@ function statusColor(status: StepStatus) {
   }
 }
 
-function InfoTooltip({ title, description }: { title: string, description: string }) {
-  return (
-    <div className="relative group inline-flex items-center ml-2">
-      <svg className="w-4 h-4 text-white cursor-help hover:text-slate-200 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-      <div className="absolute right-0 bottom-full mb-2 w-80 p-3 bg-slate-800 border border-slate-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-left cursor-default">
-        <h4 className="text-sm font-semibold text-slate-200 mb-1.5">{title}</h4>
-        <p className="text-xs text-slate-400 leading-relaxed whitespace-normal">{description}</p>
-      </div>
-    </div>
-  )
-}
-
-function getKnownGap(step: FlowStepInfo, issuer: IssuerConfig | null, verifier: VerifierConfig | null, format: CredentialType | null) {
-  if (!issuer || !verifier || !format) return null;
-
-  console.log("getKnownGap evaluate:", { stepId: step.id, format: format.format, verifierId: verifier.id });
-
-  if (step.id.includes('vp-request') && format.format.includes('mso_mdoc') && verifier.id.includes('inji-verify')) {
-    console.log("MATCHED vp-request gap!");
-    return {
-      title: "DCQL Format Unsupported",
-      description: "Inji Verify (COLLAB) uses the v2 DCQL specification, which strictly accepts only W3C formats (vc+sd-jwt, ldp_vp) and explicitly rejects mso_mdoc queries. Try testing this with Local Inji Verify instead, which uses standard OpenID4VP Presentation Exchange and fully supports mDocs!"
-    }
-  }
-  
-  if (step.id.includes('vp-response') && format.format.includes('mso_mdoc') && verifier.id.includes('inji-verify')) {
-    console.log("MATCHED vp-response gap!");
-    return {
-      title: "Skipped (Upstream Failure)",
-      description: "This step failed because the VP Authorization Request was rejected by the verifier. The wallet never received a valid request to respond to."
-    }
-  }
-
-  if (step.id.includes('verification') && format.format.includes('mso_mdoc') && verifier.id.includes('inji-verify')) {
-    console.log("MATCHED verification mdoc gap!");
-    return {
-      title: "Skipped (Upstream Failure)",
-      description: "This step failed because the wallet never successfully submitted a VP Token Response."
-    }
-  }
-
-  // All other known gaps happen at the verification step
-  if (step.id !== 'verification') return null;
-  
-  if (format.format === 'vc+sd-jwt' && issuer.id === 'certify-playground' && (verifier.id === 'inji-verify' || verifier.id === 'verify-local')) {
-    return {
-      title: "Inji Verify strictly expects X.509 for SD-JWT",
-      description: "Playground Issuer uses decentralized identifiers (did:key) to sign SD-JWTs natively, as permitted by the W3C. However, Inji Verify strictly expects an eIDAS-style X.509 certificate chain (x5c) for SD-JWTs and fails to resolve the DID. Try using the walt.id Verifier instead to see this exact credential verify successfully!"
-    }
-  }
-  
-  if (issuer.id === 'certify-playground' && (verifier.id === 'inji-verify' || verifier.id === 'verify-local')) {
-    return {
-      title: "Untrusted Issuer",
-      description: "The Playground Issuer dynamically generates a new key pair each time it runs. This mock key is not present in Inji Verify's trusted issuer registry, causing the TrustedIssuerCheck to fail even if the signature is valid."
-    }
-  }
-
-  if (issuer.id === 'certify-local' && verifier.id === 'inji-verify') {
-    return {
-      title: "Untrusted Local Issuer",
-      description: "Local Inji Certify is running on your local machine and has its own local key. The remote Inji Verify (COLLAB) cloud server does not have this local key in its trusted issuer registry, causing the TrustedIssuerCheck to fail."
-    }
-  }
-
-  return null;
-}
 
 export default function FlowProgress() {
-  const { steps, isRunning, pausedStep, oauthUrl, selectedStepId, selectStep, selectedIssuer, selectedVerifier, selectedCredType } = useStore()
+  const { steps, isRunning, pausedStep, oauthUrl, selectedStepId, selectStep, runTamperMode } = useStore()
   const [expandedStep, setExpandedStep] = useState<string | null>(null)
 
   useEffect(() => {
@@ -126,7 +57,7 @@ export default function FlowProgress() {
       <div className="divide-y divide-slate-800/50">
         {steps.map((step) => {
           const isSelected = selectedStepId === step.id
-          const knownGap = step.status === 'error' ? getKnownGap(step, selectedIssuer, selectedVerifier, selectedCredType) : null
+
           return (
             <div
               key={step.id}
@@ -194,7 +125,6 @@ export default function FlowProgress() {
                       {step.source as string}
                     </span>
                   )}
-                  <InfoTooltip title={knownGap ? knownGap.title : `Debug: ${selectedIssuer?.id} | ${selectedVerifier?.id} | ${selectedCredType?.format} | ${step.id}`} description={knownGap ? knownGap.description : "No gap matched."} />
                   <span className="text-xs text-red-400">failed</span>
                   {!!step.payload && (
                     <span className="text-xs text-slate-600">
@@ -231,22 +161,21 @@ export default function FlowProgress() {
       })}
     </div>
 
-      {!isRunning && steps.some(s => s.status === 'done' || s.status === 'error') && (
-        <div className="px-4 py-3 border-t border-slate-800">
-          <div className={`text-sm ${
-            steps.every(s => s.status === 'done') ? 'text-green-400' : 'text-yellow-400'
-          }`}>
-            {steps.every(s => s.status === 'done')
-              ? 'All steps completed successfully'
-              : `${steps.filter(s => s.status === 'done').length}/${steps.length} steps passed, ${steps.filter(s => s.status === 'error').length} failed`
-            }
+      {!isRunning && !pausedStep && steps.some(s => s.status === 'done' || s.status === 'error') && (() => {
+        const evaluation = evaluateTestRun(steps, runTamperMode)
+        return (
+          <div className="px-4 py-3 border-t border-slate-800">
+            <div className={`text-sm ${evaluation.passed ? 'text-green-400' : 'text-red-400'}`}>
+              <div className="font-semibold">{evaluation.passed ? 'Overall Status: PASS' : 'Overall Status: FAIL'}</div>
+              <div className="mt-0.5">{evaluation.message}</div>
+            </div>
+            <div className="flex gap-3 mt-2 pt-2 border-t border-slate-800/50">
+              <span className="text-xs text-green-500">{steps.filter(s => s.source === 'live').length} live</span>
+              <span className="text-xs text-slate-500">{steps.filter(s => s.source === 'mock').length} mock</span>
+            </div>
           </div>
-          <div className="flex gap-3 mt-1">
-            <span className="text-xs text-green-500">{steps.filter(s => s.source === 'live').length} live</span>
-            <span className="text-xs text-slate-500">{steps.filter(s => s.source === 'mock').length} mock</span>
-          </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

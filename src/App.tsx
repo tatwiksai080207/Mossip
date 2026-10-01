@@ -17,7 +17,7 @@ function App() {
     tamperMode, setTamperMode,
   } = useStore()
 
-  const [tunnelUrl, setTunnelUrl] = useState<string>('https://e6d4-119-161-98-68.ngrok-free.app')
+  const [tunnelUrl, setTunnelUrl] = useState<string>('http://host.docker.internal:3001')
   const [diagramExpanded, setDiagramExpanded] = useState<boolean>(false)
 
   useEffect(() => {
@@ -301,7 +301,7 @@ function App() {
                 </p>
                 <div className="flex flex-col sm:flex-row items-center gap-3 mt-2 mb-3">
                   <a
-                    href={`http://localhost:3004/user/authorize?client_id=${encodeURIComponent(vpClientId || '')}&response_type=vp_token&response_mode=direct_post&request_uri=${encodeURIComponent(requestUri || '')}`}
+                    href={`http://localhost:3004/user/authorize?client_id=${encodeURIComponent(vpClientId || '')}&response_type=vp_token&response_mode=direct_post&request_uri=${encodeURIComponent((requestUri || '').replace(/localhost:3001|127\.0\.0\.1:3001/g, 'host.docker.internal:3001'))}`}
                     target="_blank" rel="noreferrer"
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
                   >
