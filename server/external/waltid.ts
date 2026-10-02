@@ -155,8 +155,8 @@ waltidVerifierRouter.post('/v1/verify/vp-submission/direct-post', async (req: Re
 
     console.log(`[waltid-verifier] Received presentation submission, state=${state}`)
 
-    // Find session by transactionId / state
-    let session = state ? sessionsByTxnId.get(state) : undefined
+    // Find session by transactionId / state / requestId
+    let session = state ? (sessionsByTxnId.get(state) || sessionsByReqId.get(state)) : undefined
     if (!session) {
       // Find newest active session without a result
       for (const s of sessionsByTxnId.values()) {

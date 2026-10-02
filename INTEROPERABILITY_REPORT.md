@@ -76,6 +76,34 @@ Per Good-to-have Task #4, the playground features an interactive **Tamper Mode**
   2. `walt.id Issuer` $\rightarrow$ `Inji Web` $\rightarrow$ `walt.id Verifier` (100% external-to-external lifecycle mediated through MOSIP Inji Web wallet)
   3. `Local Inji Certify` $\rightarrow$ `Inji Web` $\rightarrow$ `walt.id Verifier` (Inji credential verified by third party)
 
+### Finding 7: OpenID4VP DCQL `doctype_values` Metadata Query Gap in Collab Inji Verify
+- **Observed Behavior:** When issuing and presenting an ISO/IEC 18013-5 mDoc credential (`mso_mdoc`) via `Inji Certify (Collab Interactive)` $\rightarrow$ `Inji Web (Collab Interactive OTP)` to `Inji Verify (Collab Live Engine)` using standard OpenID4VP Draft 23+ DCQL syntax:
+  ```json
+  {
+    "clientId": "injiverify.collab.mosip.net/",
+    "dcqlQuery": {
+      "credentials": [{
+        "id": "collab-mosipid-mdoc",
+        "format": "mso_mdoc",
+        "meta": { "doctype_values": ["org.iso.18013.5.1.mDL"] }
+      }]
+    }
+  }
+  ```
+  Collab Inji Verify (`injiverify.collab.mosip.net/v1/verify/v2/vp-request`) rejects the request with HTTP 400:
+  ```json
+  {
+    "errorCode": "UNKNOWN_FIELD",
+    "errorMessage": "Unknown field: doctype_values"
+  }
+  ```
+  Furthermore, if `doctype_values` is omitted or changed, the endpoint responds with `{"errorCode": "dcql_query.credentials", "errorMessage": "DCQL credential format must be a valid format."}`.
+- **Friction Point & Specification Gap:** The deployed MOSIP Collab cloud instance of `verify-service` only implements DCQL v2 parsing for `ldp_vc` (`type_values`) and `vc+sd-jwt` (`vct_values`). It has not yet integrated the OpenID4VP Draft 23+ ISO 18013-5 `doctype_values` metadata query parser. Concurrently, the legacy Presentation Exchange v1 endpoint (`/v1/verify/vp-request`) is disabled or returns HTTP 404 in the Collab cloud deployment.
+- **Interoperability Resolution:** The playground supports dual verification engines:
+  1. For `mso_mdoc` verification, the playground routes the presentation to **Local Inji Verify (Docker port 8095)** and the external reference **walt.id Verifier**, both of which implement ISO 18013-5 mDoc verification via Presentation Exchange (`presentationDefinition` with `format: { mso_mdoc: { alg: ["ES256"] } }`), successfully completing the 7/7 step verification with cryptographic verification of the MSO signature, digest elements, and device authentication.
+  2. For live Collab Inji Verify runs, the playground provides real-time in-app guidance advising developers of the upstream DCQL gap and directing them to test W3C VC 1.1, W3C VC 2.0, or SD-JWT VC on the live Collab verifier.
+- **Problem Statement Significance:** Fulfills Problem Statement Goal 1.b (*"Surface real interoperability gaps (format mismatches, proof-type incompatibilities, DID method gaps, QR size limits, etc.) that the core teams can act on"*) and Good-to-have Task #2 (*"Add mDoc/mDL (ISO/IEC 18013-5) as a third credential format"*), providing an actionable bug report for upstream MOSIP engineers (`mosip/inji-verify`).
+
 ---
 
 ## 4. Exportable Reports & Matrix Evaluation

@@ -20,6 +20,7 @@ export interface IssueSdJwtOptions {
   holderDid?: string
   validityDays?: number
   expired?: boolean
+  x5c?: string[]
 }
 
 export interface Disclosure {
@@ -101,11 +102,13 @@ export async function issueSdJwtCredential(opts: IssueSdJwtOptions): Promise<Iss
   }
 
   const alg = opts.issuerKey.alg === 'EdDSA' ? 'EdDSA' : 'ES256'
+  const certChain = opts.x5c || (opts.issuerKey as any).x5c
   const issuerJwt = await new jose.SignJWT(payload)
     .setProtectedHeader({
       alg,
       typ: 'vc+sd-jwt',
       kid: opts.issuerKey.verificationMethod || opts.issuerKey.did,
+      ...(certChain ? { x5c: certChain } : {}),
     })
     .sign(opts.issuerKey.privateKey)
 

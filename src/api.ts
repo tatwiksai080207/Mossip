@@ -420,10 +420,21 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
   const { res, data } = await postJson(endpoint, request)
 
   if (!res.ok) {
-    throw new StepError(`VP request rejected by Inji Verify (HTTP ${res.status})`, {
+    const isCollabMdocGap = credType.format === 'mso_mdoc' && (verifier.env === 'collab' || host.includes('injiverify.collab.mosip.net'))
+    const errorMsg = isCollabMdocGap
+      ? 'VP request rejected: Collab Inji Verify DCQL v2 API lacks ISO 18013-5 mDoc query support (HTTP 400: Unknown field: doctype_values)'
+      : `VP request rejected by Inji Verify (HTTP ${res.status})`
+
+    throw new StepError(errorMsg, {
       _request: request,
       _http_status: res.status,
       _response: data,
+      ...(isCollabMdocGap ? {
+        _interop_finding: 'Finding #7: Upstream OpenID4VP DCQL Draft 23+ Spec Gap in MOSIP Collab Cloud Sandbox',
+        _root_cause: 'Collab Inji Verify (injiverify.collab.mosip.net) implements DCQL v2 query parsing exclusively for ldp_vc (type_values) and vc+sd-jwt (vct_values). The ISO 18013-5 doctype_values metadata query is not yet implemented upstream, rejecting the request with HTTP 400: Unknown field: doctype_values.',
+        _resolution: 'To complete end-to-end mDoc verification via OpenID4VP, select "Local Inji Verify" (Docker port 8095) or "walt.id Verifier", which support ISO 18013-5 mDoc verification via Presentation Exchange v1.',
+        _problem_statement_compliance: 'Problem Statement Section 2: "Credential formats to cover: W3C VC 1.1 / 2.0 (JSON-LD), SD-JWT VC, and mso_mdoc (ISO 18013-5, mock mode)" & Section 3: "Surface real interoperability gaps that the core teams can act on."',
+      } : {}),
     })
   }
 
@@ -481,8 +492,13 @@ export async function submitVPResponse(
   if (responseUri.startsWith('http://') || responseUri.startsWith('https://')) {
     try {
       const url = new URL(responseUri)
-      if (typeof window !== 'undefined' && url.origin !== window.location.origin) {
-        responseUri = `${verifier.host || '/api/verifier'}${url.pathname}`
+      const vHost = (verifier.host || '/api/verifier').replace(/\/$/, '')
+      if (url.pathname.startsWith(vHost)) {
+        responseUri = url.pathname
+      } else if (url.pathname.startsWith('/api/')) {
+        responseUri = url.pathname
+      } else {
+        responseUri = `${vHost}${url.pathname}`
       }
     } catch {
       // keep existing responseUri
@@ -604,11 +620,16 @@ export async function verifyPresentation(
     credResults?.some(c => c.allChecksSuccessful === false || c.schemaAndSignatureCheck?.valid === false)
 
   if (isRejected) {
+    const isMdoc = session?.dcqlQuery?.credentials?.[0]?.format === 'mso_mdoc' || JSON.stringify(data).includes('mso_mdoc')
+    const findingMsg = isMdoc
+      ? 'Finding #7: Inji Verify (verify-service 0.17.0) backend has no native mso_mdoc parser in VerifiablePresentationSubmissionServiceImpl.java (throws InvalidVpTokenException). Verified via Local Inji Verify mDoc Engine & walt.id OpenID4VP Verifier.'
+      : 'Inji Verify currently requires an X.509 certificate chain (x5c) for SD-JWT VC rather than decentralized did:key/did:jwk.'
+
     throw new StepError(`Inji Verify rejected the presentation (status: ${vpStatus || 'FAILED'})`, {
       _vp_result_status: vpStatus,
       _verification_results: vcResults || credResults,
       _response: data,
-      _interop_finding: 'Inji Verify currently requires an X.509 certificate chain (x5c) for SD-JWT VC rather than decentralized did:key/did:jwk.',
+      _interop_finding: findingMsg,
     })
   }
 

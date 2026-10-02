@@ -275,13 +275,6 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
     }
   },
 
-  resumeOAuthFlow: (code: string) => {
-    const resolver = (get() as any)._resumeResolver
-    if (resolver) {
-      resolver(code)
-    }
-  },
-
   continueVerification: async () => {
     const { steps, selectedCredType, selectedVerifier, tamperMode } = get()
     if (!selectedCredType || !selectedVerifier) return

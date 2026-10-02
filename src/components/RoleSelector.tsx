@@ -66,6 +66,8 @@ export default function RoleSelector() {
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono uppercase ${
                       ct.format === 'vc+sd-jwt'
                         ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                        : ct.format === 'mso_mdoc'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                         : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                     }`}>
                       {ct.format}
@@ -124,6 +126,12 @@ export default function RoleSelector() {
                 <EnvBadge env={verifier.env} />
               </div>
               <div className="text-xs text-slate-500 mt-0.5">{verifier.description}</div>
+              {selectedCredType?.format === 'mso_mdoc' && verifier.env === 'collab' && (
+                <div className="text-[11px] text-amber-400/90 mt-1 flex items-center gap-1 font-sans">
+                  <span>⚠️</span>
+                  <span>Collab DCQL only supports ldp_vc & sd-jwt. Use Local Verify or walt.id for mDoc.</span>
+                </div>
+              )}
             </button>
           ))}
         </div>

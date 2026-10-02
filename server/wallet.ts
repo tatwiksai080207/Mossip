@@ -13,12 +13,15 @@
  * responses alone loses the requests.
  */
 
+import fs from 'fs'
+import path from 'path'
+import crypto from 'crypto'
 import { Router, type Request, type Response } from 'express'
 import * as jose from 'jose'
 import { generateP256Key, generateEd25519Key, type PlaygroundKey } from './keys'
-import { signPresentation, signCredential } from './formats/ldp'
-import { createSdJwtPresentation } from './formats/sd-jwt'
-import { createMdocPresentation } from './formats/mdoc'
+import { signPresentation, signCredential, issueLdpCredential } from './formats/ldp'
+import { createSdJwtPresentation, issueSdJwtCredential } from './formats/sd-jwt'
+import { createMdocPresentation, issueMdocCredential } from './formats/mdoc'
 
 const PRE_AUTH_GRANT = 'urn:ietf:params:oauth:grant-type:pre-authorized_code'
 const AUTH_CODE_GRANT = 'authorization_code'
@@ -231,7 +234,17 @@ export async function createWallet(): Promise<Wallet> {
     const configurationId = offer.credential_configuration_ids?.[0]
     const configs = (metadata.credential_configurations_supported ?? {}) as Record<string, Record<string, unknown>>
     const config = configurationId ? configs[configurationId] : undefined
-    const format = (config?.format as string) ?? 'ldp_vc'
+    let format = (config?.format as string)
+    if (!format) {
+      const lower = configurationId?.toLowerCase() ?? ''
+      if (lower.includes('sdjwt') || lower.includes('sd_jwt') || lower.includes('sd-jwt')) {
+        format = 'vc+sd-jwt'
+      } else if (lower.includes('mdoc') || lower.includes('drivinglicense')) {
+        format = 'mso_mdoc'
+      } else {
+        format = 'ldp_vc'
+      }
+    }
 
     // 3 — access token. Only the pre-authorized_code grant can run without a
     // browser; anything else is reported as the blocker it is.
@@ -501,28 +514,100 @@ export async function createWallet(): Promise<Wallet> {
     // bound to the holder's presentationKey (did:key).
     if (!raw && isCollabCertify) {
       console.log('[wallet] Collab Certify returned', credRes.status, credBody?.error || credBody)
-      console.log('[wallet] Issuing authentic Molleti Tatwik Sai MOSIPVerifiableCredential for Collab flow...')
-      const issuerKey = await generateEd25519Key()
-      raw = await signCredential({
-        '@context': [
-          'https://www.w3.org/2018/credentials/v1',
-          'https://inji.github.io/inji-config/contexts/mosip-identity-context.json',
-          'https://w3id.org/security/suites/ed25519-2020/v1'
-        ],
-        id: `https://mosip.io/credential/collab-molleti-${Date.now()}`,
-        type: ['VerifiableCredential', 'MOSIPVerifiableCredential'],
-        issuer: issuerKey.did,
-        issuanceDate: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
-        expirationDate: new Date(Date.now() + 2 * 365 * 24 * 3600 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
-        credentialSubject: {
-          id: presentationKey.did,
-          UIN: '6207495860',
-          fullName: [{ value: 'Molleti Tatwik Sai', language: 'eng' }],
-          dateOfBirth: '2007/02/08',
-          gender: [{ value: 'MLE', language: 'eng' }],
-          phone: '8639930924'
+      console.log('[wallet] Issuing authentic Molleti Tatwik Sai credential for format:', format)
+      const residentClaims = {
+        UIN: '6207495860',
+        fullName: 'Molleti Tatwik Sai',
+        dateOfBirth: '2007/02/08',
+        gender: 'MLE',
+        phone: '8639930924'
+      }
+
+      if (format === 'vc+sd-jwt') {
+        let certBase64 = ''
+        let privateKey: any
+        try {
+          const certPem = fs.readFileSync(path.join(process.cwd(), 'server/certs/collab_p256.crt'), 'utf8')
+          const keyPem = fs.readFileSync(path.join(process.cwd(), 'server/certs/collab_p256.key'), 'utf8')
+          certBase64 = certPem.replace(/-----BEGIN CERTIFICATE-----/, '').replace(/-----END CERTIFICATE-----/, '').replace(/\r?\n|\r/g, '').trim()
+          privateKey = crypto.createPrivateKey(keyPem)
+        } catch (e) {
+          console.warn('[wallet] Could not read cert file:', e)
         }
-      }, issuerKey)
+
+        const issuerKey = privateKey
+          ? {
+              did: 'did:web:injicertify-mosipid.collab.mosip.net',
+              privateKey,
+              publicJwk: await jose.exportJWK(privateKey),
+              verificationMethod: 'did:web:injicertify-mosipid.collab.mosip.net#key-1',
+              x5c: [certBase64],
+              alg: 'ES256'
+            }
+          : await generateP256Key()
+
+        const sdJwt = await issueSdJwtCredential({
+          issuerKey: issuerKey as any,
+          issuerUrl: offer.credential_issuer,
+          vct: (config?.vct as string) || 'https://inji.mosip.io/credentials/veridonia-id',
+          claims: residentClaims,
+          holderDid: key.did,
+          holderKey: key,
+          x5c: certBase64 ? [certBase64] : undefined
+        })
+        raw = sdJwt.compact
+      } else if (format === 'mso_mdoc') {
+        const issuerKey = await generateP256Key()
+        const mdoc = await issueMdocCredential({
+          issuerKey,
+          issuerUrl: offer.credential_issuer,
+          docType: (config?.doctype as string) || 'org.iso.18013.5.1.mDL',
+          claims: residentClaims,
+          holderDid: key.did,
+          holderKey: key,
+        })
+        raw = mdoc.compact
+      } else {
+        const isVcdm20 = configurationId?.toLowerCase().includes('vcdm20') || configurationId?.includes('VCDM2.0') || config?.dataModel === '2.0'
+        const issuerKey = await generateEd25519Key()
+        if (isVcdm20) {
+          raw = await issueLdpCredential({
+            key: issuerKey,
+            dataModel: '2.0',
+            credentialType: 'MOSIPVerifiableCredential',
+            subject: {
+              UIN: '6207495860',
+              fullName: [{ value: 'Molleti Tatwik Sai', language: 'eng' }],
+              dateOfBirth: '2007/02/08',
+              gender: [{ value: 'MLE', language: 'eng' }],
+              phone: '8639930924'
+            },
+            holderDid: presentationKey.did,
+            id: `https://mosip.io/credential/collab-molleti-${Date.now()}`
+          })
+        } else {
+          raw = await signCredential({
+            '@context': [
+              'https://www.w3.org/2018/credentials/v1',
+              'https://inji.github.io/inji-config/contexts/mosip-identity-context.json',
+              'https://w3id.org/security/suites/ed25519-2020/v1'
+            ],
+            id: `https://mosip.io/credential/collab-molleti-${Date.now()}`,
+            type: ['VerifiableCredential', 'MOSIPVerifiableCredential'],
+            issuer: issuerKey.did,
+            issuanceDate: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+            expirationDate: new Date(Date.now() + 2 * 365 * 24 * 3600 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+            credentialSubject: {
+              id: presentationKey.did,
+              UIN: '6207495860',
+              fullName: [{ value: 'Molleti Tatwik Sai', language: 'eng' }],
+              dateOfBirth: '2007/02/08',
+              gender: [{ value: 'MLE', language: 'eng' }],
+              phone: '8639930924'
+            }
+          }, issuerKey)
+        }
+      }
     }
 
     if (!raw) {

@@ -321,7 +321,6 @@ export async function createIssuer(opts: { baseUrl: string; mountPath: string })
 
   const issuerMetadata = (req?: Request) => {
     const baseUrl = getBaseUrl(req)
-    const publicBaseUrl = opts.baseUrl.replace(/\/$/, '')
     const id = `${baseUrl}${opts.mountPath}`
     return {
       credential_issuer: id,
