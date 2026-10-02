@@ -7,6 +7,7 @@ import RunHistory from './components/RunHistory'
 import SequenceDiagram from './components/SequenceDiagram'
 import InjiVerifyPanel from './components/InjiVerifyPanel'
 import InteropMatrix from './components/InteropMatrix'
+import { InteractiveAuthModal } from './components/InteractiveAuthModal'
 import { useStore } from './store'
 import QRCode from 'react-qr-code'
 
@@ -380,6 +381,8 @@ function App() {
         <div className="mt-6">
           <InteropMatrix />
         </div>
+
+        <InteractiveAuthModal />
       </main>
     </div>
   )

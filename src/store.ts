@@ -150,6 +150,12 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
     }).catch(err => console.error('Failed to sync tamper mode:', err))
   },
   clearHistory: () => set({ history: [] }),
+  resumeOAuthFlow: (code: string) => {
+    const resolver = (get() as any)._resumeResolver
+    if (resolver) {
+      resolver(code)
+    }
+  },
 
   runFlow: async () => {
     const { selectedIssuer, selectedWallet, selectedVerifier, selectedCredType, tamperMode } = get()

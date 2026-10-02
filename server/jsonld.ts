@@ -18,6 +18,7 @@ const WELL_KNOWN = [
   'https://www.w3.org/2018/credentials/v1',
   'https://www.w3.org/ns/credentials/v2',
   'https://w3id.org/security/suites/ed25519-2020/v1',
+  'https://inji.github.io/inji-config/contexts/mosip-identity-context.json',
 ]
 
 async function fetchContext(url: string): Promise<unknown> {
@@ -119,8 +120,54 @@ function resolveDidKey(url: string): RemoteDocument {
   }
 }
 
+async function resolveDidWeb(url: string): Promise<RemoteDocument> {
+  const [did, fragment] = url.split('#')
+  const parts = did.slice('did:web:'.length).split(':')
+  const host = decodeURIComponent(parts[0])
+  const path = parts.slice(1).map(decodeURIComponent).join('/')
+  const httpsUrl = path.length > 0
+    ? `https://${host}/${path}/did.json`
+    : `https://${host}/.well-known/did.json`
+
+  let didDoc: any = cache.get(did)
+  if (!didDoc) {
+    const res = await fetch(httpsUrl, {
+      headers: { accept: 'application/ld+json, application/json' },
+    })
+    if (!res.ok) throw new Error(`did:web fetch failed for ${httpsUrl}: HTTP ${res.status}`)
+    didDoc = await res.json()
+    cache.set(did, didDoc)
+  }
+
+  if (fragment) {
+    const fullId = `${did}#${fragment}`
+    const vms = (didDoc.verificationMethod || []) as Array<Record<string, unknown>>
+    const vm = vms.find(v => v.id === fullId || v.id === fragment || (typeof v.id === 'string' && v.id.endsWith(`#${fragment}`)))
+    if (vm) {
+      return {
+        contextUrl: null,
+        documentUrl: url,
+        document: {
+          '@context': didDoc['@context'] || [
+            'https://www.w3.org/ns/did/v1',
+            'https://w3id.org/security/suites/ed25519-2020/v1'
+          ],
+          ...vm,
+        },
+      }
+    }
+  }
+
+  return {
+    contextUrl: null,
+    documentUrl: url,
+    document: didDoc,
+  }
+}
+
 export async function documentLoader(url: string): Promise<RemoteDocument> {
   if (url.startsWith('did:key:')) return resolveDidKey(url)
+  if (url.startsWith('did:web:')) return resolveDidWeb(url)
 
   if (cache.has(url)) {
     return { contextUrl: null, documentUrl: url, document: cache.get(url) }

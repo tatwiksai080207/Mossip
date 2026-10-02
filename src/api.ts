@@ -169,6 +169,38 @@ interface IssueFlowResponse {
   steps?: { step: string; status: string; data: Record<string, unknown> }[]
 }
 
+let currentCodeVerifier: string | null = null
+
+function generatePkceVerifier(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'
+  let result = ''
+  const randomValues = new Uint8Array(43)
+  if (typeof window !== 'undefined' && window.crypto) {
+    window.crypto.getRandomValues(randomValues)
+    for (let i = 0; i < randomValues.length; i++) {
+      result += chars[randomValues[i] % chars.length]
+    }
+  } else {
+    for (let i = 0; i < 43; i++) {
+      result += chars[Math.floor(Math.random() * chars.length)]
+    }
+  }
+  return result
+}
+
+async function computePkceChallenge(verifier: string): Promise<string> {
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
+    const encoder = new TextEncoder()
+    const data = encoder.encode(verifier)
+    const hash = await window.crypto.subtle.digest('SHA-256', data)
+    return btoa(String.fromCharCode(...new Uint8Array(hash)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+  }
+  return verifier
+}
+
 async function runIssueFlow(issuer: IssuerConfig, credType: CredentialType, authCode?: string): Promise<IssueFlowResponse> {
   // We need an offer to pass to the wallet. Since the store doesn't thread step outputs,
   // we rebuild the offer here using the same function step 2 uses.
@@ -181,6 +213,8 @@ async function runIssueFlow(issuer: IssuerConfig, credType: CredentialType, auth
     grants: payload.grants as Record<string, unknown>,
   }
 
+  const isCollab = issuer.id === 'certify-collab-interactive' || issuer.env === 'collab'
+
   if (!authCode) {
     const preAuth = offer.grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']
     const authCodeGrant = offer.grants['authorization_code']
@@ -189,44 +223,63 @@ async function runIssueFlow(issuer: IssuerConfig, credType: CredentialType, auth
       // Need manual intervention!
       const metadata = await fetchIssuerMetadata(issuer)
       const authServers = (metadata.payload as any).authorization_servers as string[] | undefined
-      if (authServers && authServers.length > 0) {
-        const authServerUrl = authServers[0]
+      const authServerUrl = (authServers && authServers.length > 0)
+        ? authServers[0]
+        : (isCollab ? 'https://esignet-mosipid.collab.mosip.net' : 'http://localhost:3001/api/oidc')
 
-        // Fetch the authorization server metadata to find the authorization endpoint
-        const asMetadataRes = await fetch(`${authServerUrl}/.well-known/openid-configuration`)
+      currentCodeVerifier = generatePkceVerifier()
+      const codeChallenge = await computePkceChallenge(currentCodeVerifier)
+
+      let authEndpoint = `${authServerUrl}/authorize`
+      try {
+        const asMetadataRes = await safeFetch(`${authServerUrl}/.well-known/openid-configuration`)
         if (asMetadataRes.ok) {
-          const asMetadata = await asMetadataRes.json()
-          const authEndpoint = asMetadata.authorization_endpoint
-
-          if (authEndpoint) {
-            const url = new URL(authEndpoint)
-            url.searchParams.set('client_id', issuer.clientId || 'mpartner-default-mimoto-mosipid-oidc')
-            url.searchParams.set('response_type', 'code')
-            url.searchParams.set('redirect_uri', 'http://localhost:3001/callback')
-            url.searchParams.set('scope', 'openid')
-
-            const err = new Error('OAuthPauseRequired') as any
-            err.oauthUrl = url.toString()
-            throw err
+          const asMetadata = await readBody(asMetadataRes) as Record<string, any>
+          if (asMetadata.authorization_endpoint) {
+            authEndpoint = asMetadata.authorization_endpoint
           }
-        } else {
-          // Fallback if discovery fails
-          const url = new URL(`${authServerUrl}/authorize`)
-          url.searchParams.set('client_id', issuer.clientId || 'mpartner-default-mimoto-mosipid-oidc')
-          url.searchParams.set('response_type', 'code')
-          url.searchParams.set('redirect_uri', 'http://localhost:3001/callback')
-          url.searchParams.set('scope', 'openid')
-
-          const err = new Error('OAuthPauseRequired') as any
-          err.oauthUrl = url.toString()
-          throw err
         }
+      } catch {
+        // Fallback to /authorize
       }
+
+      const redirectUri = isCollab
+        ? 'https://injiweb.collab.mosip.net/redirect'
+        : 'http://localhost:3001/callback'
+
+      const scope = 'openid'
+
+      const clientId = issuer.clientId || (isCollab ? 'mpartner-default-mimoto-mosipid-oidc' : 'mock_client_id')
+
+      const url = new URL(authEndpoint)
+      url.searchParams.set('client_id', clientId)
+      url.searchParams.set('response_type', 'code')
+      url.searchParams.set('redirect_uri', redirectUri)
+      url.searchParams.set('scope', scope)
+      url.searchParams.set('code_challenge', codeChallenge)
+      url.searchParams.set('code_challenge_method', 'S256')
+      url.searchParams.set('state', `state-${Date.now()}`)
+
+      const err = new Error('OAuthPauseRequired') as any
+      err.oauthUrl = url.toString()
+      throw err
     }
   }
 
-  const clientId = issuer.clientId || 'mpartner-default-mimoto-mosipid-oidc'
-  const { data, res } = await postJson('/api/wallet/accept-offer', { offer, authCode, clientId })
+  const clientId = issuer.clientId || (isCollab ? 'mpartner-default-mimoto-mosipid-oidc' : 'mock_client_id')
+  const redirectUri = isCollab ? 'https://injiweb.collab.mosip.net/redirect' : 'http://localhost:3001/callback'
+  const codeVerifier = currentCodeVerifier || undefined
+  if (authCode) {
+    currentCodeVerifier = null
+  }
+
+  const { data, res } = await postJson('/api/wallet/accept-offer', {
+    offer,
+    authCode,
+    clientId,
+    codeVerifier,
+    redirectUri,
+  })
   const result = data as IssueFlowResponse
   if (!result.httpStatus) result.httpStatus = res.status
   return result

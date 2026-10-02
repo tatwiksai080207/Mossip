@@ -241,6 +241,25 @@ export const issuers: IssuerConfig[] = [
       },
     ],
   },
+  {
+    id: 'certify-collab-interactive',
+    name: 'Inji Certify (Collab Interactive - Veridonia National ID)',
+    description: 'Live Collab Inji Certify with interactive eSignet OTP authentication for Molleti Tatwik Sai (UIN: 6207495860)',
+    host: COLLAB('mosipid'),
+    clientId: 'mpartner-default-mimoto-mosipid-oidc',
+    env: 'collab',
+    credentialTypes: [
+      {
+        id: 'collab-mosipid-vcdm11',
+        name: 'Veridonia National ID (W3C JSON-LD)',
+        format: 'ldp_vc',
+        proofTypes: ['Ed25519Signature2020'],
+        credentialTypeName: 'MOSIPVerifiableCredential',
+        vcTypes: ['VerifiableCredential', 'MOSIPVerifiableCredential'],
+        dataModel: '1.1',
+      },
+    ],
+  },
 ]
 
 export const wallets: WalletConfig[] = [
@@ -261,6 +280,12 @@ export const wallets: WalletConfig[] = [
     name: 'Inji Wallet (Mobile)',
     description: 'React Native wallet, cross-device via QR',
     env: 'local',
+  },
+  {
+    id: 'inji-web-collab-interactive',
+    name: 'Inji Web (Collab Interactive OTP)',
+    description: 'Interactive Collab Inji Web Wallet with live eSignet OTP challenge and Mimoto token exchange',
+    env: 'collab',
   },
 ]
 
@@ -285,5 +310,12 @@ export const verifiers: VerifierConfig[] = [
     description: 'External reference verifier (OpenID4VP) — supports W3C VCs & SD-JWT VCs with did:key resolution',
     env: 'external',
     host: '/api/external/waltid/verifier',
+  },
+  {
+    id: 'inji-verify-collab-live',
+    name: 'Inji Verify (Collab Live Engine)',
+    description: 'Official Collab Inji Verify engine (injiverify.collab.mosip.net) with did:web Ed25519 validation',
+    env: 'collab',
+    host: '/api/verifier',
   },
 ]
