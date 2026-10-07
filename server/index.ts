@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import crypto from 'crypto'
+import fs from 'fs'
 import pg from 'pg'
 import * as jose from 'jose'
 import path from 'path'
@@ -19,34 +20,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = Number(process.env.PORT || 3001)
 
-// Override when a tunnel is fronting the BFF, so credential offers and QR codes
-// carry a URL a phone can actually reach.
-let activeTunnelUrl = process.env.PUBLIC_BASE_URL || 'http://localhost:3001'
-
-export function getPublicBaseUrl(req?: express.Request): string {
-  if (req) {
-    const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http'
-    const host = (req.headers['x-forwarded-host'] as string) || req.headers.host
-    const isInternal = !host ||
-      host.includes('localhost') ||
-      host.includes('127.0.0.1') ||
-      host.includes('host.docker.internal') ||
-      host.includes('inji-playground') ||
-      host.includes('verify-service') ||
-      host.includes('certify') ||
-      host.includes('mimoto') ||
-      host.endsWith(':3001');
-    if (!isInternal) {
-      activeTunnelUrl = `${proto}://${host}`
-      return activeTunnelUrl
-    }
-    if (host) {
-      return `${proto}://${host}`
-    }
-  }
-  if (activeTunnelUrl) return activeTunnelUrl.replace(/\/$/, '')
-  return `http://localhost:${PORT}`
-}
+import { getPublicBaseUrl, getActiveTunnelUrl, setTunnelUrl } from './tunnel'
+export { getPublicBaseUrl }
 
 const PUBLIC_BASE_URL = getPublicBaseUrl()
 const ISSUER_MOUNT = '/api/playground-issuer'
@@ -108,19 +83,20 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     endpoints: ENDPOINTS,
     playgroundIssuer: `${base}${ISSUER_MOUNT}`,
-    tunnelUrl: activeTunnelUrl,
+    tunnelUrl: getActiveTunnelUrl(),
   })
 })
 
 app.get('/api/tunnel', (_req, res) => {
-  res.json({ tunnelUrl: activeTunnelUrl })
+  res.json({ tunnelUrl: getActiveTunnelUrl() })
 })
 
 app.post('/api/tunnel', (req, res) => {
   if (req.body?.tunnelUrl) {
-    activeTunnelUrl = req.body.tunnelUrl.replace(/\/$/, '')
+    const url = setTunnelUrl(req.body.tunnelUrl)
+    console.log('[tunnel] Updated activeTunnelUrl to:', url)
   }
-  res.json({ tunnelUrl: activeTunnelUrl })
+  res.json({ tunnelUrl: getActiveTunnelUrl() })
 })
 
 let activeTamperMode: 'none' | 'signature' | 'expired' = 'none'
@@ -1143,8 +1119,10 @@ function rewriteLocalCertifyMetadata(body: Record<string, unknown>, req?: expres
     result.authorization_servers = (result.authorization_servers as string[]).map(
       (url: string) =>
         url.replace(COLLAB_ESIGNET_PATTERN, playgroundOidcUri)
+          .replace(/^http:\/\/[^/]+\/api\/oidc/, playgroundOidcUri)
           .replace('http://inji-playground:3001/api/oidc', playgroundOidcUri)
           .replace('http://localhost:3001/api/oidc', playgroundOidcUri)
+          .replace('http://host.docker.internal:3001/api/oidc', playgroundOidcUri)
     )
   }
 
@@ -1407,15 +1385,28 @@ app.get('/api/mock-verifier/status', (_req, res) => {
   res.json({ status: 'pending' })
 })
 
-// ── Serve React Frontend ────────────────────────────────────────────────────
-// In production (e.g. inside Docker), the BFF serves the compiled React app
-const distPath = path.join(__dirname, '../dist')
-app.use(express.static(distPath))
-
-app.get('/*splat', (_req, res) => {
-  // If we get here and the file exists, send it (fallback for react-router)
-  res.sendFile(path.join(distPath, 'index.html'))
-})
+// ── Frontend Routing ────────────────────────────────────────────────────────
+// In development, the live React UI with hot-reload runs exclusively on Vite (port 3000).
+// Port 3001 is the backend API server. If accessed in a browser, redirect to port 3000.
+if (process.env.SERVE_STATIC === 'true') {
+  const distPath = path.join(__dirname, '../dist')
+  app.use(express.static(distPath))
+  app.get('/*splat', (_req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'))
+  })
+} else {
+  app.get('/', (_req, res) => {
+    const accept = _req.headers.accept || ''
+    if (accept.includes('text/html')) {
+      return res.redirect('http://localhost:3000')
+    }
+    res.json({
+      service: 'Inji Playground BFF Server',
+      status: 'running',
+      ui: 'http://localhost:3000',
+    })
+  })
+}
 
 app.listen(PORT, () => {
   console.log(`[bff] Playground BFF running on http://localhost:${PORT}`)

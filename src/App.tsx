@@ -14,7 +14,7 @@ import QRCode from 'react-qr-code'
 function App() {
   const {
     selectedIssuer, selectedWallet, selectedVerifier, selectedCredType,
-    steps, isRunning, runFlow, resumeOAuthFlow, continueVerification, checkVerificationResult,
+    steps, isRunning, runFlow, stopFlow, resumeOAuthFlow, continueVerification, checkVerificationResult,
     tamperMode, setTamperMode,
   } = useStore()
 
@@ -25,7 +25,7 @@ function App() {
     fetch('/api/tunnel')
       .then(r => r.json())
       .then(d => {
-        if (d?.tunnelUrl) setTunnelUrl(d.tunnelUrl)
+        if (d?.tunnelUrl) setTunnelUrl(String(d.tunnelUrl).trim())
       })
       .catch(() => { })
   }, [])
@@ -158,16 +158,30 @@ function App() {
               </select>
             </div>
 
-            <button
-              disabled={!canRun}
-              onClick={runFlow}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${canRun
-                  ? 'bg-blue-600 text-white hover:bg-blue-500'
-                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                }`}
-            >
-              {isRunning ? 'Running...' : 'Run Test'}
-            </button>
+            {isRunning ? (
+              <button
+                type="button"
+                onClick={stopFlow}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-red-600 hover:bg-red-500 text-white flex items-center gap-2 transition-colors shadow-sm cursor-pointer"
+                title="Stop the current test"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="5" y="5" width="14" height="14" rx="2" />
+                </svg>
+                <span>Stop Test</span>
+              </button>
+            ) : (
+              <button
+                disabled={!canRun}
+                onClick={runFlow}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${canRun
+                    ? 'bg-blue-600 text-white hover:bg-blue-500 cursor-pointer'
+                    : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  }`}
+              >
+                Run Test
+              </button>
+            )}
           </div>
         </div>
 

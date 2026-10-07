@@ -26,6 +26,7 @@ interface PlaygroundStore {
   runTamperMode: 'none' | 'signature' | 'expired'
   selectedStepId: FlowStepInfo['id'] | null
   networkEvents: NetworkEvent[]
+  _resumeResolver?: ((code: string) => void) | null
 
   selectIssuer: (issuer: IssuerConfig) => void
   selectWallet: (wallet: WalletConfig) => void
@@ -34,7 +35,9 @@ interface PlaygroundStore {
   setTamperMode: (mode: 'none' | 'signature' | 'expired') => void
   selectStep: (id: FlowStepInfo['id'] | null) => void
   runFlow: () => Promise<void>
+  stopFlow: () => void
   resumeOAuthFlow: (code: string) => void
+  cancelOAuthFlow: () => void
   clearHistory: () => void
   continueVerification: () => Promise<void>
   checkVerificationResult: () => Promise<void>
@@ -156,10 +159,39 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       resolver(code)
     }
   },
+  stopFlow: () => {
+    const { isRunning, _resumeResolver } = get() as any
+    if (!isRunning) return
+
+    api.abortPendingRequests()
+
+    if (_resumeResolver) {
+      _resumeResolver('')
+    }
+
+    set({
+      isRunning: false,
+      pausedStep: null,
+      oauthUrl: null,
+      _resumeResolver: null,
+      steps: get().steps.map(s =>
+        s.status === 'running'
+          ? { ...s, status: 'error', payload: { _cancelled: true, _note: 'Test stopped by user' }, source: 'live' }
+          : s
+      ),
+    })
+  },
+  cancelOAuthFlow: () => {
+    const { stopFlow } = get()
+    stopFlow()
+  },
 
   runFlow: async () => {
     const { selectedIssuer, selectedWallet, selectedVerifier, selectedCredType, tamperMode } = get()
     if (!selectedIssuer || !selectedWallet || !selectedVerifier || !selectedCredType) return
+
+    api.resetAbortController()
+    api.resetVpSession()
 
     fetch('/api/tamper', {
       method: 'POST',
@@ -168,7 +200,6 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
     }).catch(err => console.error('Failed to sync tamper mode on runFlow:', err))
 
     set({ isRunning: true, steps: [], pausedStep: null, oauthUrl: null, networkEvents: [], selectedStepId: null, runTamperMode: tamperMode })
-    api.resetVpSession()
 
     const initial: FlowStepInfo[] = FLOW_STEPS.map(s => ({
       ...s, status: 'pending' as StepStatus,
@@ -189,6 +220,8 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
     let manualWait = false;
 
     for (let i = 0; i < FLOW_STEPS.length; i++) {
+      if (!get().isRunning) return
+
       const stepId = FLOW_STEPS[i].id
 
       // mark as running
@@ -198,6 +231,8 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
 
       try {
         const result = await stepActions[stepId]()
+        if (!get().isRunning) return
+
         set({ steps: get().steps.map((s, idx) =>
           idx === i ? { ...s, status: 'done', payload: result.payload, source: result.source } : s
         )})
@@ -212,6 +247,8 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
           break;
         }
       } catch (err: unknown) {
+        if (!get().isRunning) return
+
         const errObj = err as { stepPayload?: Record<string, unknown>; message?: string; oauthUrl?: string }
         
         if (errObj.message === 'OAuthPauseRequired' && errObj.oauthUrl) {
@@ -229,10 +266,24 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
 
           set({ pausedStep: null, oauthUrl: null, _resumeResolver: null } as Partial<PlaygroundStore>)
           
+          if (!code || !get().isRunning) {
+            set({
+              isRunning: false,
+              steps: get().steps.map((s, idx) =>
+                idx === i
+                  ? { ...s, status: 'error', payload: { _cancelled: true, _note: 'Test stopped by user' }, source: 'live' }
+                  : s
+              ),
+            })
+            return
+          }
+
           // Retry the step (assuming the API orchestrator will pick up the code or state)
           // We pass the code to the exchangeToken step. We need to modify stepActions for token-exchange
           if (stepId === 'token-exchange') {
             const result = await api.exchangeToken(get().selectedIssuer!, get().selectedCredType!, code)
+            if (!get().isRunning) return
+
             set({ steps: get().steps.map((s, idx) =>
               idx === i ? { ...s, status: 'done', payload: result.payload, source: result.source } : s
             )})
@@ -251,7 +302,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       }
     }
 
-    if (!manualWait) {
+    if (!manualWait && get().isRunning) {
       // save to history
       const finalSteps = get().steps
       const evaluation = evaluateTestRun(finalSteps, get().runTamperMode)
@@ -296,12 +347,14 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
 
     try {
       const result = await api.createVPRequest(selectedCredType, selectedVerifier)
+      if (!get().isRunning) return
       set({ steps: get().steps.map((s, idx) => {
         if (idx === vpRequestIdx) return { ...s, status: 'done', payload: result.payload, source: result.source }
         if (idx > vpRequestIdx) return { ...s, status: 'pending', payload: { _note: 'Manual mode: waiting for user to verify.' } }
         return s
       })})
     } catch (err: unknown) {
+      if (!get().isRunning) return
       const errObj = err as { stepPayload?: Record<string, unknown>; message?: string }
       const payload = errObj.stepPayload
         ? { _error: errObj.message, ...errObj.stepPayload }
@@ -330,6 +383,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
 
     try {
       const result = await api.verifyPresentation(selectedVerifier)
+      if (!get().isRunning) return
       const isManual = get().selectedWallet?.id === 'inji-web-manual' || get().selectedWallet?.id === 'inji-mobile'
       set({ steps: get().steps.map((s, idx) => {
         if (idx === verificationIdx) return { ...s, status: 'done', payload: result.payload, source: result.source }
@@ -339,6 +393,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
         return s
       })})
     } catch (err: unknown) {
+      if (!get().isRunning) return
       const errObj = err as { stepPayload?: Record<string, unknown>; message?: string }
       const payload = errObj.stepPayload
         ? { _error: errObj.message, ...errObj.stepPayload }

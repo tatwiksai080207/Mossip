@@ -26,13 +26,38 @@ export class StepError extends Error {
 
 const TIMEOUT_MS = 20000
 
+let currentAbortController: AbortController | null = null
+
+export function abortPendingRequests() {
+  if (currentAbortController) {
+    currentAbortController.abort()
+    currentAbortController = null
+  }
+}
+
+export function resetAbortController() {
+  if (currentAbortController) {
+    currentAbortController.abort()
+  }
+  currentAbortController = new AbortController()
+}
+
 async function safeFetch(url: string, options?: RequestInit): Promise<Response> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  const timeoutController = new AbortController()
+  const timer = setTimeout(() => timeoutController.abort(), TIMEOUT_MS)
+
+  const abortListener = () => timeoutController.abort()
+  if (currentAbortController) {
+    currentAbortController.signal.addEventListener('abort', abortListener, { once: true })
+  }
+
   try {
-    return await fetch(url, { ...options, signal: controller.signal })
+    return await fetch(url, { ...options, signal: timeoutController.signal })
   } finally {
     clearTimeout(timer)
+    if (currentAbortController) {
+      currentAbortController.signal.removeEventListener('abort', abortListener)
+    }
   }
 }
 
@@ -150,6 +175,11 @@ export async function createCredentialOffer(
         JSON.stringify({
           credential_issuer: metadata.credential_issuer,
           credential_configuration_ids: [configId],
+          grants: {
+            authorization_code: {
+              authorization_server: (metadata.authorization_servers as string[] | undefined)?.[0],
+            },
+          },
         }),
       )}`,
     },

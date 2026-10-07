@@ -23,31 +23,16 @@ initKeys().catch(console.error)
 // (inside Docker) can resolve it to fetch the JWKS for token validation.
 const DOCKER_ISSUER_URI = 'http://host.docker.internal:3001/api/oidc'
 
-function getIssuerUri(req: any): string {
-  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http'
-  const host = req.headers['x-forwarded-host'] || req.headers.host
-  if (host && !host.includes('localhost') && !host.includes('127.0.0.1') && !host.includes('host.docker.internal') && !host.includes('inji-playground')) {
-    return `${proto}://${host}/api/oidc`
-  }
-  if (host) {
-    return `${proto}://${host}/api/oidc`
-  }
-  const tunnel = process.env.PUBLIC_BASE_URL
-  if (tunnel) return `${tunnel.replace(/\/$/, '')}/api/oidc`
-  return `${proto}://${host || 'localhost:3001'}/api/oidc`
-}
+import { getPublicBaseUrl } from './tunnel'
 
 const discoveryHandler = (req: any, res: any) => {
-  const issuer = getIssuerUri(req)
-  const tunnel = process.env.PUBLIC_BASE_URL
-  const authBase = (tunnel && !tunnel.includes('host.docker.internal') && !tunnel.includes('inji-playground'))
-    ? tunnel.replace(/\/$/, '')
-    : 'http://localhost:3001'
+  const publicBase = getPublicBaseUrl(req)
+  const oidcBase = `${publicBase}/api/oidc`
   res.json({
-    issuer,
-    authorization_endpoint: `${authBase}/api/oidc/authorize`,
-    token_endpoint: `${issuer}/token`,
-    jwks_uri: `${issuer}/jwks`,
+    issuer: oidcBase,
+    authorization_endpoint: `${oidcBase}/authorize`,
+    token_endpoint: `${oidcBase}/token`,
+    jwks_uri: `${oidcBase}/jwks`,
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'urn:ietf:params:oauth:grant-type:pre-authorized_code'],
     subject_types_supported: ['public'],
@@ -116,12 +101,23 @@ oidcRouter.get('/protocol/openid-connect/auth', (req, res) => {
 // Handle the mock login submission
 oidcRouter.post('/authorize/submit', (req, res) => {
   const { redirect_uri, state } = req.body
+  if (!redirect_uri) {
+    return res.status(400).send('Missing redirect_uri')
+  }
   // Generate a fake auth code
   const code = 'mock_auth_code_' + Math.random().toString(36).substring(7)
-  const url = new URL(redirect_uri)
-  url.searchParams.set('code', code)
-  if (state) url.searchParams.set('state', state)
-  res.redirect(url.toString())
+  try {
+    const url = new URL(redirect_uri)
+    url.searchParams.set('code', code)
+    if (state) url.searchParams.set('state', state)
+    res.redirect(url.toString())
+  } catch (err) {
+    console.error('[oidc] failed to redirect to redirect_uri:', redirect_uri, err)
+    // Fallback if URL parsing failed (e.g. non-standard custom scheme)
+    const sep = redirect_uri.includes('?') ? '&' : '?'
+    const fallbackUrl = `${redirect_uri}${sep}code=${encodeURIComponent(code)}${state ? `&state=${encodeURIComponent(state)}` : ''}`
+    res.redirect(fallbackUrl)
+  }
 })
 
 // Token Endpoint

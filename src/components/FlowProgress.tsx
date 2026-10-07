@@ -22,7 +22,7 @@ function statusColor(status: StepStatus) {
 
 
 export default function FlowProgress() {
-  const { steps, isRunning, pausedStep, oauthUrl, selectedStepId, selectStep, runTamperMode } = useStore()
+  const { steps, isRunning, pausedStep, oauthUrl, selectedStepId, selectStep, runTamperMode, stopFlow } = useStore()
   const [expandedStep, setExpandedStep] = useState<string | null>(null)
 
   useEffect(() => {
@@ -44,14 +44,26 @@ export default function FlowProgress() {
           <h3 className="text-sm font-medium text-slate-300">Flow Progress</h3>
           <p className="text-xs text-slate-500 mt-0.5">Click a step or diagram arrow to inspect its payload</p>
         </div>
-        {selectedStepId && (
-          <button
-            onClick={() => selectStep(null)}
-            className="text-[11px] text-slate-400 hover:text-slate-200 px-2 py-0.5 rounded bg-slate-800 border border-slate-700 transition-colors"
-          >
-            Clear selection
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {isRunning && (
+            <button
+              onClick={stopFlow}
+              className="text-xs font-medium px-2.5 py-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Stop running test"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+              <span>Stop Test</span>
+            </button>
+          )}
+          {selectedStepId && (
+            <button
+              onClick={() => selectStep(null)}
+              className="text-[11px] text-slate-400 hover:text-slate-200 px-2 py-0.5 rounded bg-slate-800 border border-slate-700 transition-colors"
+            >
+              Clear selection
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="divide-y divide-slate-800/50">
@@ -87,18 +99,42 @@ export default function FlowProgress() {
                   {step.label}
                 </span>
               {step.status === 'running' && pausedStep !== step.id && (
-                <span className="text-xs text-blue-400 ml-auto">in progress</span>
+                <div className="flex items-center gap-2 ml-auto">
+                  <span className="text-xs text-blue-400">in progress</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      stopFlow()
+                    }}
+                    className="text-[11px] font-medium px-2 py-0.5 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors cursor-pointer"
+                    title="Stop this test"
+                  >
+                    Stop
+                  </button>
+                </div>
               )}
               {step.status === 'running' && pausedStep === step.id && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    if (oauthUrl) window.open(oauthUrl, 'eSignet Login', 'width=500,height=600')
-                  }}
-                  className="ml-auto text-xs font-medium px-2.5 py-1 rounded bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition-colors"
-                >
-                  Login via eSignet
-                </button>
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (oauthUrl) window.open(oauthUrl, 'eSignet Login', 'width=540,height=700')
+                    }}
+                    className="text-xs font-medium px-2.5 py-1 rounded bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition-colors cursor-pointer"
+                  >
+                    Login via eSignet
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      stopFlow()
+                    }}
+                    className="text-xs font-medium px-2 py-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors cursor-pointer"
+                    title="Stop this test"
+                  >
+                    Stop
+                  </button>
+                </div>
               )}
               {step.status === 'done' && (
                 <span className="flex items-center gap-2 ml-auto">

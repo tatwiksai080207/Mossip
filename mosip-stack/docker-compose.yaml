@@ -30,7 +30,7 @@ services:
       - enable_certify_artifactory=false
       - download_hsm_client=false
       - mosip_certify_domain_url=http://certify-nginx:80
-      - mosip_certify_identifier=http://host.docker.internal:3001/api/local-certify
+      - mosip_certify_identifier=${PUBLIC_BASE_URL:-https://populace-viscosity-suitable.ngrok-free.dev}/api/local-certify
       - mosip_certify_authorization_url=http://host.docker.internal:3001/api/oidc
     volumes:
       - ./config/certify-default.properties:/home/mosip/config/certify-default.properties
