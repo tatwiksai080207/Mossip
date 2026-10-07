@@ -5,6 +5,7 @@ import type express from 'express'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const tunnelFile = path.join(__dirname, '../scratch/tunnel.json')
+const rootTunnelFile = path.join(__dirname, '../.tunnel.json')
 
 let activeTunnelUrl = (process.env.PUBLIC_BASE_URL || '').trim()
 
@@ -13,11 +14,13 @@ export function getActiveTunnelUrl(): string {
     return activeTunnelUrl
   }
   try {
-    if (fs.existsSync(tunnelFile)) {
-      const raw = JSON.parse(fs.readFileSync(tunnelFile, 'utf-8'))
-      if (raw?.tunnelUrl) {
-        activeTunnelUrl = String(raw.tunnelUrl).trim()
-        return activeTunnelUrl
+    for (const f of [tunnelFile, rootTunnelFile]) {
+      if (fs.existsSync(f)) {
+        const raw = JSON.parse(fs.readFileSync(f, 'utf-8'))
+        if (raw?.tunnelUrl) {
+          activeTunnelUrl = String(raw.tunnelUrl).trim()
+          return activeTunnelUrl
+        }
       }
     }
   } catch { }
@@ -27,7 +30,9 @@ export function getActiveTunnelUrl(): string {
 export function setTunnelUrl(url: string): string {
   activeTunnelUrl = String(url).trim().replace(/\/$/, '')
   try {
+    fs.mkdirSync(path.dirname(tunnelFile), { recursive: true })
     fs.writeFileSync(tunnelFile, JSON.stringify({ tunnelUrl: activeTunnelUrl }), 'utf-8')
+    fs.writeFileSync(rootTunnelFile, JSON.stringify({ tunnelUrl: activeTunnelUrl }), 'utf-8')
   } catch { }
   return activeTunnelUrl
 }

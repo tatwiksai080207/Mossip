@@ -1,7 +1,6 @@
 import express from 'express'
 import cors from 'cors'
 import crypto from 'crypto'
-import fs from 'fs'
 import pg from 'pg'
 import * as jose from 'jose'
 import path from 'path'
@@ -40,8 +39,8 @@ const ENDPOINTS = {
   verifier: 'https://injiverify.collab.mosip.net',
   mimoto: 'https://api.collab.mosip.net/v1/mimoto',
   localCertify: process.env.LOCAL_CERTIFY_URL || 'http://127.0.0.1:8090/v1/certify',
-  localVerifier: process.env.LOCAL_VERIFIER_URL || 'http://localhost:8095',
-  localMimoto: process.env.LOCAL_MIMOTO_URL || 'http://localhost:8099/v1/mimoto',
+  localVerifier: process.env.LOCAL_VERIFIER_URL || 'http://127.0.0.1:8095',
+  localMimoto: process.env.LOCAL_MIMOTO_URL || 'http://127.0.0.1:8099/v1/mimoto',
 }
 
 // Inji Verify exposes a v2, DCQL-based API that the cloned repo predates.
@@ -231,6 +230,53 @@ export function applyTamperingToVpToken(vpTokenRaw: any, mode: 'none' | 'signatu
   return vpTokenRaw
 }
 
+function maybeRewriteAndSignVpRequestJwt(jwtStr: string): string {
+  if (typeof jwtStr !== 'string' || !jwtStr.includes('.')) return jwtStr
+  const parts = jwtStr.split('.')
+  if (parts.length !== 3) return jwtStr
+  try {
+    const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'))
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
+    const activeTunnel = getActiveTunnelUrl().replace(/\/$/, '')
+    let changed = false
+
+    if (payload.response_uri) {
+      if (activeTunnel && !activeTunnel.includes('localhost') && !activeTunnel.includes('127.0.0.1')) {
+        if (
+          payload.response_uri.includes('host.docker.internal') ||
+          payload.response_uri.includes('localhost') ||
+          payload.response_uri.includes('verify-service')
+        ) {
+          payload.response_uri = payload.response_uri.replace(/^https?:\/\/[^\/]+/, activeTunnel)
+          changed = true
+          console.log('[verifier-proxy] Rewrote JWT response_uri to:', payload.response_uri)
+        }
+      }
+    }
+
+    if (changed) {
+      const privKey = crypto.createPrivateKey({
+        key: {
+          kty: 'OKP',
+          crv: 'Ed25519',
+          d: 'BOLjKdGvTf_uNoSW8dW6ZIRaUZ0_wTzu-LS3Rlcl4VI',
+          x: 'YT6KJVovMxNYJ-gxCEa3C0lCy0BSWaPjp30_BWLOr_k'
+        },
+        format: 'jwk'
+      })
+      const newHeaderB64 = Buffer.from(JSON.stringify(header)).toString('base64url')
+      const newPayloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url')
+      const signingInput = Buffer.from(`${newHeaderB64}.${newPayloadB64}`)
+      const sig = crypto.sign(null, signingInput, privKey)
+      const sigB64 = sig.toString('base64url')
+      return `${newHeaderB64}.${newPayloadB64}.${sigB64}`
+    }
+  } catch (err) {
+    console.error('[verifier-proxy] Failed to rewrite and re-sign VP request JWT:', err)
+  }
+  return jwtStr
+}
+
 // Expose /v1/verify on the root path for OpenID4VP request_uri and vp-submission direct_post
 app.all('/v1/verify/*splat', async (req, res) => {
   try {
@@ -249,6 +295,25 @@ app.all('/v1/verify/*splat', async (req, res) => {
       ENDPOINTS.localVerifier, path, req.method,
       req.headers as Record<string, string>, body,
     )
+
+    // If fetching the signed authorization request JWT via GET /v1/verify/vp-request/:requestId
+    if (req.method === 'GET' && path.includes('/vp-request/') && typeof result.body === 'string' && result.body.includes('.')) {
+      const rewrittenJwt = maybeRewriteAndSignVpRequestJwt(result.body)
+      return res.status(result.status).type('application/oauth-authz-req+jwt').send(rewrittenJwt)
+    }
+
+    // If generating a VP request via POST /v1/verify/vp-request
+    if (req.method === 'POST' && path.includes('/vp-request') && typeof result.body === 'object' && result.body !== null) {
+      const respObj = { ...result.body } as any
+      const activeTunnel = getActiveTunnelUrl().replace(/\/$/, '')
+      if (activeTunnel && !activeTunnel.includes('localhost') && !activeTunnel.includes('127.0.0.1')) {
+        if (respObj.authorizationDetails?.responseUri) {
+          respObj.authorizationDetails.responseUri = respObj.authorizationDetails.responseUri.replace(/^https?:\/\/[^\/]+/, activeTunnel)
+        }
+      }
+      return res.status(result.status).json(respObj)
+    }
+
     if (path.includes('vp-submission/direct-post') && result.status >= 200 && result.status < 300) {
       console.log(`[verifier-proxy] Submission succeeded! Providing redirect_uri to Playground`)
       const respObj = (typeof result.body === 'object' && result.body !== null) ? { ...result.body } : {}
@@ -303,7 +368,8 @@ app.get('/v1/mimoto/allProperties', async (req, res) => {
     )
     if (result.body && typeof result.body === 'object' && (result.body as any).response) {
       const resp = (result.body as any).response;
-      resp.warningDomainName = activeTunnelUrl;
+      const activeTunnel = getActiveTunnelUrl().replace(/\/$/, '')
+      resp.warningDomainName = activeTunnel;
       resp.cacheTTLInMilliSeconds = '1';
       resp.openid4vpClientValidation = 'true';
       resp.disableCredentialOfferVcVerification = true;
@@ -325,6 +391,7 @@ app.get('/v1/mimoto/verifiers', async (req, res) => {
     )
     if (result.body && typeof result.body === 'object' && (result.body as any).response?.verifiers) {
       const verifiers = (result.body as any).response.verifiers
+      const activeTunnelUrl = getActiveTunnelUrl().replace(/\/$/, '')
       for (const v of verifiers) {
         if (v.client_id === 'localhost-verifier' || v.client_id?.includes('ngrok')) {
           v.jwks_uri = `${activeTunnelUrl}/api/verifier/jwks.json`
@@ -338,6 +405,8 @@ app.get('/v1/mimoto/verifiers', async (req, res) => {
           v.response_uris = [
             `${activeTunnelUrl}/v1/verify/v2/vp-submission/direct-post`,
             `${activeTunnelUrl}/v1/verify/vp-submission/direct-post`,
+            'http://host.docker.internal:3001/v1/verify/v2/vp-submission/direct-post',
+            'http://host.docker.internal:3001/v1/verify/vp-submission/direct-post',
             'http://inji-playground:3001/v1/verify/v2/vp-submission/direct-post',
             'http://inji-playground:3001/v1/verify/vp-submission/direct-post',
             'http://verify-service:8080/v1/verify/v2/vp-submission/direct-post',
@@ -347,14 +416,25 @@ app.get('/v1/mimoto/verifiers', async (req, res) => {
           ]
         }
       }
-      // Ensure Collab verifier is also in the list
-      const hasCollab = verifiers.some((v: any) => v.client_id === 'injiverify.collab.mosip.net/')
-      if (!hasCollab) {
+      // Ensure Collab verifier is also in the list with both client_id forms
+      const hasCollabHttps = verifiers.some((v: any) => v.client_id === 'https://injiverify.collab.mosip.net')
+      if (!hasCollabHttps) {
+        verifiers.push({
+          client_id: 'https://injiverify.collab.mosip.net',
+          redirect_uris: ['https://injiverify.collab.mosip.net/'],
+          response_uris: ['https://injiverify.collab.mosip.net/v1/verify/v2/vp-submission/direct-post'],
+          jwks_uri: 'https://injiverify.collab.mosip.net/v1/verify/jwks.json',
+          allow_unsigned_request: true,
+          spec_version: 'v2',
+        })
+      }
+      const hasCollabSlash = verifiers.some((v: any) => v.client_id === 'injiverify.collab.mosip.net/')
+      if (!hasCollabSlash) {
         verifiers.push({
           client_id: 'injiverify.collab.mosip.net/',
           redirect_uris: ['https://injiverify.collab.mosip.net/'],
           response_uris: ['https://injiverify.collab.mosip.net/v1/verify/v2/vp-submission/direct-post'],
-          jwks_uri: `${activeTunnelUrl}/api/verifier/jwks.json`,
+          jwks_uri: 'https://injiverify.collab.mosip.net/v1/verify/jwks.json',
           allow_unsigned_request: true,
           spec_version: 'v1',
         })
@@ -1027,13 +1107,24 @@ for (const { prefix, target, label } of PROXIES) {
       // Track local verifier mDoc sessions and results
       if (prefix === '/api/local-verifier') {
         if (sPath.includes('/vp-request') && req.method === 'POST') {
-          const isMdocReq = JSON.stringify(body).includes('mso_mdoc') || JSON.stringify(body).includes('org.iso.18013.5.1')
-          if (isMdocReq && typeof result.body === 'object' && result.body !== null) {
+          if (typeof result.body === 'object' && result.body !== null) {
             const resp = result.body as any
-            const sessionInfo = { transactionId: resp.transactionId, nonce: resp.authorizationDetails?.nonce }
-            if (resp.requestId) localMdocSessions.set(resp.requestId, sessionInfo)
-            if (resp.transactionId) localMdocSessions.set(resp.transactionId, sessionInfo)
+            const activeTunnel = getActiveTunnelUrl().replace(/\/$/, '')
+            if (activeTunnel && !activeTunnel.includes('localhost') && !activeTunnel.includes('127.0.0.1')) {
+              if (resp.authorizationDetails?.responseUri) {
+                resp.authorizationDetails.responseUri = resp.authorizationDetails.responseUri.replace(/^https?:\/\/[^\/]+/, activeTunnel)
+              }
+            }
+            const isMdocReq = JSON.stringify(body).includes('mso_mdoc') || JSON.stringify(body).includes('org.iso.18013.5.1')
+            if (isMdocReq) {
+              const sessionInfo = { transactionId: resp.transactionId, nonce: resp.authorizationDetails?.nonce }
+              if (resp.requestId) localMdocSessions.set(resp.requestId, sessionInfo)
+              if (resp.transactionId) localMdocSessions.set(resp.transactionId, sessionInfo)
+            }
           }
+        } else if (sPath.includes('/vp-request/') && req.method === 'GET' && typeof result.body === 'string' && result.body.includes('.')) {
+          const rewritten = maybeRewriteAndSignVpRequestJwt(result.body)
+          return res.status(result.status).type('application/oauth-authz-req+jwt').send(rewritten)
         } else if (sPath.includes('vp-submission/direct-post') && req.method === 'POST') {
           const isMdoc = String(body?.vp_token).includes('org.iso.18013.5.1') || String(body?.presentation_submission).includes('mso_mdoc')
           if (isMdoc) {

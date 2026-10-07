@@ -419,7 +419,7 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
             constraints: {
               fields: [
                 {
-                  path: credType.format === 'mso_mdoc' ? ["$.mdoc.doctype"] : (credType.format === 'vc+sd-jwt' ? ["$.vct"] : ["$.type"]),
+                  path: credType.format === 'mso_mdoc' ? ["$.mdoc.doctype"] : (credType.format === 'vc+sd-jwt' ? ["$.vct"] : ["$.type[*]", "$.type"]),
                   filter: {
                     type: "string",
                     pattern: credType.format === 'mso_mdoc'
@@ -439,7 +439,7 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
   } else {
     // Collab Inji Verify uses v2 DCQL
     request = {
-      clientId: 'injiverify.collab.mosip.net/',
+      clientId: 'https://injiverify.collab.mosip.net',
       transactionId,
       nonce,
       dcqlQuery,

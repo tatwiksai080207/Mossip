@@ -100,7 +100,7 @@ function App() {
       } else {
         // Collab verifier: use its public URL directly — fully reachable by the phone.
         requestUri = `https://injiverify.collab.mosip.net/v1/verify/v2/vp-request/${requestId}`
-        vpClientId = 'injiverify.collab.mosip.net/'
+        vpClientId = 'https://injiverify.collab.mosip.net'
       }
     }
   }
