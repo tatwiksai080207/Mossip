@@ -90,6 +90,7 @@ export interface VpSession {
   requestUri?: string
   expiresAt?: number
   dcqlQuery: DcqlQuery
+  clientId?: string
 }
 
 let currentVpSession: VpSession | null = null
@@ -484,6 +485,7 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
     requestUri: body.requestUri,
     expiresAt: body.expiresAt,
     dcqlQuery,
+    clientId: request.clientId,
   }
 
   return { payload: { _request: request, _response: body }, source: 'live' }
@@ -502,9 +504,14 @@ export async function submitVPResponse(
   }
 
   // 1. Ask the wallet to sign a Verifiable Presentation using the verifier's nonce.
+  const targetClientId = session.clientId || (
+    verifier.env === 'external' ? 'waltid-verifier' :
+    verifier.env === 'local' ? 'localhost-verifier' :
+    'https://injiverify.collab.mosip.net'
+  )
   const { res: presentRes, data: presentData } = await postJson('/api/wallet/present', {
     nonce: session.nonce,
-    clientId: 'injiverify.collab.mosip.net/'
+    clientId: targetClientId,
   })
   if (!presentRes.ok) {
     throw new StepError('Failed to sign Verifiable Presentation', {
