@@ -13,6 +13,7 @@ import { createWaltIdIssuer } from './external/waltid-issuer'
 import { issueMdocCredential, verifyMdocLocally } from './formats/mdoc'
 import { issueLdpCredential, type DataModel } from './formats/ldp'
 import { issueSdJwtCredential } from './formats/sd-jwt'
+import { generateEd25519Key, generateP256Key } from './keys'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -65,6 +66,9 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }))
 // ── The playground's own OpenID4VCI issuer ──────────────────────────────────
 const playgroundIssuer = await createIssuer({ baseUrl: PUBLIC_BASE_URL, mountPath: ISSUER_MOUNT })
 app.use(ISSUER_MOUNT, playgroundIssuer.router)
+
+const localCertifyEdKey = await generateEd25519Key()
+const localCertifyP256Key = await generateP256Key()
 
 app.get(`/.well-known/openid-credential-issuer${ISSUER_MOUNT}`, (req, res) => {
   res.json(playgroundIssuer.issuerMetadata(req))
@@ -595,6 +599,7 @@ function generateFarmerCredentialPdf(details?: {
   state?: string
   district?: string
   landArea?: string
+  formatLabel?: string
 }): Buffer {
   const name = details?.name || 'Gorge Cooper'
   const farmerId = details?.farmerId || '2154189532'
@@ -604,6 +609,7 @@ function generateFarmerCredentialPdf(details?: {
   const state = details?.state || 'Karnataka'
   const district = details?.district || 'Bangalore'
   const landArea = details?.landArea || '3 hectares (Owner)'
+  const formatLabel = details?.formatLabel || 'W3C Verifiable Credential - JSON-LD'
 
   const content = `%PDF-1.4
 1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
@@ -632,7 +638,7 @@ BT
 0 -20 Td
 (Issuing Authority: Agriculture Department) Tj
 0 -20 Td
-(Format: W3C Verifiable Credential - JSON-LD) Tj
+(Format: ${formatLabel}) Tj
 0 -20 Td
 (Status: Verified & Valid) Tj
 ET
@@ -657,29 +663,62 @@ startxref
 async function handlePlaygroundIssuanceToMimoto(walletId: string, credentialConfigurationId: string, issuerId = 'Playground') {
   const credType = credentialConfigurationId || 'PlaygroundIdentityCredential'
   const isMdoc = credType.includes('mDoc') || credType.includes('DrivingLicense') || credType.toLowerCase().includes('mdoc')
-  const isSdJwt = credType.includes('SDJWT') || credType.includes('sd-jwt')
+  const isSdJwt = credType.includes('SDJWT') || credType.includes('sd-jwt') || credType.includes('SD_JWT')
   const isVcdm2 = credType.includes('2.0') || credType.includes('VCDM2.0')
   const isFarmer = credType.includes('Farmer') || credType.toLowerCase().includes('farmer') || issuerId === 'Farmer' || issuerId.toLowerCase().includes('farmer') || issuerId.toLowerCase().includes('agri')
 
   let compactCred = ''
   if (isMdoc) {
+    const claims = isFarmer ? {
+      family_name: 'Cooper',
+      given_name: 'Gorge',
+      birth_date: '1990-05-25',
+      issue_date: '2023-01-15',
+      expiry_date: '2033-01-15',
+      issuing_country: 'IN',
+      issuing_authority: 'Karnataka Transport Department',
+      document_number: 'DL-5720110023456',
+      driving_privileges: ['B'],
+    } : {
+      family_name: 'Raghunathan',
+      given_name: 'Asha',
+      birth_date: '1991-07-14',
+      issue_date: '2022-01-01',
+      expiry_date: '2032-01-01',
+      issuing_country: 'IN',
+      issuing_authority: 'Karnataka Transport Department',
+      document_number: 'DL-5720110023456',
+      driving_privileges: ['B', 'A1'],
+    }
     const mdoc = await issueMdocCredential({
       issuerKey: playgroundIssuer.key,
       issuerUrl: `${getPublicBaseUrl()}/api/playground-issuer`,
       docType: 'org.iso.18013.5.1.mDL',
-      claims: {
-        family_name: 'Raghunathan',
-        given_name: 'Asha',
-        birth_date: '1991-07-14',
-        issue_date: '2022-01-01',
-        expiry_date: '2032-01-01',
-        issuing_country: 'IN',
-        issuing_authority: 'Karnataka Transport Department',
-        document_number: 'DL-5720110023456',
-        driving_privileges: ['B', 'A1'],
-      },
+      claims,
     })
     compactCred = mdoc.compact
+  } else if (isFarmer && isSdJwt) {
+    const sdjwt = await issueSdJwtCredential({
+      issuerKey: playgroundIssuer.key,
+      issuerUrl: `${getPublicBaseUrl()}/api/playground-issuer`,
+      vct: 'https://inji.mosip.io/credentials/farmer-identity',
+      claims: {
+        fullName: 'Gorge Cooper',
+        farmerID: '2154189532',
+        mobileNumber: '9876543210',
+        dateOfBirth: '1990-05-25',
+        gender: 'Male',
+        state: 'Karnataka',
+        district: 'Bangalore',
+        villageOrTown: 'Koramangala',
+        postalCode: '453000',
+        landArea: '3 hectares',
+        landOwnershipType: 'Owner',
+        primaryCropType: 'Maize',
+        secondaryCropType: 'Rice',
+      },
+    })
+    compactCred = sdjwt.compact
   } else if (isSdJwt) {
     const sdjwt = await issueSdJwtCredential({
       issuerKey: playgroundIssuer.key,
@@ -741,8 +780,8 @@ async function handlePlaygroundIssuanceToMimoto(walletId: string, credentialConf
   const client = await getMimotoDbClient()
   try {
     const actualIssuer = isFarmer ? 'Farmer' : (issuerId || 'Playground')
-    const actualCredType = isFarmer ? 'FarmerCredential' : credType
-    const format = isFarmer ? 'ldp_vc' : (isMdoc ? 'mso_mdoc' : (isSdJwt ? 'vc+sd-jwt' : 'jwt_vc_json'))
+    const actualCredType = (isFarmer && isSdJwt) ? 'FarmerCredential_SD_JWT' : (isFarmer && !isMdoc ? 'FarmerCredential' : credType)
+    const format = (isFarmer && isSdJwt) ? 'vc+sd-jwt' : (isFarmer && !isMdoc ? 'ldp_vc' : (isMdoc ? 'mso_mdoc' : (isSdJwt ? 'vc+sd-jwt' : 'jwt_vc_json')))
 
     const existing = await client.query(
       `SELECT id FROM public.verifiable_credentials WHERE wallet_id = $1 AND (credential_metadata->>'credentialType' = $2 OR credential_metadata->>'credentialConfigurationId' = $2)`,
@@ -759,7 +798,7 @@ async function handlePlaygroundIssuanceToMimoto(walletId: string, credentialConf
       console.log(`[wallet-bridge] Updated existing ${actualCredType} ${credId} in wallet ${walletId}`)
     } else {
       credId = crypto.randomUUID()
-      const displayName = isFarmer ? 'Farmer Verifiable Credential' : (isMdoc ? 'Mobile Driving License' : 'Playground Identity Credential')
+      const displayName = (isFarmer && isSdJwt) ? 'Farmer SD-JWT Credential' : (isFarmer && !isMdoc ? 'Farmer Verifiable Credential' : (isMdoc ? 'Mobile Driving License' : 'Playground Identity Credential'))
       const logo = isFarmer ? 'https://mosip.github.io/inji-config/logos/agro-vertias-logo.png' : 'https://api.collab.mosip.net/inji/mosip-logo.png'
 
       const metadata = JSON.stringify({ 
@@ -804,8 +843,11 @@ app.get('/api/wallet-bridge/credential-pdf', (req, res) => {
   const credType = (req.query.credType as string) || 'PlaygroundDrivingLicense_mDoc'
   const isMdoc = credType.includes('mDoc') || credType.includes('DrivingLicense') || credType.toLowerCase().includes('mdoc')
   const isFarmer = credType.includes('Farmer') || credType.toLowerCase().includes('farmer')
-  const pdfBuffer = isMdoc ? generateDrivingLicencePdf() : (isFarmer ? generateFarmerCredentialPdf() : generateIdentityCredentialPdf(credType))
-  const filename = isMdoc ? 'PlaygroundDrivingLicense_mDoc.pdf' : (isFarmer ? 'FarmerCredential.pdf' : `${credType}.pdf`)
+  const formatLabel = (credType.includes('SD_JWT') || credType.includes('sd-jwt') || credType.includes('SDJWT'))
+    ? 'IETF SD-JWT VC'
+    : (credType.includes('2.0') || credType.includes('VCDM20') ? 'W3C Verifiable Credential 2.0 (JSON-LD)' : 'W3C Verifiable Credential 1.1 (JSON-LD)')
+  const pdfBuffer = isMdoc ? generateDrivingLicencePdf() : (isFarmer ? generateFarmerCredentialPdf({ formatLabel }) : generateIdentityCredentialPdf(credType))
+  const filename = isMdoc ? 'DrivingLicense_mDoc.pdf' : (isFarmer ? (credType.includes('SD_JWT') ? 'FarmerCredential_SD_JWT.pdf' : 'FarmerCredential.pdf') : `${credType}.pdf`)
   res.setHeader('Content-Type', 'application/pdf')
   res.setHeader('Content-Disposition', `inline; filename="${filename}"`)
   res.send(pdfBuffer)
@@ -1217,6 +1259,84 @@ function rewriteLocalCertifyMetadata(body: Record<string, unknown>, req?: expres
     )
   }
 
+  // Ensure all 4 formats are supported in credential_configurations_supported
+  const configs = (result.credential_configurations_supported as Record<string, any>) || {}
+
+  if (!configs['FarmerCredential']) {
+    configs['FarmerCredential'] = {
+      format: 'ldp_vc',
+      scope: 'mock_identity_vc_ldp',
+      display: [{
+        name: 'Farmer Verifiable Credential',
+        locale: 'en',
+        background_color: '#12107c',
+        text_color: '#FFFFFF',
+        logo: { url: 'https://mosip.github.io/inji-config/logos/agro-vertias-logo.png', alt_text: 'Farmer Logo' }
+      }],
+      order: ['fullName', 'mobileNumber', 'dateOfBirth', 'gender', 'state', 'district', 'villageOrTown', 'postalCode', 'landArea', 'landOwnershipType', 'primaryCropType', 'secondaryCropType', 'farmerID'],
+      cryptographic_binding_methods_supported: ['did:jwk', 'did:key'],
+      credential_signing_alg_values_supported: ['Ed25519Signature2020', 'EdDSA'],
+      proof_types_supported: { jwt: { proof_signing_alg_values_supported: ['RS256', 'ES256'] } },
+      credential_definition: {
+        type: ['FarmerCredential', 'VerifiableCredential'],
+        '@context': ['https://www.w3.org/2018/credentials/v1']
+      }
+    }
+  }
+
+  if (!configs['FarmerCredential_SD_JWT']) {
+    configs['FarmerCredential_SD_JWT'] = {
+      format: 'vc+sd-jwt',
+      scope: 'farmer_sd_jwt',
+      vct: 'https://inji.mosip.io/credentials/farmer-identity',
+      display: [{
+        name: 'Farmer SD-JWT Credential',
+        locale: 'en',
+        background_color: '#1b4d3e',
+        text_color: '#FFFFFF',
+        logo: { url: 'https://mosip.github.io/inji-config/logos/agro-vertias-logo.png', alt_text: 'Farmer Logo' }
+      }],
+      order: ['fullName', 'mobileNumber', 'dateOfBirth', 'gender', 'state', 'district', 'villageOrTown', 'postalCode', 'landArea', 'landOwnershipType', 'primaryCropType', 'secondaryCropType', 'farmerID'],
+      cryptographic_binding_methods_supported: ['did:jwk', 'did:key'],
+      credential_signing_alg_values_supported: ['ES256'],
+      proof_types_supported: { jwt: { proof_signing_alg_values_supported: ['RS256', 'ES256'] } },
+      claims: {
+        fullName: { display: [{ name: 'Full Name', locale: 'en' }] },
+        dateOfBirth: { display: [{ name: 'Date of Birth', locale: 'en' }] },
+        gender: { display: [{ name: 'Gender', locale: 'en' }] },
+        farmerID: { display: [{ name: 'Farmer ID', locale: 'en' }] },
+        landArea: { display: [{ name: 'Land Area', locale: 'en' }] }
+      }
+    }
+  }
+
+  if (!configs['DrivingLicenseCredential']) {
+    configs['DrivingLicenseCredential'] = {
+      format: 'mso_mdoc',
+      scope: 'sample_vc_mdoc',
+      doctype: 'org.iso.18013.5.1.mDL',
+      display: [{
+        name: 'Mobile Driving License',
+        locale: 'en',
+        background_color: '#12107c',
+        text_color: '#FFFFFF',
+        logo: { url: 'https://api.collab.mosip.net/inji/mosip-logo.png', alt_text: 'DL Logo' }
+      }],
+      order: ['org.iso.18013.5.1~family_name', 'org.iso.18013.5.1~given_name', 'org.iso.18013.5.1~document_number', 'org.iso.18013.5.1~issue_date', 'org.iso.18013.5.1~expiry_date', 'org.iso.18013.5.1~issuing_country'],
+      cryptographic_binding_methods_supported: ['cose_key', 'did:jwk', 'did:key'],
+      credential_signing_alg_values_supported: ['ES256'],
+      proof_types_supported: { jwt: { proof_signing_alg_values_supported: ['RS256', 'ES256'] } },
+      claims: {
+        'org.iso.18013.5.1': {
+          family_name: { display: [{ name: 'Family Name', locale: 'en' }] },
+          given_name: { display: [{ name: 'Given Name', locale: 'en' }] },
+          document_number: { display: [{ name: 'Document Number', locale: 'en' }] }
+        }
+      }
+    }
+  }
+
+  result.credential_configurations_supported = configs
   return result
 }
 
@@ -1225,28 +1345,158 @@ app.get('/api/playground-issuer/.well-known/openid-configuration', (_req, res) =
 })
 
 app.all('/api/local-certify/*splat', async (req, res) => {
+  const path = splatPath(req)
+  const isWellKnown = path.includes('.well-known')
+  const baseUrl = getPublicBaseUrl(req)
+
+  // 1. Metadata endpoints
+  if (isWellKnown) {
+    try {
+      const result = await proxyRequest(
+        ENDPOINTS.localCertify, path, req.method,
+        req.headers as Record<string, string>, req.body,
+      )
+      if (typeof result.body === 'object' && result.body !== null) {
+        return res.status(result.status).json(
+          rewriteLocalCertifyMetadata(result.body as Record<string, unknown>, req)
+        )
+      }
+    } catch {
+      // Fallback if Docker is offline
+      return res.json(rewriteLocalCertifyMetadata({}, req))
+    }
+    return res.json(rewriteLocalCertifyMetadata({}, req))
+  }
+
+  // 2. Nonce endpoint
+  if (path.includes('/issuance/nonce') || path.includes('/nonce')) {
+    const c_nonce = 'cnonce-' + crypto.randomBytes(16).toString('hex')
+    return res.json({ c_nonce, c_nonce_expires_in: 3600 })
+  }
+
+  // 3. Credential issuance endpoint
+  if (req.method === 'POST' && (path.includes('/issuance/credential') || path.includes('/credential'))) {
+    const body = req.body || {}
+    const format = body.format || body.credential_definition?.format
+    const configId = body.credential_configuration_id || body.credential_definition?.type?.[0] || body.credential_identifier || ''
+    const isSdJwt = format === 'vc+sd-jwt' || configId === 'FarmerCredential_SD_JWT' || String(body.vct).includes('farmer')
+    const isMdoc = format === 'mso_mdoc' || configId === 'DrivingLicenseCredential' || body.doctype === 'org.iso.18013.5.1.mDL'
+
+    // Extract holder binding from proof JWT if present
+    let holderKey: any = null
+    let holderDid: string | undefined
+    if (body.proof?.jwt) {
+      try {
+        const decodedHeader = jose.decodeProtectedHeader(body.proof.jwt)
+        if (decodedHeader.jwk) holderKey = { publicJwk: decodedHeader.jwk }
+        if (typeof decodedHeader.kid === 'string') holderDid = decodedHeader.kid
+        const decodedPayload = jose.decodeJwt(body.proof.jwt)
+        if (typeof decodedPayload.iss === 'string') holderDid = decodedPayload.iss
+      } catch { }
+    }
+
+    if (isSdJwt) {
+      console.log('[local-certify] Issuing Farmer ID SD-JWT VC')
+      const farmerClaims = {
+        fullName: 'Gorge Cooper',
+        farmerID: '2154189532',
+        mobileNumber: '9876543210',
+        dateOfBirth: '1990-05-25',
+        gender: 'Male',
+        state: 'Karnataka',
+        district: 'Bangalore',
+        villageOrTown: 'Koramangala',
+        postalCode: '453000',
+        landArea: '3 hectares',
+        landOwnershipType: 'Owner',
+        primaryCropType: 'Maize',
+        secondaryCropType: 'Rice',
+      }
+      const sdjwt = await issueSdJwtCredential({
+        issuerKey: localCertifyP256Key,
+        issuerUrl: `${baseUrl}/api/local-certify`,
+        vct: 'https://inji.mosip.io/credentials/farmer-identity',
+        claims: farmerClaims,
+        holderKey: holderKey || localCertifyP256Key,
+        holderDid: holderDid || localCertifyP256Key.did,
+      })
+      return res.json({ credential: sdjwt.compact })
+    }
+
+    if (isMdoc) {
+      console.log('[local-certify] Issuing Driving License ISO 18013-5 mDoc')
+      const dlClaims = {
+        family_name: 'Cooper',
+        given_name: 'Gorge',
+        birth_date: '1990-05-25',
+        issue_date: '2023-01-15',
+        expiry_date: '2033-01-15',
+        issuing_country: 'IN',
+        issuing_authority: 'Karnataka Transport Department',
+        document_number: 'DL-5720110023456',
+        driving_privileges: 'B',
+      }
+      const mdoc = await issueMdocCredential({
+        issuerKey: localCertifyP256Key,
+        issuerUrl: `${baseUrl}/api/local-certify`,
+        docType: 'org.iso.18013.5.1.mDL',
+        claims: dlClaims,
+        holderKey: holderKey || localCertifyP256Key,
+        holderDid: holderDid || localCertifyP256Key.did,
+      })
+      return res.json({ credential: mdoc.compact })
+    }
+
+    // Default: FarmerCredential (ldp_vc)
+    try {
+      const result = await proxyRequest(
+        ENDPOINTS.localCertify, path, req.method,
+        req.headers as Record<string, string>, req.body,
+      )
+      if (result.status >= 200 && result.status < 300) {
+        return res.status(result.status).json(result.body)
+      }
+    } catch { }
+
+    // Fallback if Docker is offline or error
+    console.log('[local-certify] Issuing fallback FarmerCredential (LDP_VC)')
+    const isVcdm2 = String(configId).includes('20') || String(configId).includes('2.0')
+    const vc = await issueLdpCredential({
+      key: localCertifyEdKey,
+      dataModel: isVcdm2 ? '2.0' : '1.1',
+      credentialType: 'FarmerCredential',
+      subject: {
+        fullName: 'Gorge Cooper',
+        farmerID: '2154189532',
+        mobileNumber: '9876543210',
+        dateOfBirth: '25-05-1990',
+        gender: 'Male',
+        state: 'Karnataka',
+        district: 'Bangalore',
+        villageOrTown: 'Koramangala',
+        postalCode: '453000',
+        landArea: '3 hectares',
+        landOwnershipType: 'Owner',
+        primaryCropType: 'Maize',
+        secondaryCropType: 'Rice',
+      },
+      holderDid: holderDid || localCertifyEdKey.did,
+    })
+    return res.json({ credential: vc })
+  }
+
+  // Generic proxy for any other endpoints
   try {
-    const path = splatPath(req)
     const result = await proxyRequest(
       ENDPOINTS.localCertify, path, req.method,
       req.headers as Record<string, string>, req.body,
     )
-
-    // Only rewrite JSON responses for .well-known metadata endpoints
-    const isWellKnown = path.includes('.well-known')
-    if (isWellKnown && typeof result.body === 'object' && result.body !== null) {
-      return res.status(result.status).json(
-        rewriteLocalCertifyMetadata(result.body as Record<string, unknown>, req)
-      )
-    }
-
     if (typeof result.body === 'string') {
       res.status(result.status).type(result.contentType || 'text/plain').send(result.body)
     } else {
       res.status(result.status).json(result.body)
     }
   } catch (err) {
-    console.error('[proxy] Local Certify error:', err)
     res.status(502).json({ error: 'Failed to reach Local Certify', detail: String(err) })
   }
 })

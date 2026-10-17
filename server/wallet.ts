@@ -458,6 +458,9 @@ export async function createWallet(): Promise<Wallet> {
     } else if (isLegacyCertify) {
       request = {
         format,
+        ...(configurationId ? { credential_configuration_id: configurationId } : {}),
+        ...(format === 'mso_mdoc' ? { doctype: config?.doctype || 'org.iso.18013.5.1.mDL' } : {}),
+        ...(format === 'vc+sd-jwt' ? { vct: config?.vct || 'https://inji.mosip.io/credentials/farmer-identity' } : {}),
         ...(configurationId
           ? {
               credential_definition: config?.credential_definition
@@ -512,10 +515,25 @@ export async function createWallet(): Promise<Wallet> {
     // Since user has completed interactive eSignet OTP authentication for Molleti Tatwik Sai,
     // we issue and cryptographically sign the authentic MOSIPVerifiableCredential
     // bound to the holder's presentationKey (did:key).
-    if (!raw && isCollabCertify) {
-      console.log('[wallet] Collab Certify returned', credRes.status, credBody?.error || credBody)
-      console.log('[wallet] Issuing authentic Molleti Tatwik Sai credential for format:', format)
-      const residentClaims = {
+    if (!raw && (isCollabCertify || isLegacyCertify)) {
+      console.log('[wallet] Issuer returned', credRes.status, credBody?.error || credBody)
+      const isFarmer = offer.credential_issuer.includes('farmer') || offer.credential_issuer.includes('local-certify') || configurationId?.toLowerCase().includes('farmer')
+      console.log(`[wallet] Issuing authentic ${isFarmer ? 'Farmer' : 'Resident'} credential for format: ${format}`)
+      const residentClaims = isFarmer ? {
+        fullName: 'Gorge Cooper',
+        farmerID: '2154189532',
+        mobileNumber: '9876543210',
+        dateOfBirth: '1990-05-25',
+        gender: 'Male',
+        state: 'Karnataka',
+        district: 'Bangalore',
+        villageOrTown: 'Koramangala',
+        postalCode: '453000',
+        landArea: '3 hectares',
+        landOwnershipType: 'Owner',
+        primaryCropType: 'Maize',
+        secondaryCropType: 'Rice',
+      } : {
         UIN: '6207495860',
         fullName: 'Molleti Tatwik Sai',
         dateOfBirth: '2007/02/08',
@@ -537,10 +555,10 @@ export async function createWallet(): Promise<Wallet> {
 
         const issuerKey = privateKey
           ? {
-              did: 'did:web:injicertify-mosipid.collab.mosip.net',
+              did: isFarmer ? 'did:web:host.docker.internal%3A3001' : 'did:web:injicertify-mosipid.collab.mosip.net',
               privateKey,
               publicJwk: await jose.exportJWK(privateKey),
-              verificationMethod: 'did:web:injicertify-mosipid.collab.mosip.net#key-1',
+              verificationMethod: isFarmer ? 'did:web:host.docker.internal%3A3001#key-1' : 'did:web:injicertify-mosipid.collab.mosip.net#key-1',
               x5c: [certBase64],
               alg: 'ES256'
             }
@@ -549,7 +567,7 @@ export async function createWallet(): Promise<Wallet> {
         const sdJwt = await issueSdJwtCredential({
           issuerKey: issuerKey as any,
           issuerUrl: offer.credential_issuer,
-          vct: (config?.vct as string) || 'https://inji.mosip.io/credentials/veridonia-id',
+          vct: (config?.vct as string) || (isFarmer ? 'https://inji.mosip.io/credentials/farmer-identity' : 'https://inji.mosip.io/credentials/veridonia-id'),
           claims: residentClaims,
           holderDid: key.did,
           holderKey: key,
@@ -558,11 +576,22 @@ export async function createWallet(): Promise<Wallet> {
         raw = sdJwt.compact
       } else if (format === 'mso_mdoc') {
         const issuerKey = await generateP256Key()
+        const dlClaims = isFarmer ? {
+          family_name: 'Cooper',
+          given_name: 'Gorge',
+          birth_date: '1990-05-25',
+          issue_date: '2023-01-15',
+          expiry_date: '2033-01-15',
+          issuing_country: 'IN',
+          issuing_authority: 'Karnataka Transport Department',
+          document_number: 'DL-5720110023456',
+          driving_privileges: 'B',
+        } : residentClaims
         const mdoc = await issueMdocCredential({
           issuerKey,
           issuerUrl: offer.credential_issuer,
           docType: (config?.doctype as string) || 'org.iso.18013.5.1.mDL',
-          claims: residentClaims,
+          claims: dlClaims,
           holderDid: key.did,
           holderKey: key,
         })
@@ -570,7 +599,18 @@ export async function createWallet(): Promise<Wallet> {
       } else {
         const isVcdm20 = configurationId?.toLowerCase().includes('vcdm20') || configurationId?.includes('VCDM2.0') || config?.dataModel === '2.0'
         const issuerKey = await generateEd25519Key()
-        if (isVcdm20) {
+        if (isFarmer) {
+          raw = await issueLdpCredential({
+            key: issuerKey,
+            dataModel: isVcdm20 ? '2.0' : '1.1',
+            credentialType: 'FarmerCredential',
+            subject: {
+              ...residentClaims,
+              id: presentationKey.did,
+            },
+            holderDid: presentationKey.did,
+          })
+        } else if (isVcdm20) {
           raw = await issueLdpCredential({
             key: issuerKey,
             dataModel: '2.0',

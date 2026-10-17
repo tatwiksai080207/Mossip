@@ -147,6 +147,22 @@ export const issuers: IssuerConfig[] = [
         credentialTypeName: 'FarmerCredential',
         vcTypes: ['VerifiableCredential', 'FarmerCredential'],
         dataModel: '2.0',
+      },
+      {
+        id: 'farmer-sdjwt',
+        name: 'Farmer ID (SD-JWT VC)',
+        format: 'vc+sd-jwt',
+        proofTypes: ['ES256'],
+        credentialTypeName: 'FarmerCredential_SD_JWT',
+        vct: 'https://inji.mosip.io/credentials/farmer-identity',
+      },
+      {
+        id: 'local-mdoc',
+        name: 'Driving Licence (mDoc / mDL)',
+        format: 'mso_mdoc',
+        proofTypes: ['ES256'],
+        credentialTypeName: 'DrivingLicenseCredential',
+        doctype: 'org.iso.18013.5.1.mDL',
       }
     ],
   },
