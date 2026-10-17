@@ -1238,17 +1238,19 @@ function rewriteLocalCertifyMetadata(body: Record<string, unknown>, req?: expres
   const result = { ...body }
 
   // Rewrite all internal Docker references to the public-facing BFF proxy
-  if (typeof result.credential_issuer === 'string') {
-    result.credential_issuer = rewriteBase(result.credential_issuer)
-    result._internal_credential_issuer = result.credential_issuer
-  }
-  if (typeof result.credential_endpoint === 'string') {
-    result.credential_endpoint = rewritePath(result.credential_endpoint)
-  }
-  if (typeof result.nonce_endpoint === 'string') {
-    result.nonce_endpoint = rewritePath(result.nonce_endpoint)
-  }
-  if (Array.isArray(result.authorization_servers)) {
+  result.credential_issuer = (typeof result.credential_issuer === 'string')
+    ? rewriteBase(result.credential_issuer)
+    : localCertifyHost
+  result._internal_credential_issuer = result.credential_issuer
+  result.credential_endpoint = (typeof result.credential_endpoint === 'string')
+    ? rewritePath(result.credential_endpoint)
+    : `${localCertifyHost}/issuance/credential`
+  result.nonce_endpoint = (typeof result.nonce_endpoint === 'string')
+    ? rewritePath(result.nonce_endpoint)
+    : `${localCertifyHost}/issuance/nonce`
+  if (!result.authorization_servers || !Array.isArray(result.authorization_servers) || result.authorization_servers.length === 0) {
+    result.authorization_servers = [playgroundOidcUri]
+  } else {
     result.authorization_servers = (result.authorization_servers as string[]).map(
       (url: string) =>
         url.replace(COLLAB_ESIGNET_PATTERN, playgroundOidcUri)
