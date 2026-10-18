@@ -10,9 +10,9 @@ import { createWallet } from './wallet'
 import { oidcRouter } from './oidc'
 import { waltidVerifierRouter } from './external/waltid'
 import { createWaltIdIssuer } from './external/waltid-issuer'
-import { issueMdocCredential, verifyMdocLocally } from './formats/mdoc'
-import { issueLdpCredential, type DataModel } from './formats/ldp'
-import { issueSdJwtCredential } from './formats/sd-jwt'
+import { issueMdocCredential, verifyMdocLocally, createMdocPresentation } from './formats/mdoc'
+import { issueLdpCredential, signPresentation, type DataModel } from './formats/ldp'
+import { issueSdJwtCredential, createSdJwtPresentation } from './formats/sd-jwt'
 import { generateEd25519Key, generateP256Key } from './keys'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -66,6 +66,9 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }))
 // ── The playground's own OpenID4VCI issuer ──────────────────────────────────
 const playgroundIssuer = await createIssuer({ baseUrl: PUBLIC_BASE_URL, mountPath: ISSUER_MOUNT })
 app.use(ISSUER_MOUNT, playgroundIssuer.router)
+
+// ── The playground's holder wallet ──────────────────────────────────────────
+const playgroundWallet = await createWallet()
 
 const localCertifyEdKey = await generateEd25519Key()
 const localCertifyP256Key = await generateP256Key()
@@ -955,6 +958,386 @@ app.get('/v1/mimoto/wallets/:walletId/credentials/:credentialId', async (req, re
   next()
 })
 
+// ── In-memory presentation session tracker for Inji Web OpenID4VP presentations ──
+let lastPresentationSession: any = null
+const mimotoPresentationSessions = new Map<string, {
+  walletId: string
+  presentationId: string
+  authRequestUrl?: string
+  requestUri?: string
+  authPayload?: any
+  verifier?: any
+}>()
+
+// Intercept Mimoto presentation creation to track request_uri and presentationId
+app.post('/v1/mimoto/wallets/:walletId/presentations', async (req, res, next) => {
+  const { walletId } = req.params
+  const authUrl = req.body?.authorizationRequestUrl || ''
+  console.log(`[presentation-bridge] Intercepted POST /wallets/${walletId}/presentations:`, authUrl)
+
+  let requestUri = ''
+  let clientId = ''
+  try {
+    const qIdx = authUrl.indexOf('?')
+    if (qIdx !== -1) {
+      const qParams = new URLSearchParams(authUrl.slice(qIdx + 1))
+      requestUri = qParams.get('request_uri') || ''
+      clientId = qParams.get('client_id') || ''
+    }
+  } catch (e) {}
+
+  try {
+    const result = await proxyRequest(
+      localMimotoHost,
+      `/v1/mimoto/wallets/${walletId}/presentations`,
+      req.method,
+      req.headers as Record<string, string>,
+      req.body,
+    )
+
+    const setCookie = result.headers?.get('set-cookie')
+    if (setCookie) res.setHeader('set-cookie', setCookie)
+
+    const activeTunnel = getActiveTunnelUrl().replace(/\/$/, '')
+
+    if (result.status >= 200 && result.status < 300 && typeof result.body === 'object' && result.body !== null) {
+      const respObj = result.body as any
+      const presentationId = respObj.presentationId || respObj.response?.presentationId
+      if (presentationId) {
+        let authPayload: any = null
+        if (requestUri) {
+          try {
+            let fetchUri = requestUri
+            if (activeTunnel && !activeTunnel.includes('localhost') && !activeTunnel.includes('127.0.0.1')) {
+              fetchUri = fetchUri.replace(activeTunnel, 'http://127.0.0.1:3001')
+            }
+            fetchUri = fetchUri.replace(/host\.docker\.internal:3001|localhost:3001|inji-playground:3001/g, '127.0.0.1:3001')
+            const r = await fetch(fetchUri)
+            if (r.ok) {
+              const jwt = await r.text()
+              const parts = jwt.split('.')
+              if (parts.length >= 2) {
+                authPayload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
+              }
+            }
+          } catch (fetchErr) {
+            console.warn('[presentation-bridge] Could not fetch request_uri authPayload:', fetchErr)
+          }
+        }
+
+        const targetVerifier = respObj.verifier || respObj.response?.verifier || {}
+        let redir = targetVerifier.redirectUri || targetVerifier.redirect_uri || 'http://localhost:3000'
+        if (Array.isArray(redir)) redir = redir[0] || 'http://localhost:3000'
+        targetVerifier.redirectUri = String(redir)
+        targetVerifier.redirect_uri = String(redir)
+
+        if (!respObj.verifier) {
+          respObj.verifier = targetVerifier
+        } else {
+          respObj.verifier.redirectUri = String(redir)
+          respObj.verifier.redirect_uri = String(redir)
+        }
+
+        if (respObj.response) {
+          if (!respObj.response.verifier) respObj.response.verifier = targetVerifier
+          respObj.response.verifier.redirectUri = String(redir)
+          respObj.response.verifier.redirect_uri = String(redir)
+        }
+
+        const sessionData = {
+          walletId,
+          presentationId,
+          authRequestUrl: authUrl,
+          requestUri,
+          authPayload,
+          verifier: targetVerifier
+        }
+        mimotoPresentationSessions.set(presentationId, sessionData)
+        lastPresentationSession = sessionData
+        console.log(`[presentation-bridge] Stored session for presentationId=${presentationId}, state=${authPayload?.state}, nonce=${authPayload?.nonce}`)
+      }
+      return res.status(result.status).json(respObj)
+    }
+
+    console.warn(`[presentation-bridge] Mimoto returned ${result.status}, using bridge fallback`)
+    const fallbackId = crypto.randomUUID()
+    let authPayload: any = null
+    if (requestUri) {
+      try {
+        let fetchUri = requestUri
+        if (activeTunnel && !activeTunnel.includes('localhost') && !activeTunnel.includes('127.0.0.1')) {
+          fetchUri = fetchUri.replace(activeTunnel, 'http://127.0.0.1:3001')
+        }
+        fetchUri = fetchUri.replace(/host\.docker\.internal:3001|localhost:3001|inji-playground:3001/g, '127.0.0.1:3001')
+        const r = await fetch(fetchUri)
+        if (r.ok) {
+          const jwt = await r.text()
+          const parts = jwt.split('.')
+          if (parts.length >= 2) {
+            authPayload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
+          }
+        }
+      } catch (fetchErr) {
+        console.warn('[presentation-bridge] Fallback authPayload fetch error:', fetchErr)
+      }
+    }
+    const fallbackSession = {
+      walletId,
+      presentationId: fallbackId,
+      authRequestUrl: authUrl,
+      requestUri,
+      authPayload,
+      verifier: { name: clientId || 'localhost-verifier', trusted: true, redirectUri: 'http://localhost:3000', redirect_uri: 'http://localhost:3000' }
+    }
+    mimotoPresentationSessions.set(fallbackId, fallbackSession)
+    lastPresentationSession = fallbackSession
+    return res.status(200).json({
+      presentationId: fallbackId,
+      verifier: {
+        name: clientId || 'localhost-verifier',
+        trusted: true,
+        redirectUri: 'http://localhost:3000',
+        redirect_uri: 'http://localhost:3000'
+      }
+    })
+  } catch (err) {
+    console.error('[presentation-bridge] Error in POST /presentations:', err)
+    next()
+  }
+})
+
+// Return matching presentation credentials to Inji Web without AES/GCM decryption failure
+app.get('/v1/mimoto/wallets/:walletId/presentations/:presentationId/credentials', async (req, res) => {
+  const { walletId, presentationId } = req.params
+  console.log(`[presentation-bridge] Fetching presentation credentials for wallet=${walletId}, presId=${presentationId}`)
+  try {
+    const client = await getMimotoDbClient()
+    const dbRes = await client.query(
+      `SELECT id, credential, credential_metadata FROM public.verifiable_credentials WHERE wallet_id = $1`,
+      [walletId]
+    )
+    await client.end().catch(() => {})
+
+    const availableCredentials: any[] = []
+    for (const row of dbRes.rows) {
+      let meta = row.credential_metadata
+      if (typeof meta === 'string') {
+        try { meta = JSON.parse(meta) } catch (e) {}
+      }
+      const credType = meta?.credentialType || meta?.credentialConfigurationId || ''
+      const isFarmer = credType.includes('Farmer') || meta?.issuerId === 'Farmer'
+      const isMdoc = credType.includes('mDoc') || credType.includes('DrivingLicense') || credType.toLowerCase().includes('mdoc')
+      const isSdJwt = credType.includes('SD_JWT') || credType.includes('sd-jwt') || meta?.format === 'vc+sd-jwt'
+
+      const displayName = meta?.credentialTypeDisplayName || 
+        (isFarmer ? 'Farmer Verifiable Credential' : (isMdoc ? 'Mobile Driving License' : 'Playground Identity Credential'))
+      const logo = meta?.credentialTypeLogo || 
+        (isFarmer ? 'https://mosip.github.io/inji-config/logos/agro-vertias-logo.png' : 'https://api.collab.mosip.net/inji/mosip-logo.png')
+      const format = meta?.format || (isMdoc ? 'mso_mdoc' : (isSdJwt ? 'vc+sd-jwt' : 'ldp_vc'))
+
+      availableCredentials.push({
+        credentialId: row.id,
+        credentialTypeDisplayName: displayName,
+        credentialTypeLogo: logo,
+        format: format,
+        issuer: meta?.issuer || (isFarmer ? 'Farmer' : 'Playground')
+      })
+    }
+
+    console.log(`[presentation-bridge] Found ${availableCredentials.length} credentials for wallet ${walletId}:`, availableCredentials.map(c => c.credentialTypeDisplayName))
+
+    return res.status(200).json({
+      availableCredentials,
+      missingClaims: []
+    })
+  } catch (err) {
+    console.error('[presentation-bridge] Error fetching presentation credentials:', err)
+    return res.status(500).json({ error: 'Failed to fetch presentation credentials', detail: String(err) })
+  }
+})
+
+// Handle Inji Web presentation submission (PATCH /presentations/:presentationId)
+app.patch('/v1/mimoto/wallets/:walletId/presentations/:presentationId', async (req, res) => {
+  const { walletId, presentationId } = req.params
+  console.log(`[presentation-bridge] PATCH presentation ${presentationId} for wallet ${walletId}, body:`, JSON.stringify(req.body))
+
+  if (req.body?.error) {
+    console.log(`[presentation-bridge] Presentation rejected or error:`, req.body.error)
+    return res.status(200).json({ redirectUri: 'http://localhost:3000' })
+  }
+
+  const selectedCredentials: string[] = req.body?.selectedCredentials || []
+  if (selectedCredentials.length === 0) {
+    return res.status(400).json({ error: 'No credentials selected' })
+  }
+
+  try {
+    const client = await getMimotoDbClient()
+    const dbRes = await client.query(
+      `SELECT id, credential, credential_metadata FROM public.verifiable_credentials WHERE id = $1 AND wallet_id = $2`,
+      [selectedCredentials[0], walletId]
+    )
+
+    if (dbRes.rows.length === 0) {
+      await client.end().catch(() => {})
+      return res.status(404).json({ error: 'Selected credential not found in wallet' })
+    }
+
+    const row = dbRes.rows[0]
+    let meta = row.credential_metadata
+    if (typeof meta === 'string') {
+      try { meta = JSON.parse(meta) } catch (e) {}
+    }
+
+    let session = mimotoPresentationSessions.get(presentationId) || lastPresentationSession
+    let authPayload = session?.authPayload
+
+    const activeTunnel = getActiveTunnelUrl().replace(/\/$/, '')
+
+    if (!authPayload && session?.requestUri) {
+      try {
+        let fetchUri = session.requestUri
+        if (activeTunnel && !activeTunnel.includes('localhost') && !activeTunnel.includes('127.0.0.1')) {
+          fetchUri = fetchUri.replace(activeTunnel, 'http://127.0.0.1:3001')
+        }
+        fetchUri = fetchUri.replace(/host\.docker\.internal:3001|localhost:3001|inji-playground:3001/g, '127.0.0.1:3001')
+        const r = await fetch(fetchUri)
+        if (r.ok) {
+          const jwt = await r.text()
+          const parts = jwt.split('.')
+          if (parts.length >= 2) {
+            authPayload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
+          }
+        }
+      } catch (fetchErr) {
+        console.warn('[presentation-bridge] Error fetching requestUri authPayload in PATCH:', fetchErr)
+      }
+    }
+
+    const nonce = authPayload?.nonce || crypto.randomUUID()
+    const clientId = authPayload?.client_id || 'localhost-verifier'
+    let responseUri = authPayload?.response_uri || `${activeTunnel}/v1/verify/v2/vp-submission/direct-post`
+
+    const stateFromUri = (session?.requestUri || '').match(/vp-request\/([^?\/]+)/)?.[1]
+    const state = authPayload?.state || stateFromUri || ''
+
+    const format = meta?.format || 'ldp_vc'
+    let vpToken: any
+    let presFormat = 'ldp_vp'
+
+    if (format === 'mso_mdoc') {
+      presFormat = 'mso_mdoc'
+      vpToken = await createMdocPresentation({
+        credential: row.credential,
+        holderKey: playgroundWallet.key,
+        nonce: String(nonce),
+        audience: String(clientId)
+      })
+    } else if (format === 'vc+sd-jwt') {
+      presFormat = 'vc+sd-jwt'
+      vpToken = await createSdJwtPresentation({
+        credential: String(row.credential),
+        holderKey: playgroundIssuer.key,
+        nonce: String(nonce),
+        audience: String(clientId)
+      })
+    } else {
+      // ldp_vc
+      presFormat = 'ldp_vp'
+      let credObj = row.credential
+      if (typeof credObj === 'string') {
+        try { credObj = JSON.parse(credObj) } catch (e) {}
+      }
+      vpToken = await signPresentation({
+        credentials: [credObj],
+        holderKey: playgroundIssuer.key,
+        challenge: String(nonce),
+        domain: String(clientId)
+      })
+    }
+
+    const descriptorId = authPayload?.presentation_definition?.input_descriptors?.[0]?.id || 'credential_1'
+    const submission = {
+      id: `submission_${Date.now()}`,
+      definition_id: authPayload?.presentation_definition?.id || 'presentation_definition',
+      descriptor_map: [
+        {
+          id: descriptorId,
+          format: presFormat,
+          path: '$'
+        }
+      ]
+    }
+
+    // Submit to verifier with required state parameter
+    const params = new URLSearchParams()
+    params.set('vp_token', typeof vpToken === 'string' ? vpToken : JSON.stringify(vpToken))
+    params.set('presentation_submission', JSON.stringify(submission))
+    if (state) {
+      params.set('state', state)
+    }
+
+    // Route responseUri locally if pointing to local hostnames or active tunnel
+    let directPostTarget = responseUri
+    if (activeTunnel && !activeTunnel.includes('localhost') && !activeTunnel.includes('127.0.0.1')) {
+      directPostTarget = directPostTarget.replace(activeTunnel, 'http://127.0.0.1:3001')
+    }
+    directPostTarget = directPostTarget
+      .replace(/host\.docker\.internal:3001/g, '127.0.0.1:3001')
+      .replace(/localhost:3001/g, '127.0.0.1:3001')
+      .replace(/inji-playground:3001/g, '127.0.0.1:3001')
+
+    if (state && !directPostTarget.includes('state=')) {
+      directPostTarget += (directPostTarget.includes('?') ? '&' : '?') + 'state=' + encodeURIComponent(state)
+    }
+
+    console.log(`[presentation-bridge] Submitting direct-post to: ${directPostTarget}`)
+    const submitRes = await fetch(directPostTarget, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    })
+
+    const submitJson = await submitRes.json().catch(() => ({})) as any
+    console.log(`[presentation-bridge] Verifier response (${submitRes.status}):`, submitJson)
+
+    if (submitRes.status >= 400) {
+      console.error('[presentation-bridge] Direct post rejected by verifier:', submitRes.status, submitJson)
+      await client.end().catch(() => {})
+      return res.status(submitRes.status).json(submitJson)
+    }
+
+    // Record in verifiable_presentations table
+    await client.query(
+      `INSERT INTO public.verifiable_presentations (id, wallet_id, auth_request, presentation_data, verifier_id, status, requested_at, created_at, consent)
+       VALUES ($1, $2, $3, $4, $5, 'success', now(), now(), true)
+       ON CONFLICT (id) DO UPDATE SET status = 'success', presentation_data = $4`,
+      [
+        presentationId,
+        walletId,
+        JSON.stringify({ authorizationRequestUrl: session?.authRequestUrl || '' }),
+        JSON.stringify({ selectedCredentials }),
+        clientId
+      ]
+    ).catch(e => console.warn('[presentation-bridge] Error inserting into verifiable_presentations:', e))
+
+    await client.end().catch(() => {})
+
+    const finalRedirectUri = submitJson?.redirect_uri || submitJson?.redirectUri || 'http://localhost:3000'
+    return res.status(200).json({
+      redirectUri: finalRedirectUri,
+      redirect_uri: finalRedirectUri,
+      response: {
+        redirectUri: finalRedirectUri,
+        redirect_uri: finalRedirectUri
+      }
+    })
+  } catch (err) {
+    console.error('[presentation-bridge] Error processing PATCH /presentations:', err)
+    return res.status(500).json({ error: 'Failed to complete presentation', detail: String(err) })
+  }
+})
+
 app.all('/v1/mimoto/*splat', async (req, res) => {
   try {
     const path = '/v1/mimoto' + splatPath(req)
@@ -1707,7 +2090,6 @@ app.get(`/.well-known/oauth-authorization-server${WALTID_ISSUER_MOUNT}`, (_req, 
 // ── The playground's holder wallet ──────────────────────────────────────────
 // Points at any OpenID4VCI issuer, not just ours, so the same step log can be
 // compared across implementations.
-const playgroundWallet = await createWallet()
 app.use('/api/wallet', playgroundWallet.router)
 
 // ── Mock v1 Verifier for the React SDK ──────────────────────────────────────

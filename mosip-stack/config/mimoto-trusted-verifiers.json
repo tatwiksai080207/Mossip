@@ -14,13 +14,21 @@
       "client_id": "localhost-verifier",
       "redirect_uri": [
         "http://localhost:3000",
-        "http://localhost:3000/"
+        "http://localhost:3000/",
+        "http://host.docker.internal:3000",
+        "https://populace-viscosity-suitable.ngrok-free.dev",
+        "https://populace-viscosity-suitable.ngrok-free.dev/"
       ],
       "redirect_uris": [
         "http://localhost:3000",
-        "http://localhost:3000/"
+        "http://localhost:3000/",
+        "http://host.docker.internal:3000",
+        "https://populace-viscosity-suitable.ngrok-free.dev",
+        "https://populace-viscosity-suitable.ngrok-free.dev/"
       ],
       "response_uris": [
+        "https://populace-viscosity-suitable.ngrok-free.dev/v1/verify/v2/vp-submission/direct-post",
+        "https://populace-viscosity-suitable.ngrok-free.dev/v1/verify/vp-submission/direct-post",
         "http://host.docker.internal:3001/v1/verify/v2/vp-submission/direct-post",
         "http://host.docker.internal:3001/v1/verify/vp-submission/direct-post",
         "http://inji-playground:3001/v1/verify/v2/vp-submission/direct-post",

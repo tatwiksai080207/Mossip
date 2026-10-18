@@ -27,12 +27,43 @@ export function getActiveTunnelUrl(): string {
   return activeTunnelUrl || 'http://localhost:3001'
 }
 
+function syncMimotoTrustedVerifiers(url: string) {
+  if (!url || url.includes('localhost') || url.includes('127.0.0.1')) return
+  try {
+    const verifiersFile = path.join(__dirname, '../mosip-stack/config/mimoto-trusted-verifiers.json')
+    if (fs.existsSync(verifiersFile)) {
+      const data = JSON.parse(fs.readFileSync(verifiersFile, 'utf-8'))
+      const verifiers = data?.verifiers
+      if (Array.isArray(verifiers)) {
+        for (const v of verifiers) {
+          if (v.client_id === 'localhost-verifier') {
+            const resUris = new Set(v.response_uris || [])
+            resUris.add(`${url}/v1/verify/v2/vp-submission/direct-post`)
+            resUris.add(`${url}/v1/verify/vp-submission/direct-post`)
+            v.response_uris = Array.from(resUris)
+
+            const redUris = new Set(v.redirect_uris || [])
+            redUris.add(url)
+            redUris.add(`${url}/`)
+            v.redirect_uris = Array.from(redUris)
+            v.redirect_uri = v.redirect_uris
+          }
+        }
+        fs.writeFileSync(verifiersFile, JSON.stringify(data, null, 2), 'utf-8')
+      }
+    }
+  } catch (err) {
+    console.error('[tunnel] Error syncing mimoto-trusted-verifiers.json:', err)
+  }
+}
+
 export function setTunnelUrl(url: string): string {
   activeTunnelUrl = String(url).trim().replace(/\/$/, '')
   try {
     fs.mkdirSync(path.dirname(tunnelFile), { recursive: true })
     fs.writeFileSync(tunnelFile, JSON.stringify({ tunnelUrl: activeTunnelUrl }), 'utf-8')
     fs.writeFileSync(rootTunnelFile, JSON.stringify({ tunnelUrl: activeTunnelUrl }), 'utf-8')
+    syncMimotoTrustedVerifiers(activeTunnelUrl)
   } catch { }
   return activeTunnelUrl
 }

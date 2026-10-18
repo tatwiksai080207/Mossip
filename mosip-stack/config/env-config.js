@@ -17,6 +17,14 @@ window._env_ = {
     }
 
     function checkPostLoginRedirect() {
+      if (sessionStorage.getItem('openIdVpDone') === 'true') {
+        sessionStorage.removeItem('redirectTo');
+        sessionStorage.removeItem('openIdVpDone');
+        sessionStorage.removeItem('openIdVpLogin');
+        console.log('[InjiAuthGuard] openIdVpDone detected in checkPostLoginRedirect, redirecting to http://localhost:3000');
+        window.location.replace('http://localhost:3000');
+        return true;
+      }
       var redirectTo = sessionStorage.getItem('redirectTo');
       if (redirectTo) {
         try {
@@ -37,12 +45,28 @@ window._env_ = {
     var origPushState = history.pushState;
     history.pushState = function() {
       origPushState.apply(this, arguments);
+      if (sessionStorage.getItem('openIdVpDone') === 'true') {
+        sessionStorage.removeItem('redirectTo');
+        sessionStorage.removeItem('openIdVpDone');
+        sessionStorage.removeItem('openIdVpLogin');
+        console.log('[InjiAuthGuard] openIdVpDone detected in pushState, redirecting to http://localhost:3000');
+        window.location.replace('http://localhost:3000');
+        return;
+      }
       checkPostLoginRedirect();
       checkAutoSelect();
     };
     var origReplaceState = history.replaceState;
     history.replaceState = function() {
       origReplaceState.apply(this, arguments);
+      if (sessionStorage.getItem('openIdVpDone') === 'true') {
+        sessionStorage.removeItem('redirectTo');
+        sessionStorage.removeItem('openIdVpDone');
+        sessionStorage.removeItem('openIdVpLogin');
+        console.log('[InjiAuthGuard] openIdVpDone detected in replaceState, redirecting to http://localhost:3000');
+        window.location.replace('http://localhost:3000');
+        return;
+      }
       checkPostLoginRedirect();
       checkAutoSelect();
     };
@@ -102,10 +126,10 @@ window._env_ = {
       this._method = method;
       this._url = url;
       if (url && typeof url === 'string') {
-        if (method === 'POST' && url.indexOf('/wallets/') !== -1 && url.indexOf('/credentials') !== -1 && url.indexOf('/presentations') === -1) {
+        if ((method === 'POST' || method === 'PATCH') && url.indexOf('/wallets/') !== -1 && (url.indexOf('/credentials') !== -1 || url.indexOf('/presentations') !== -1)) {
           url = url.replace('http://localhost:3004', 'http://localhost:3001').replace('http://localhost:8099', 'http://localhost:3001');
           if (url.startsWith('/v1/mimoto')) url = 'http://localhost:3001' + url;
-        } else if (method === 'GET' && url.indexOf('/wallets/') !== -1 && url.indexOf('/credentials') !== -1 && url.indexOf('/presentations') === -1) {
+        } else if (method === 'GET' && url.indexOf('/wallets/') !== -1 && (url.indexOf('/credentials') !== -1 || url.indexOf('/presentations') !== -1)) {
           url = url.replace('http://localhost:3004', 'http://localhost:3001').replace('http://localhost:8099', 'http://localhost:3001');
           if (url.startsWith('/v1/mimoto')) url = 'http://localhost:3001' + url;
         } else if (url.indexOf('/v2/issuers') !== -1) {
@@ -137,6 +161,11 @@ window._env_ = {
           if (this._url && this._url.indexOf('/presentations') !== -1) {
             var status = this.status;
             var text = this.responseText || '';
+            if (status === 200) {
+              sessionStorage.setItem('openIdVpDone', 'true');
+              sessionStorage.removeItem('redirectTo');
+              sessionStorage.removeItem('openIdVpLogin');
+            }
             if (status === 401 || (status === 400 && (text.indexOf('wallet_locked') !== -1 || text.indexOf('Invalid Wallet ID') !== -1 || text.indexOf('unauthorized') !== -1))) {
               console.warn('[InjiAuthGuard] Detected locked wallet in presentations API response (' + status + '). Redirecting to unlock:', text);
               var curRoute = window.location.pathname + window.location.search;
@@ -195,7 +224,7 @@ window._env_ = {
       arguments[1] = config;
       
       if (url) {
-        if (url.indexOf('/wallets/') !== -1 && url.indexOf('/credentials') !== -1 && url.indexOf('/presentations') === -1) {
+        if (url.indexOf('/wallets/') !== -1 && (url.indexOf('/credentials') !== -1 || url.indexOf('/presentations') !== -1)) {
           url = url.replace('http://localhost:3004', 'http://localhost:3001').replace('http://localhost:8099', 'http://localhost:3001');
           if (url.startsWith('/v1/mimoto')) url = 'http://localhost:3001' + url;
         } else if (url.indexOf('/v2/issuers') !== -1) {
@@ -213,6 +242,11 @@ window._env_ = {
       const fetchPromise = origFetch.apply(this, arguments);
       const modifiedPromise = fetchPromise.then(res => {
           if (res.ok) {
+              if (url && url.indexOf('/presentations') !== -1) {
+                sessionStorage.setItem('openIdVpDone', 'true');
+                sessionStorage.removeItem('redirectTo');
+                sessionStorage.removeItem('openIdVpLogin');
+              }
               // We must replace internal docker hostnames with localhost in the JSON responses (like /v2/issuers)
               // so that Inji Web navigates to localhost for authorization endpoints instead of Docker's internal host.
               return res.clone().text().then(text => {
@@ -263,6 +297,14 @@ window._env_ = {
 
     // 1. OpenID4VP Presentation Guard
     if (path === '/user/authorize' || path === '/authorize') {
+      if (sessionStorage.getItem('openIdVpDone') === 'true') {
+        console.log('[InjiAuthGuard] Presentation already completed (openIdVpDone), redirecting immediately to http://localhost:3000');
+        sessionStorage.removeItem('openIdVpDone');
+        sessionStorage.removeItem('redirectTo');
+        sessionStorage.removeItem('openIdVpLogin');
+        window.location.replace('http://localhost:3000');
+        return;
+      }
       if (search && search.length > 1) {
         var targetVpRoute = '/user/authorize' + (search.startsWith('?') ? search : '?' + search);
         sessionStorage.setItem('redirectTo', JSON.stringify(targetVpRoute));
@@ -408,6 +450,37 @@ window._env_ = {
         }
       }
     }, 500);
+    // Auto-redirect and cleanup when presentation success modal is displayed
+    setInterval(function() {
+      var successCard = document.getElementById('card-share-success') || document.getElementById('icon-success');
+      if (successCard && !successCard._redirectAttached) {
+        successCard._redirectAttached = true;
+        sessionStorage.setItem('openIdVpDone', 'true');
+        sessionStorage.removeItem('redirectTo');
+        sessionStorage.removeItem('openIdVpLogin');
+
+        // Hook return button immediately
+        var returnBtn = successCard.querySelector('[data-testid="btn-return-to-verifier"]') ||
+                        successCard.querySelector('button');
+        if (returnBtn) {
+          returnBtn.addEventListener('click', function(ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            console.log('[InjiAuthGuard] User clicked Return to Verifier, navigating to http://localhost:3000');
+            window.location.href = 'http://localhost:3000';
+          }, true);
+        }
+
+        // Automatic countdown redirect fallback after 4 seconds (before React modal timer calls navigate('/'))
+        setTimeout(function() {
+          console.log('[InjiAuthGuard] Auto-redirecting to verifier playground (http://localhost:3000)...');
+          sessionStorage.setItem('openIdVpDone', 'true');
+          sessionStorage.removeItem('redirectTo');
+          sessionStorage.removeItem('openIdVpLogin');
+          window.location.href = 'http://localhost:3000';
+        }, 4000);
+      }
+    }, 200);
   } catch (e) {
     console.warn('[InjiAuthGuard] Error in guard:', e);
   }
