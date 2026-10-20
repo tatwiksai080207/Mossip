@@ -7,7 +7,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { createIssuer } from './issuer'
 import { createWallet } from './wallet'
-import { oidcRouter } from './oidc'
+import { oidcRouter, discoveryHandler } from './oidc'
 import { waltidVerifierRouter } from './external/waltid'
 import { createWaltIdIssuer } from './external/waltid-issuer'
 import { issueMdocCredential, verifyMdocLocally, createMdocPresentation } from './formats/mdoc'
@@ -18,6 +18,7 @@ import { generateEd25519Key, generateP256Key } from './keys'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const app = express()
+app.set('etag', false)
 const PORT = Number(process.env.PORT || 3001)
 
 import { getPublicBaseUrl, getActiveTunnelUrl, setTunnelUrl } from './tunnel'
@@ -55,7 +56,8 @@ export const VERIFY = {
   vcVerification: '/v1/verify/v2/vc-verification',
 }
 
-app.use((req, _res, next) => {
+app.use((req, res, next) => {
+  res.setHeader('ngrok-skip-browser-warning', 'true')
   console.log('[HTTP]', req.method, req.url)
   next()
 })
@@ -81,6 +83,10 @@ app.get(`/.well-known/oauth-authorization-server${ISSUER_MOUNT}`, (req, res) => 
 })
 
 app.use('/api/oidc', oidcRouter)
+app.get([
+  '/.well-known/oauth-authorization-server/api/oidc',
+  '/.well-known/openid-configuration/api/oidc',
+], discoveryHandler)
 app.use('/api/external/waltid/verifier', waltidVerifierRouter)
 
 app.get('/api/health', (req, res) => {
@@ -367,11 +373,14 @@ const localMimotoHost = (ENDPOINTS.localMimoto || 'http://localhost:8099').repla
 
 app.get('/v1/mimoto/allProperties', async (req, res) => {
   try {
+    const forwardHeaders = { ...req.headers }
+    delete forwardHeaders['if-none-match']
+    delete forwardHeaders['if-modified-since']
     const result = await proxyRequest(
       localMimotoHost,
       '/v1/mimoto/allProperties',
       'GET',
-      req.headers as Record<string, string>,
+      forwardHeaders as Record<string, string>,
     )
     if (result.body && typeof result.body === 'object' && (result.body as any).response) {
       const resp = (result.body as any).response;
@@ -381,7 +390,11 @@ app.get('/v1/mimoto/allProperties', async (req, res) => {
       resp.openid4vpClientValidation = 'true';
       resp.disableCredentialOfferVcVerification = true;
     }
-    res.status(result.status).json(result.body)
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
+    res.removeHeader('ETag')
+    res.status(result.status === 304 ? 200 : result.status).json(result.body)
   } catch (err) {
     console.error('[proxy] /v1/mimoto/allProperties error:', err)
     res.status(502).json({ error: 'Failed to reach local mimoto', detail: String(err) })
@@ -390,11 +403,14 @@ app.get('/v1/mimoto/allProperties', async (req, res) => {
 
 app.get('/v1/mimoto/verifiers', async (req, res) => {
   try {
+    const forwardHeaders = { ...req.headers }
+    delete forwardHeaders['if-none-match']
+    delete forwardHeaders['if-modified-since']
     const result = await proxyRequest(
       localMimotoHost,
       '/v1/mimoto/verifiers',
       'GET',
-      req.headers as Record<string, string>,
+      forwardHeaders as Record<string, string>,
     )
     if (result.body && typeof result.body === 'object' && (result.body as any).response?.verifiers) {
       const verifiers = (result.body as any).response.verifiers
@@ -463,7 +479,11 @@ app.get('/v1/mimoto/verifiers', async (req, res) => {
         })
       }
     }
-    res.status(result.status).json(result.body)
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
+    res.removeHeader('ETag')
+    res.status(result.status === 304 ? 200 : result.status).json(result.body)
   } catch (err) {
     console.error('[proxy] /v1/mimoto/verifiers error:', err)
     res.status(502).json({ error: 'Failed to reach local mimoto', detail: String(err) })
@@ -969,6 +989,11 @@ const mimotoPresentationSessions = new Map<string, {
   verifier?: any
 }>()
 
+// Redirect Google OAuth to Mimoto on port 8099 so Google OAuth receives the whitelisted redirect_uri
+app.get('/v1/mimoto/oauth2/authorize/google', (_req, res) => {
+  res.redirect('http://localhost:8099/v1/mimoto/oauth2/authorize/google')
+})
+
 // Intercept Mimoto presentation creation to track request_uri and presentationId
 app.post('/v1/mimoto/wallets/:walletId/presentations', async (req, res, next) => {
   const { walletId } = req.params
@@ -1341,6 +1366,8 @@ app.patch('/v1/mimoto/wallets/:walletId/presentations/:presentationId', async (r
 app.all('/v1/mimoto/*splat', async (req, res) => {
   try {
     const path = '/v1/mimoto' + splatPath(req)
+    const baseUrl = getPublicBaseUrl(req)
+    const localCertifyHost = `${baseUrl}/api/local-certify`
     const result = await proxyRequest(
       localMimotoHost,
       path,
@@ -1350,10 +1377,24 @@ app.all('/v1/mimoto/*splat', async (req, res) => {
     )
     const setCookie = result.headers?.get('set-cookie')
     if (setCookie) res.setHeader('set-cookie', setCookie)
-    if (typeof result.body === 'string') {
-      res.status(result.status).type(result.contentType || 'text/plain').send(result.body)
+
+    let body = result.body
+    if (body && typeof body === 'object') {
+      let bodyStr = JSON.stringify(body)
+      bodyStr = bodyStr
+        .replace(/http:\/\/certify-nginx:80/g, localCertifyHost)
+        .replace(/http:\/\/certify-nginx/g, localCertifyHost)
+        .replace(/http:\/\/localhost:8099/g, baseUrl)
+        .replace(/http:\/\/127\.0\.0\.1:8099/g, baseUrl)
+        .replace(/http:\/\/host\.docker\.internal:3001/g, baseUrl)
+        .replace(/http:\/\/inji-playground:3001/g, baseUrl)
+      body = JSON.parse(bodyStr)
+    }
+
+    if (typeof body === 'string') {
+      res.status(result.status).type(result.contentType || 'text/plain').send(body)
     } else {
-      res.status(result.status).json(result.body)
+      res.status(result.status).json(body)
     }
   } catch (err) {
     console.error('[proxy] /v1/mimoto error:', err)
@@ -1721,6 +1762,34 @@ function rewriteLocalCertifyMetadata(body: Record<string, unknown>, req?: expres
     }
   }
 
+  if (!configs['FarmerCredential_VCDM2.0']) {
+    configs['FarmerCredential_VCDM2.0'] = {
+      format: 'ldp_vc',
+      scope: 'mock_identity_vc_ldp',
+      display: [{
+        name: 'Farmer Verifiable Credential (VC 2.0)',
+        locale: 'en',
+        background_color: '#12107c',
+        text_color: '#FFFFFF',
+        logo: { url: 'https://mosip.github.io/inji-config/logos/agro-vertias-logo.png', alt_text: 'Farmer Logo' }
+      }],
+      order: ['fullName', 'mobileNumber', 'dateOfBirth', 'gender', 'state', 'district', 'villageOrTown', 'postalCode', 'landArea', 'landOwnershipType', 'primaryCropType', 'secondaryCropType', 'farmerID'],
+      cryptographic_binding_methods_supported: ['did:jwk', 'did:key'],
+      credential_signing_alg_values_supported: ['Ed25519Signature2020', 'EdDSA'],
+      proof_types_supported: { jwt: { proof_signing_alg_values_supported: ['RS256', 'ES256'] } },
+      credential_definition: {
+        type: ['FarmerCredential', 'VerifiableCredential'],
+        '@context': ['https://www.w3.org/ns/credentials/v2']
+      }
+    }
+  }
+
+  // Aliases for all 4 format keys so any client lookup matches
+  configs['farmer-ldp-vcdm11'] = configs['FarmerCredential']
+  configs['farmer-ldp-vcdm20'] = configs['FarmerCredential_VCDM2.0']
+  configs['farmer-sdjwt'] = configs['FarmerCredential_SD_JWT']
+  configs['local-mdoc'] = configs['DrivingLicenseCredential']
+
   result.credential_configurations_supported = configs
   return result
 }
@@ -1729,10 +1798,151 @@ app.get('/api/playground-issuer/.well-known/openid-configuration', (_req, res) =
   res.redirect('/api/oidc/.well-known/openid-configuration')
 })
 
+// DID document handler for resolving issuer identity (did:web)
+const didDocumentHandler = (req: express.Request, res: express.Response) => {
+  const baseUrl = getPublicBaseUrl(req)
+  const host = baseUrl.replace(/^https?:\/\//, '').replace(/:/g, '%3A')
+  const didWeb = `did:web:${host}`
+  res.json({
+    '@context': [
+      'https://www.w3.org/ns/did/v1',
+      'https://w3id.org/security/suites/ed25519-2020/v1',
+      'https://w3id.org/security/suites/jws-2020/v1'
+    ],
+    id: didWeb,
+    alsoKnownAs: [
+      'did:web:host.docker.internal%3A3001',
+      'did:web:certify-nginx%3A80'
+    ],
+    verificationMethod: [
+      {
+        id: `${didWeb}#key-0`,
+        type: 'Ed25519VerificationKey2020',
+        controller: didWeb,
+        publicKeyMultibase: localCertifyEdKey.publicKeyMultibase || 'z6Mkst4pBviY5YxiTz5m9yR5XjpWNjE252HZMmokdXYgPMGN'
+      },
+      {
+        id: 'did:web:host.docker.internal%3A3001#R-tBgzITi4Z5vLd-Rg1aU7s6T7lCIVlf-KEFeir3Mas',
+        type: 'Ed25519VerificationKey2020',
+        controller: 'did:web:host.docker.internal%3A3001',
+        publicKeyMultibase: 'z6Mkst4pBviY5YxiTz5m9yR5XjpWNjE252HZMmokdXYgPMGN'
+      },
+      {
+        id: `${didWeb}#key-p256`,
+        type: 'JsonWebKey2020',
+        controller: didWeb,
+        publicKeyJwk: localCertifyP256Key.publicJwk
+      }
+    ],
+    authentication: [`${didWeb}#key-0`, `${didWeb}#key-p256`, 'did:web:host.docker.internal%3A3001#R-tBgzITi4Z5vLd-Rg1aU7s6T7lCIVlf-KEFeir3Mas'],
+    assertionMethod: [`${didWeb}#key-0`, `${didWeb}#key-p256`, 'did:web:host.docker.internal%3A3001#R-tBgzITi4Z5vLd-Rg1aU7s6T7lCIVlf-KEFeir3Mas']
+  })
+}
+
+app.get([
+  '/.well-known/did.json',
+  '/did.json',
+  '/api/local-certify/.well-known/did.json',
+  '/api/local-certify/did.json'
+], didDocumentHandler)
+
+const jwksHandler = (_req: express.Request, res: express.Response) => {
+  res.json({
+    keys: [
+      localCertifyP256Key.publicJwk,
+      localCertifyEdKey.publicJwk
+    ].filter(Boolean)
+  })
+}
+
+app.get(['/.well-known/jwks.json', '/api/local-certify/.well-known/jwks.json', '/api/local-certify/jwks'], jwksHandler)
+
+app.get(['/.well-known/jwt-issuer', '/api/local-certify/.well-known/jwt-issuer'], (req: express.Request, res: express.Response) => {
+  const baseUrl = getPublicBaseUrl(req)
+  res.json({
+    issuer: `${baseUrl}/api/local-certify`,
+    jwks_uri: `${baseUrl}/api/local-certify/.well-known/jwks.json`
+  })
+})
+
+const localCertifyWellKnownHandler = async (req: express.Request, res: express.Response) => {
+  try {
+    const result = await proxyRequest(
+      ENDPOINTS.localCertify, '/.well-known/openid-credential-issuer', req.method,
+      req.headers as Record<string, string>, req.body,
+    )
+    if (typeof result.body === 'object' && result.body !== null) {
+      return res.status(result.status).json(
+        rewriteLocalCertifyMetadata(result.body as Record<string, unknown>, req)
+      )
+    }
+  } catch {
+    return res.json(rewriteLocalCertifyMetadata({}, req))
+  }
+  return res.json(rewriteLocalCertifyMetadata({}, req))
+}
+
+app.get([
+  '/.well-known/openid-credential-issuer',
+  '/.well-known/openid-credential-issuer/api/local-certify',
+  '/.well-known/openid-credential-issuer/*splat',
+  '/.well-known/oauth-authorization-server/api/local-certify',
+  '/.well-known/openid-configuration/api/local-certify',
+  '/api/local-certify/.well-known/openid-credential-issuer',
+  '/api/local-certify/.well-known/openid-configuration',
+  '/api/local-certify/.well-known/oauth-authorization-server'
+], localCertifyWellKnownHandler)
+
+app.post(['/api/local-certify/offer', '/api/local-certify/issuance/offer'], (req, res) => {
+  const baseUrl = getPublicBaseUrl(req)
+  const { configurationId = 'FarmerCredential' } = req.body || {}
+  const preAuthorizedCode = 'preauth-' + crypto.randomBytes(16).toString('hex')
+  const authServer = `${baseUrl}/api/oidc`
+  const credentialOffer = {
+    credential_issuer: `${baseUrl}/api/local-certify`,
+    credential_configuration_ids: [configurationId],
+    grants: {
+      'urn:ietf:params:oauth:grant-type:pre-authorized_code': {
+        'pre-authorized_code': preAuthorizedCode,
+        authorization_server: authServer,
+      },
+      authorization_code: {
+        authorization_server: authServer,
+      },
+    },
+  }
+  const credential_offer_uri = `openid-credential-offer://?credential_offer=${encodeURIComponent(JSON.stringify(credentialOffer))}`
+  console.log('[local-certify] Generated credential offer for', configurationId, 'preAuth:', preAuthorizedCode)
+  res.json({
+    credential_offer: credentialOffer,
+    credential_offer_uri,
+    expires_in: 3600,
+  })
+})
+
 app.all('/api/local-certify/*splat', async (req, res) => {
   const path = splatPath(req)
-  const isWellKnown = path.includes('.well-known')
   const baseUrl = getPublicBaseUrl(req)
+
+  // Explicit DID document request
+  if (path.includes('did.json')) {
+    return didDocumentHandler(req, res)
+  }
+
+  // Explicit JWKS request
+  if (path.includes('jwks')) {
+    return jwksHandler(req, res)
+  }
+
+  // Explicit JWT issuer request
+  if (path.includes('jwt-issuer')) {
+    return res.json({
+      issuer: `${baseUrl}/api/local-certify`,
+      jwks_uri: `${baseUrl}/api/local-certify/.well-known/jwks.json`
+    })
+  }
+
+  const isWellKnown = path.includes('.well-known')
 
   // 1. Metadata endpoints
   if (isWellKnown) {
@@ -1762,21 +1972,41 @@ app.all('/api/local-certify/*splat', async (req, res) => {
   // 3. Credential issuance endpoint
   if (req.method === 'POST' && (path.includes('/issuance/credential') || path.includes('/credential'))) {
     const body = req.body || {}
-    const format = body.format || body.credential_definition?.format
-    const configId = body.credential_configuration_id || body.credential_definition?.type?.[0] || body.credential_identifier || ''
-    const isSdJwt = format === 'vc+sd-jwt' || configId === 'FarmerCredential_SD_JWT' || String(body.vct).includes('farmer')
-    const isMdoc = format === 'mso_mdoc' || configId === 'DrivingLicenseCredential' || body.doctype === 'org.iso.18013.5.1.mDL'
+    const configId = String(body.credential_configuration_id || body.credential_definition?.type?.[0] || body.credential_identifier || '').toLowerCase()
+    const rawConfigId = body.credential_configuration_id || body.credential_definition?.type?.[0] || body.credential_identifier || ''
+    const reqFormat = body.format || body.credential_definition?.format || ''
 
-    // Extract holder binding from proof JWT if present
+    const isSdJwt = reqFormat === 'vc+sd-jwt' ||
+      configId.includes('sdjwt') ||
+      configId.includes('sd-jwt') ||
+      rawConfigId === 'FarmerCredential_SD_JWT' ||
+      rawConfigId === 'farmer-sdjwt' ||
+      String(body.vct).includes('farmer')
+
+    const isMdoc = reqFormat === 'mso_mdoc' ||
+      configId.includes('mdoc') ||
+      configId.includes('mdl') ||
+      rawConfigId === 'DrivingLicenseCredential' ||
+      rawConfigId === 'local-mdoc' ||
+      body.doctype === 'org.iso.18013.5.1.mDL'
+
+    const isVcdm2 = configId.includes('20') || configId.includes('2.0') || rawConfigId === 'farmer-ldp-vcdm20' || rawConfigId === 'FarmerCredential_VCDM2.0'
+
+    // Extract holder binding from proof JWT if present (support proof.jwt and proofs.jwt[0])
     let holderKey: any = null
     let holderDid: string | undefined
-    if (body.proof?.jwt) {
+    const proofJwt = body.proof?.jwt || (body.proofs?.jwt && body.proofs.jwt[0])
+    if (proofJwt) {
       try {
-        const decodedHeader = jose.decodeProtectedHeader(body.proof.jwt)
+        const decodedHeader = jose.decodeProtectedHeader(proofJwt)
         if (decodedHeader.jwk) holderKey = { publicJwk: decodedHeader.jwk }
-        if (typeof decodedHeader.kid === 'string') holderDid = decodedHeader.kid
-        const decodedPayload = jose.decodeJwt(body.proof.jwt)
-        if (typeof decodedPayload.iss === 'string') holderDid = decodedPayload.iss
+        if (typeof decodedHeader.kid === 'string' && (decodedHeader.kid.startsWith('did:') || decodedHeader.kid.startsWith('urn:'))) {
+          holderDid = decodedHeader.kid
+        }
+        const decodedPayload = jose.decodeJwt(proofJwt)
+        if (!holderDid && typeof decodedPayload.iss === 'string' && (decodedPayload.iss.startsWith('did:') || decodedPayload.iss.startsWith('urn:'))) {
+          holderDid = decodedPayload.iss
+        }
       } catch { }
     }
 
@@ -1805,7 +2035,13 @@ app.all('/api/local-certify/*splat', async (req, res) => {
         holderKey: holderKey || localCertifyP256Key,
         holderDid: holderDid || localCertifyP256Key.did,
       })
-      return res.json({ credential: sdjwt.compact })
+      const c_nonce = 'cnonce-' + crypto.randomBytes(16).toString('hex')
+      return res.json({
+        format: 'vc+sd-jwt',
+        credential: sdjwt.compact,
+        c_nonce,
+        c_nonce_expires_in: 3600
+      })
     }
 
     if (isMdoc) {
@@ -1829,23 +2065,54 @@ app.all('/api/local-certify/*splat', async (req, res) => {
         holderKey: holderKey || localCertifyP256Key,
         holderDid: holderDid || localCertifyP256Key.did,
       })
-      return res.json({ credential: mdoc.compact })
+      const c_nonce = 'cnonce-' + crypto.randomBytes(16).toString('hex')
+      return res.json({
+        format: 'mso_mdoc',
+        credential: mdoc.compact,
+        c_nonce,
+        c_nonce_expires_in: 3600
+      })
     }
 
     // Default: FarmerCredential (ldp_vc)
-    try {
-      const result = await proxyRequest(
-        ENDPOINTS.localCertify, path, req.method,
-        req.headers as Record<string, string>, req.body,
-      )
-      if (result.status >= 200 && result.status < 300) {
-        return res.status(result.status).json(result.body)
-      }
-    } catch { }
+    if (!isVcdm2) {
+      try {
+        const draft11Body: Record<string, any> = {
+          format: 'ldp_vc',
+          credential_definition: {
+            type: ['FarmerCredential', 'VerifiableCredential'],
+            '@context': ['https://www.w3.org/2018/credentials/v1'],
+          },
+          proof: body.proof || (proofJwt ? { proof_type: 'jwt', jwt: proofJwt } : undefined),
+        }
+        const result = await proxyRequest(
+          ENDPOINTS.localCertify, path, req.method,
+          req.headers as Record<string, string>, draft11Body,
+        )
+        if (result.status >= 200 && result.status < 300) {
+          const bodyObj = (typeof result.body === 'object' && result.body !== null) ? result.body as any : {}
+          return res.status(result.status).json({
+            format: 'ldp_vc',
+            credential: bodyObj.credential || result.body,
+            c_nonce: bodyObj.c_nonce || ('cnonce-' + crypto.randomBytes(16).toString('hex')),
+            c_nonce_expires_in: bodyObj.c_nonce_expires_in || 3600
+          })
+        }
+      } catch { }
+    }
 
     // Fallback if Docker is offline or error
     console.log('[local-certify] Issuing fallback FarmerCredential (LDP_VC)')
-    const isVcdm2 = String(configId).includes('20') || String(configId).includes('2.0')
+    const host = baseUrl.replace(/^https?:\/\//, '').replace(/:/g, '%3A')
+    const didWeb = `did:web:${host}`
+
+    localCertifyEdKey.did = didWeb
+    localCertifyEdKey.verificationMethod = `${didWeb}#key-0`
+    if (localCertifyEdKey.signatureKeyPair) {
+      localCertifyEdKey.signatureKeyPair.controller = didWeb
+      localCertifyEdKey.signatureKeyPair.id = `${didWeb}#key-0`
+    }
+
     const vc = await issueLdpCredential({
       key: localCertifyEdKey,
       dataModel: isVcdm2 ? '2.0' : '1.1',
@@ -1867,7 +2134,13 @@ app.all('/api/local-certify/*splat', async (req, res) => {
       },
       holderDid: holderDid || localCertifyEdKey.did,
     })
-    return res.json({ credential: vc })
+    const c_nonce = 'cnonce-' + crypto.randomBytes(16).toString('hex')
+    return res.json({
+      format: 'ldp_vc',
+      credential: vc,
+      c_nonce,
+      c_nonce_expires_in: 3600
+    })
   }
 
   // Generic proxy for any other endpoints

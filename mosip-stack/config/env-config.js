@@ -284,11 +284,34 @@ window._env_ = {
       return modifiedPromise;
     };
 
-    if (typeof window !== 'undefined' && window.localStorage && !window.localStorage.getItem('did_clear_stale_wallet_2')) {
-        window.localStorage.clear();
-        window.localStorage.setItem('did_clear_stale_wallet_2', 'true');
-        window.location.href = '/';
-    }
+    // Helper: Add Quick Local Login button for local development/testing on the login screen
+    setInterval(function() {
+      if (window.location.pathname === '/' || window.location.pathname === '') {
+        var loginForm = document.querySelector('[data-testid="login-title"]')?.parentElement;
+        if (loginForm && !document.getElementById('quick-local-login-btn')) {
+          var quickBtn = document.createElement('button');
+          quickBtn.id = 'quick-local-login-btn';
+          quickBtn.type = 'button';
+          quickBtn.style.cssText = 'width: 100%; margin-top: 14px; padding: 10px 16px; background: #0284c7; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1);';
+          quickBtn.innerText = '⚡ Quick Local Login (Tatwik)';
+          quickBtn.onmouseover = function() { quickBtn.style.background = '#0369a1'; };
+          quickBtn.onmouseout = function() { quickBtn.style.background = '#0284c7'; };
+          quickBtn.onclick = function() {
+            localStorage.setItem('user', JSON.stringify("{\"displayName\":\"Tatwik\",\"email\":\"tatwiksaiytchannel@gmail.com\"}"));
+            localStorage.setItem('walletId', JSON.stringify("1be5df51-5765-45e8-b5fe-47a4364b0f80"));
+            var target = sessionStorage.getItem('redirectTo');
+            if (target) {
+              try { target = JSON.parse(target); } catch(e) {}
+              sessionStorage.removeItem('redirectTo');
+              window.location.href = target;
+            } else {
+              window.location.href = '/user/home';
+            }
+          };
+          loginForm.appendChild(quickBtn);
+        }
+      }
+    }, 400);
 
     var path = window.location.pathname;
     var search = window.location.search || '';

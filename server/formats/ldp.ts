@@ -70,13 +70,15 @@ export function buildCredential(opts: IssueLdpOptions): Record<string, unknown> 
   } = opts
 
   const now = new Date()
-  const issued = expired ? new Date(now.getTime() - 400 * 86400_000) : now
+  const issued = expired ? new Date(now.getTime() - 400 * 86400_000) : new Date(now.getTime() - 5 * 60_000)
   const expires = expired
     ? new Date(now.getTime() - 35 * 86400_000)
     : new Date(now.getTime() + validityDays * 86400_000)
 
   const credentialSubject: Record<string, unknown> = { ...subject }
-  if (holderDid) credentialSubject.id = holderDid
+  if (holderDid && (holderDid.startsWith('did:') || holderDid.startsWith('urn:') || holderDid.startsWith('http:') || holderDid.startsWith('https:'))) {
+    credentialSubject.id = holderDid
+  }
 
   const credential: Record<string, unknown> = {
     '@context': [...BASE_CONTEXT[dataModel], inlineContext()],

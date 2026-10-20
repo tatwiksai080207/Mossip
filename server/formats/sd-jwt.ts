@@ -74,7 +74,7 @@ export function parseDisclosure(raw: string): { salt: string; key: string; value
 export async function issueSdJwtCredential(opts: IssueSdJwtOptions): Promise<IssuedSdJwt> {
   const now = Math.floor(Date.now() / 1000)
   const validitySeconds = (opts.validityDays ?? 365) * 86400
-  const iat = opts.expired ? now - validitySeconds - 3600 : now
+  const iat = opts.expired ? now - validitySeconds - 3600 : now - 300
   const exp = opts.expired ? now - 3600 : now + validitySeconds
 
   // Create disclosures for each claim in opts.claims

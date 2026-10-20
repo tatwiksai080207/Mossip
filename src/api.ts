@@ -138,11 +138,11 @@ export async function createCredentialOffer(
     ? (credType.id ?? credType.credentialTypeName)
     : (credType.credentialTypeName ?? credType.id)
 
-  if (issuer.id === 'certify-playground' || issuer.id === 'issuer-waltid' || issuer.env === 'external') {
+  if (issuer.id === 'certify-playground' || issuer.id === 'issuer-waltid' || issuer.id === 'certify-local' || issuer.env === 'external') {
     // Fetch a real offer from the issuer that includes a valid pre-authorized_code
     const offerEndpoint = issuer.id === 'issuer-waltid' || issuer.env === 'external'
       ? '/api/external/waltid/issuer/offer'
-      : '/api/playground-issuer/offer'
+      : (issuer.id === 'certify-local' ? '/api/local-certify/offer' : '/api/playground-issuer/offer')
     const offerRes = await postJson(offerEndpoint, {
       configurationId: configId,
     })
@@ -161,27 +161,29 @@ export async function createCredentialOffer(
     }
   }
 
+  const preAuthCode = 'preauth-' + Math.random().toString(36).substring(2)
+  const authServer = (metadata.authorization_servers as string[] | undefined)?.[0]
+  const offerPayload = {
+    credential_issuer: metadata.credential_issuer,
+    credential_configuration_ids: [configId],
+    grants: {
+      'urn:ietf:params:oauth:grant-type:pre-authorized_code': {
+        'pre-authorized_code': preAuthCode,
+        ...(authServer ? { authorization_server: authServer } : {}),
+      },
+      authorization_code: {
+        authorization_server: authServer,
+      },
+    },
+  }
+
   return {
     payload: {
-      credential_issuer: metadata.credential_issuer,
-      credential_configuration_ids: [configId],
-      grants: {
-        authorization_code: {
-          authorization_server: (metadata.authorization_servers as string[] | undefined)?.[0],
-        },
-      },
+      ...offerPayload,
       _constructed_by: 'playground',
       _reason: 'Issuer metadata advertises no credential_offer_endpoint (OpenID4VCI allows one).',
       _offer_uri: `openid-credential-offer://?credential_offer=${encodeURIComponent(
-        JSON.stringify({
-          credential_issuer: metadata.credential_issuer,
-          credential_configuration_ids: [configId],
-          grants: {
-            authorization_code: {
-              authorization_server: (metadata.authorization_servers as string[] | undefined)?.[0],
-            },
-          },
-        }),
+        JSON.stringify(offerPayload),
       )}`,
     },
     source: 'live',
