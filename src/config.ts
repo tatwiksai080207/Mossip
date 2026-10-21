@@ -222,13 +222,6 @@ export const wallets: WalletConfig[] = [
 
 export const verifiers: VerifierConfig[] = [
   {
-    id: 'inji-verify',
-    name: 'Inji Verify',
-    description: 'Collab verify-service, OpenID4VP v2 / DCQL',
-    env: 'collab',
-    host: '/api/verifier',
-  },
-  {
     id: 'verify-local',
     name: 'Local Inji Verify',
     description: 'Local MOSIP Docker Stack — running on port 8095',
@@ -236,17 +229,17 @@ export const verifiers: VerifierConfig[] = [
     host: '/api/local-verifier',
   },
   {
-    id: 'verify-waltid',
-    name: 'walt.id Verifier',
-    description: 'External reference verifier (OpenID4VP) — supports W3C VCs & SD-JWT VCs with did:key resolution',
-    env: 'external',
-    host: '/api/external/waltid/verifier',
-  },
-  {
     id: 'inji-verify-collab-live',
     name: 'Inji Verify (Collab Live Engine)',
     description: 'Official Collab Inji Verify engine (injiverify.collab.mosip.net) with did:web Ed25519 validation',
     env: 'collab',
     host: '/api/verifier',
+  },
+  {
+    id: 'verify-waltid',
+    name: 'walt.id Verifier',
+    description: 'External reference verifier (OpenID4VP) — supports W3C VCs & SD-JWT VCs with did:key resolution',
+    env: 'external',
+    host: '/api/external/waltid/verifier',
   },
 ]
