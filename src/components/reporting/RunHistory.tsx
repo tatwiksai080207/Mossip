@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useStore } from '../../store'
+import { useStore } from '../../store/index'
 import type { CredentialFormat } from '../../types'
 
 const FORMAT_LABELS: Record<string, string> = {

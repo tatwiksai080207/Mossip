@@ -10,7 +10,7 @@ import {
   InteropMatrix,
   InteractiveAuthModal,
 } from './components'
-import { useStore } from './store'
+import { useStore } from './store/index'
 import QRCode from 'react-qr-code'
 
 function App() {

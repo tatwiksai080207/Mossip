@@ -1,4 +1,4 @@
-import { useStore } from '../../store'
+import { useStore } from '../../store/index'
 
 const FORMAT_LABELS: Record<string, string> = {
   'ldp_vc': 'W3C VC (JSON-LD)',

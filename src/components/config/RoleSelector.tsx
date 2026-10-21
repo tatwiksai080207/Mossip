@@ -1,5 +1,5 @@
 import { issuers, wallets, verifiers } from '../../config'
-import { useStore } from '../../store'
+import { useStore } from '../../store/index'
 
 export default function RoleSelector() {
   const {

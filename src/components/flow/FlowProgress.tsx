@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useStore, evaluateTestRun } from '../../store'
+import { useStore, evaluateTestRun } from '../../store/index'
 import type { StepStatus } from '../../types'
 
 function statusIcon(status: StepStatus) {

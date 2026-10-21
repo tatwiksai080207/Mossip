@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useStore } from '../../store'
+import { useStore } from '../../store/index'
 
 export const InteractiveAuthModal: React.FC = () => {
   const { pausedStep, oauthUrl, resumeOAuthFlow, cancelOAuthFlow, selectedIssuer, selectedWallet } = useStore()

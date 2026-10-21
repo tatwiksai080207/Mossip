@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import mermaid from 'mermaid'
-import { useStore } from '../../store'
+import { useStore } from '../../store/index'
 import type { FlowStep, FlowStepInfo, StepStatus, NetworkEvent } from '../../types'
 
 interface SequenceDiagramProps {

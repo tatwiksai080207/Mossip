@@ -5,7 +5,8 @@ import type express from 'express'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const tunnelFile = path.join(__dirname, '../scratch/tunnel.json')
-const rootTunnelFile = path.join(__dirname, '../.tunnel.json')
+const serverTunnelFile = path.join(__dirname, '.tunnel.json')
+const legacyRootTunnelFile = path.join(__dirname, '../.tunnel.json')
 
 let activeTunnelUrl = (process.env.PUBLIC_BASE_URL || '').trim()
 
@@ -14,7 +15,7 @@ export function getActiveTunnelUrl(): string {
     return activeTunnelUrl
   }
   try {
-    for (const f of [tunnelFile, rootTunnelFile]) {
+    for (const f of [serverTunnelFile, tunnelFile, legacyRootTunnelFile]) {
       if (fs.existsSync(f)) {
         const raw = JSON.parse(fs.readFileSync(f, 'utf-8'))
         if (raw?.tunnelUrl) {
@@ -62,7 +63,7 @@ export function setTunnelUrl(url: string): string {
   try {
     fs.mkdirSync(path.dirname(tunnelFile), { recursive: true })
     fs.writeFileSync(tunnelFile, JSON.stringify({ tunnelUrl: activeTunnelUrl }), 'utf-8')
-    fs.writeFileSync(rootTunnelFile, JSON.stringify({ tunnelUrl: activeTunnelUrl }), 'utf-8')
+    fs.writeFileSync(serverTunnelFile, JSON.stringify({ tunnelUrl: activeTunnelUrl }), 'utf-8')
     syncMimotoTrustedVerifiers(activeTunnelUrl)
   } catch { }
   return activeTunnelUrl

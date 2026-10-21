@@ -161,20 +161,27 @@ export async function createCredentialOffer(
     }
   }
 
+  const isInteractive = issuer.id === 'certify-collab-interactive' || issuer.env === 'collab'
   const preAuthCode = 'preauth-' + Math.random().toString(36).substring(2)
   const authServer = (metadata.authorization_servers as string[] | undefined)?.[0]
+
+  const grants: Record<string, unknown> = {
+    authorization_code: {
+      authorization_server: authServer,
+    },
+  }
+
+  if (!isInteractive) {
+    grants['urn:ietf:params:oauth:grant-type:pre-authorized_code'] = {
+      'pre-authorized_code': preAuthCode,
+      ...(authServer ? { authorization_server: authServer } : {}),
+    }
+  }
+
   const offerPayload = {
     credential_issuer: metadata.credential_issuer,
     credential_configuration_ids: [configId],
-    grants: {
-      'urn:ietf:params:oauth:grant-type:pre-authorized_code': {
-        'pre-authorized_code': preAuthCode,
-        ...(authServer ? { authorization_server: authServer } : {}),
-      },
-      authorization_code: {
-        authorization_server: authServer,
-      },
-    },
+    grants,
   }
 
   return {
@@ -252,7 +259,7 @@ async function runIssueFlow(issuer: IssuerConfig, credType: CredentialType, auth
     const preAuth = offer.grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']
     const authCodeGrant = offer.grants['authorization_code']
 
-    if (!preAuth && authCodeGrant) {
+    if ((!preAuth && authCodeGrant) || (isCollab && !authCode)) {
       // Need manual intervention!
       const metadata = await fetchIssuerMetadata(issuer)
       const authServers = (metadata.payload as any).authorization_servers as string[] | undefined
