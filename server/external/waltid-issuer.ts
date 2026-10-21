@@ -278,6 +278,9 @@ function credentialConfigurationsSupported(): Record<string, unknown> {
       'x-vc-data-model': cfg.dataModel,
     }
   }
+  if (WALTID_CREDENTIAL_CONFIGS.length > 0) {
+    out[''] = { ...(out[WALTID_CREDENTIAL_CONFIGS[0].id] as object), id: WALTID_CREDENTIAL_CONFIGS[0].id }
+  }
   return out
 }
 

@@ -100,7 +100,7 @@ export function resetVpSession() { currentVpSession = null }
 // ── Step 1: issuer metadata discovery ───────────────────────────────────────
 
 export async function fetchIssuerMetadata(issuer: IssuerConfig): Promise<StepResult> {
-  const host = issuer.host ?? 'https://injicertify-mock.collab.mosip.net'
+  const host = issuer.host ?? 'http://localhost:3001/api/local-certify'
   const url = `/api/wellknown?host=${encodeURIComponent(host)}`
   const res = await safeFetch(url)
   const data = await readBody(res)
@@ -123,7 +123,7 @@ export async function createCredentialOffer(
   issuer: IssuerConfig,
   credType: CredentialType,
 ): Promise<StepResult> {
-  const host = issuer.host ?? 'https://injicertify-mock.collab.mosip.net'
+  const host = issuer.host ?? 'http://localhost:3001/api/local-certify'
   const res = await safeFetch(`/api/wellknown?host=${encodeURIComponent(host)}`)
   const metadata = await readBody(res) as Record<string, unknown>
 
@@ -134,7 +134,7 @@ export async function createCredentialOffer(
     })
   }
 
-  const configId = (issuer.id === 'certify-playground' || issuer.id === 'issuer-waltid' || issuer.env === 'external')
+  const configId = (issuer.id === 'certify-playground' || issuer.id === 'issuer-waltid' || issuer.id === 'certify-local' || issuer.env === 'external')
     ? (credType.id ?? credType.credentialTypeName)
     : (credType.credentialTypeName ?? credType.id)
 

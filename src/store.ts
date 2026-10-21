@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import * as api from './api'
 import type { IssuerConfig, WalletConfig, VerifierConfig, CredentialType, FlowStepInfo, StepStatus, TestRun, NetworkEvent } from './types'
+import { issuers, wallets, verifiers } from './config'
 
 const FLOW_STEPS: { id: FlowStepInfo['id']; label: string }[] = [
   { id: 'issuer-metadata', label: 'Issuer Metadata Discovery' },
@@ -108,10 +109,10 @@ export function evaluateTestRun(steps: FlowStepInfo[], tamperMode: string): { pa
 }
 
 export const useStore = create<PlaygroundStore>((set, get) => ({
-  selectedIssuer: null,
-  selectedWallet: null,
-  selectedVerifier: null,
-  selectedCredType: null,
+  selectedIssuer: issuers[0] || null,
+  selectedWallet: wallets[0] || null,
+  selectedVerifier: verifiers[0] || null,
+  selectedCredType: issuers[0]?.credentialTypes[0] || null,
   steps: [],
   isRunning: false,
   pausedStep: null,

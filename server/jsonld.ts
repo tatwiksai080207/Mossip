@@ -19,6 +19,7 @@ const WELL_KNOWN = [
   'https://www.w3.org/ns/credentials/v2',
   'https://w3id.org/security/suites/ed25519-2020/v1',
   'https://inji.github.io/inji-config/contexts/mosip-identity-context.json',
+  'https://inji.github.io/inji-config/contexts/farmer.json',
 ]
 
 async function fetchContext(url: string): Promise<unknown> {

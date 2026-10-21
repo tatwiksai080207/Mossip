@@ -294,6 +294,9 @@ function credentialConfigurationsSupported(): Record<string, unknown> {
       'x-vc-data-model': cfg.dataModel,
     }
   }
+  if (CREDENTIAL_CONFIGS.length > 0) {
+    out[''] = { ...(out[CREDENTIAL_CONFIGS[0].id] as object), id: CREDENTIAL_CONFIGS[0].id }
+  }
   return out
 }
 

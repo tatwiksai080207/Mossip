@@ -121,8 +121,8 @@ function didJwkFrom(publicJwk: jose.JWK): string {
  * generated separately, so the suite instance and the `jose` key are provably
  * the same key.
  */
-export async function generateEd25519Key(): Promise<PlaygroundKey> {
-  const signatureKeyPair = await Ed25519VerificationKey2020.generate()
+export async function generateEd25519Key(seedBytes?: Uint8Array): Promise<PlaygroundKey> {
+  const signatureKeyPair = await Ed25519VerificationKey2020.generate(seedBytes ? { seed: seedBytes } : undefined)
 
   const publicKeyBytes = stripMultibase(signatureKeyPair.publicKeyMultibase, MULTICODEC.ed25519Pub)
   // The 2020 suite stores the 64-byte libsodium secret key: seed || publicKey.

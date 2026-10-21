@@ -72,7 +72,7 @@ app.use(ISSUER_MOUNT, playgroundIssuer.router)
 // ── The playground's holder wallet ──────────────────────────────────────────
 const playgroundWallet = await createWallet()
 
-const localCertifyEdKey = await generateEd25519Key()
+const localCertifyEdKey = await generateEd25519Key(Buffer.from('mossip-certify-ed25519-seed-32b!'))
 const localCertifyP256Key = await generateP256Key()
 
 app.get(`/.well-known/openid-credential-issuer${ISSUER_MOUNT}`, (req, res) => {
@@ -1644,6 +1644,8 @@ for (const { prefix, target, label } of PROXIES) {
 const CERTIFY_INTERNAL_DOCKER = 'http://certify-nginx:80'
 const COLLAB_ESIGNET_PATTERN = new RegExp('https://esignet[^"\\s]*', 'g')
 
+let lastLocalCertifyConfigId = 'FarmerCredential'
+
 function rewriteLocalCertifyMetadata(body: Record<string, unknown>, req?: express.Request): Record<string, unknown> {
   const baseUrl = getPublicBaseUrl(req)
   const localCertifyHost = `${baseUrl}/api/local-certify`
@@ -1683,6 +1685,26 @@ function rewriteLocalCertifyMetadata(body: Record<string, unknown>, req?: expres
           .replace('http://localhost:3001/api/oidc', playgroundOidcUri)
           .replace('http://host.docker.internal:3001/api/oidc', playgroundOidcUri)
     )
+  }
+
+  // Ensure root display has a valid logo and localized name so
+  // getDisplayObjectForCurrentLanguage(context.selectedIssuer.display) does not throw
+  if (!result.display || !Array.isArray(result.display) || result.display.length === 0) {
+    result.display = [
+      {
+        name: 'Inji Playground Local Certify',
+        locale: 'en',
+        logo: {
+          url: 'https://mosip.github.io/inji-config/logos/agro-vertias-logo.png',
+          alt_text: 'Local Certify Logo'
+        }
+      }
+    ]
+  } else if (Array.isArray(result.display) && result.display[0] && !result.display[0].logo) {
+    result.display[0].logo = {
+      url: 'https://mosip.github.io/inji-config/logos/agro-vertias-logo.png',
+      alt_text: 'Local Certify Logo'
+    }
   }
 
   // Ensure all 4 formats are supported in credential_configurations_supported
@@ -1790,6 +1812,43 @@ function rewriteLocalCertifyMetadata(body: Record<string, unknown>, req?: expres
   configs['farmer-sdjwt'] = configs['FarmerCredential_SD_JWT']
   configs['local-mdoc'] = configs['DrivingLicenseCredential']
 
+  // Crucial issuer identification fields for Inji Mobile Wallet
+  result.issuer_id = 'local-certify'
+  result.credential_issuer_host = localCertifyHost
+  result.protocol = 'OpenId4VCI'
+  result.client_id = 'wallet'
+  result.redirect_uri = 'io.mosip.residentapp.inji://oauthredirect'
+
+  // Crucial compatibility patch for Inji Mobile Wallet:
+  // Inji Mobile Wallet's React Native bridge contains an interoperability bug in VciClient.ts
+  // (lines 164-165) where it reads `parsedResponse.credentialConfigurationId` (camelCase) instead of
+  // `parsedResponse.credential_configuration_id` (snake_case as emitted by Gson).
+  // Consequently, context.credentialConfigurationId is set to "" (empty string).
+  // By mapping configs[''] to the active configuration, Inji Mobile's lookup
+  // `issuerMetadata.credential_configurations_supported[""]` resolves cleanly
+  // rather than setting context.selectedCredentialType to undefined and crashing.
+  let activeKey = lastLocalCertifyConfigId || 'FarmerCredential'
+  let activeConfig = configs[activeKey]
+  if (!activeConfig) {
+    if (activeKey.includes('sdjwt') || activeKey.includes('sd-jwt')) activeConfig = configs['FarmerCredential_SD_JWT']
+    else if (activeKey.includes('mdoc') || activeKey.includes('mdl')) activeConfig = configs['DrivingLicenseCredential']
+    else if (activeKey.includes('20') || activeKey.includes('2.0')) activeConfig = configs['FarmerCredential_VCDM2.0']
+    else activeConfig = configs['FarmerCredential']
+  }
+  configs[''] = {
+    ...activeConfig,
+    id: activeKey,
+    credential_configuration_id: activeKey,
+  }
+
+  // Ensure every configuration entry has id and credential_configuration_id defined
+  for (const [k, v] of Object.entries(configs)) {
+    if (v && typeof v === 'object') {
+      v.id = v.id || k
+      v.credential_configuration_id = v.credential_configuration_id || k
+    }
+  }
+
   result.credential_configurations_supported = configs
   return result
 }
@@ -1798,11 +1857,11 @@ app.get('/api/playground-issuer/.well-known/openid-configuration', (_req, res) =
   res.redirect('/api/oidc/.well-known/openid-configuration')
 })
 
-// DID document handler for resolving issuer identity (did:web)
 const didDocumentHandler = (req: express.Request, res: express.Response) => {
   const baseUrl = getPublicBaseUrl(req)
   const host = baseUrl.replace(/^https?:\/\//, '').replace(/:/g, '%3A')
   const didWeb = `did:web:${host}`
+  const didWebPath = `${didWeb}:api:local-certify`
   res.json({
     '@context': [
       'https://www.w3.org/ns/did/v1',
@@ -1811,6 +1870,7 @@ const didDocumentHandler = (req: express.Request, res: express.Response) => {
     ],
     id: didWeb,
     alsoKnownAs: [
+      didWebPath,
       'did:web:host.docker.internal%3A3001',
       'did:web:certify-nginx%3A80'
     ],
@@ -1819,6 +1879,12 @@ const didDocumentHandler = (req: express.Request, res: express.Response) => {
         id: `${didWeb}#key-0`,
         type: 'Ed25519VerificationKey2020',
         controller: didWeb,
+        publicKeyMultibase: localCertifyEdKey.publicKeyMultibase || 'z6Mkst4pBviY5YxiTz5m9yR5XjpWNjE252HZMmokdXYgPMGN'
+      },
+      {
+        id: `${didWebPath}#key-0`,
+        type: 'Ed25519VerificationKey2020',
+        controller: didWebPath,
         publicKeyMultibase: localCertifyEdKey.publicKeyMultibase || 'z6Mkst4pBviY5YxiTz5m9yR5XjpWNjE252HZMmokdXYgPMGN'
       },
       {
@@ -1832,10 +1898,28 @@ const didDocumentHandler = (req: express.Request, res: express.Response) => {
         type: 'JsonWebKey2020',
         controller: didWeb,
         publicKeyJwk: localCertifyP256Key.publicJwk
+      },
+      {
+        id: `${didWebPath}#key-p256`,
+        type: 'JsonWebKey2020',
+        controller: didWebPath,
+        publicKeyJwk: localCertifyP256Key.publicJwk
       }
     ],
-    authentication: [`${didWeb}#key-0`, `${didWeb}#key-p256`, 'did:web:host.docker.internal%3A3001#R-tBgzITi4Z5vLd-Rg1aU7s6T7lCIVlf-KEFeir3Mas'],
-    assertionMethod: [`${didWeb}#key-0`, `${didWeb}#key-p256`, 'did:web:host.docker.internal%3A3001#R-tBgzITi4Z5vLd-Rg1aU7s6T7lCIVlf-KEFeir3Mas']
+    authentication: [
+      `${didWeb}#key-0`,
+      `${didWebPath}#key-0`,
+      `${didWeb}#key-p256`,
+      `${didWebPath}#key-p256`,
+      'did:web:host.docker.internal%3A3001#R-tBgzITi4Z5vLd-Rg1aU7s6T7lCIVlf-KEFeir3Mas'
+    ],
+    assertionMethod: [
+      `${didWeb}#key-0`,
+      `${didWebPath}#key-0`,
+      `${didWeb}#key-p256`,
+      `${didWebPath}#key-p256`,
+      'did:web:host.docker.internal%3A3001#R-tBgzITi4Z5vLd-Rg1aU7s6T7lCIVlf-KEFeir3Mas'
+    ]
   })
 }
 
@@ -1896,6 +1980,7 @@ app.get([
 app.post(['/api/local-certify/offer', '/api/local-certify/issuance/offer'], (req, res) => {
   const baseUrl = getPublicBaseUrl(req)
   const { configurationId = 'FarmerCredential' } = req.body || {}
+  lastLocalCertifyConfigId = configurationId
   const preAuthorizedCode = 'preauth-' + crypto.randomBytes(16).toString('hex')
   const authServer = `${baseUrl}/api/oidc`
   const credentialOffer = {
@@ -1973,7 +2058,8 @@ app.all('/api/local-certify/*splat', async (req, res) => {
   if (req.method === 'POST' && (path.includes('/issuance/credential') || path.includes('/credential'))) {
     const body = req.body || {}
     const configId = String(body.credential_configuration_id || body.credential_definition?.type?.[0] || body.credential_identifier || '').toLowerCase()
-    const rawConfigId = body.credential_configuration_id || body.credential_definition?.type?.[0] || body.credential_identifier || ''
+    const rawConfigId = body.credential_configuration_id || body.credential_definition?.type?.[0] || body.credential_identifier || lastLocalCertifyConfigId || 'FarmerCredential'
+    lastLocalCertifyConfigId = rawConfigId
     const reqFormat = body.format || body.credential_definition?.format || ''
 
     const isSdJwt = reqFormat === 'vc+sd-jwt' ||
@@ -2039,6 +2125,10 @@ app.all('/api/local-certify/*splat', async (req, res) => {
       return res.json({
         format: 'vc+sd-jwt',
         credential: sdjwt.compact,
+        credential_configuration_id: rawConfigId,
+        credentialConfigurationId: rawConfigId,
+        credential_issuer: `${baseUrl}/api/local-certify`,
+        credentialIssuer: `${baseUrl}/api/local-certify`,
         c_nonce,
         c_nonce_expires_in: 3600
       })
@@ -2069,6 +2159,10 @@ app.all('/api/local-certify/*splat', async (req, res) => {
       return res.json({
         format: 'mso_mdoc',
         credential: mdoc.compact,
+        credential_configuration_id: rawConfigId,
+        credentialConfigurationId: rawConfigId,
+        credential_issuer: `${baseUrl}/api/local-certify`,
+        credentialIssuer: `${baseUrl}/api/local-certify`,
         c_nonce,
         c_nonce_expires_in: 3600
       })
@@ -2094,6 +2188,10 @@ app.all('/api/local-certify/*splat', async (req, res) => {
           return res.status(result.status).json({
             format: 'ldp_vc',
             credential: bodyObj.credential || result.body,
+            credential_configuration_id: rawConfigId,
+            credentialConfigurationId: rawConfigId,
+            credential_issuer: `${baseUrl}/api/local-certify`,
+            credentialIssuer: `${baseUrl}/api/local-certify`,
             c_nonce: bodyObj.c_nonce || ('cnonce-' + crypto.randomBytes(16).toString('hex')),
             c_nonce_expires_in: bodyObj.c_nonce_expires_in || 3600
           })
@@ -2138,6 +2236,10 @@ app.all('/api/local-certify/*splat', async (req, res) => {
     return res.json({
       format: 'ldp_vc',
       credential: vc,
+      credential_configuration_id: rawConfigId,
+      credentialConfigurationId: rawConfigId,
+      credential_issuer: `${baseUrl}/api/local-certify`,
+      credentialIssuer: `${baseUrl}/api/local-certify`,
       c_nonce,
       c_nonce_expires_in: 3600
     })

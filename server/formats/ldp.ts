@@ -80,8 +80,12 @@ export function buildCredential(opts: IssueLdpOptions): Record<string, unknown> 
     credentialSubject.id = holderDid
   }
 
+  const contexts = (credentialType === 'FarmerCredential' && dataModel === '1.1')
+    ? [...BASE_CONTEXT[dataModel], 'https://inji.github.io/inji-config/contexts/farmer.json']
+    : [...BASE_CONTEXT[dataModel], inlineContext()]
+
   const credential: Record<string, unknown> = {
-    '@context': [...BASE_CONTEXT[dataModel], inlineContext()],
+    '@context': contexts,
     id: opts.id ?? `urn:uuid:${crypto.randomUUID()}`,
     type: ['VerifiableCredential', credentialType],
     issuer: key.did,
