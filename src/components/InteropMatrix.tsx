@@ -3,6 +3,7 @@ import { useStore } from '../store'
 const FORMAT_LABELS: Record<string, string> = {
   'ldp_vc': 'W3C VC (JSON-LD)',
   'vc+sd-jwt': 'SD-JWT VC',
+  'mso_mdoc': 'ISO 18013-5 mDoc',
 }
 
 export default function InteropMatrix() {

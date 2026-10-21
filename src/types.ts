@@ -96,4 +96,6 @@ export interface TestRun {
   steps: FlowStepInfo[]
   result: 'pass' | 'fail'
   timestamp: number
+  version?: string
+  durationMs?: number
 }

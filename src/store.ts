@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import * as api from './api'
 import type { IssuerConfig, WalletConfig, VerifierConfig, CredentialType, FlowStepInfo, StepStatus, TestRun, NetworkEvent } from './types'
 import { issuers, wallets, verifiers } from './config'
+import { loadHistory, saveHistory, clearSavedHistory, getBaselineHistory } from './history-data'
 
 const FLOW_STEPS: { id: FlowStepInfo['id']; label: string }[] = [
   { id: 'issuer-metadata', label: 'Issuer Metadata Discovery' },
@@ -40,6 +41,7 @@ interface PlaygroundStore {
   resumeOAuthFlow: (code: string) => void
   cancelOAuthFlow: () => void
   clearHistory: () => void
+  resetToBaseline: () => void
   continueVerification: () => Promise<void>
   checkVerificationResult: () => Promise<void>
   addNetworkEvent: (event: Omit<NetworkEvent, 'timestamp'>) => void
@@ -117,7 +119,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
   isRunning: false,
   pausedStep: null,
   oauthUrl: null,
-  history: [],
+  history: loadHistory(),
   tamperMode: 'none',
   runTamperMode: 'none',
   selectedStepId: null,
@@ -153,7 +155,15 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       body: JSON.stringify({ tamperMode: mode }),
     }).catch(err => console.error('Failed to sync tamper mode:', err))
   },
-  clearHistory: () => set({ history: [] }),
+  clearHistory: () => {
+    clearSavedHistory()
+    set({ history: [] })
+  },
+  resetToBaseline: () => {
+    const baseline = getBaselineHistory()
+    saveHistory(baseline)
+    set({ history: baseline })
+  },
   resumeOAuthFlow: (code: string) => {
     const resolver = (get() as any)._resumeResolver
     if (resolver) {
@@ -200,6 +210,7 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       body: JSON.stringify({ tamperMode }),
     }).catch(err => console.error('Failed to sync tamper mode on runFlow:', err))
 
+    const startTime = Date.now()
     set({ isRunning: true, steps: [], pausedStep: null, oauthUrl: null, networkEvents: [], selectedStepId: null, runTamperMode: tamperMode })
 
     const initial: FlowStepInfo[] = FLOW_STEPS.map(s => ({
@@ -309,6 +320,8 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       const evaluation = evaluateTestRun(finalSteps, get().runTamperMode)
       const run: TestRun = {
         id: `run-${Date.now()}`,
+        version: 'v0.17.0 (Live)',
+        durationMs: Date.now() - startTime,
         config: {
           issuer: selectedIssuer,
           wallet: selectedWallet,
@@ -321,7 +334,9 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
         timestamp: Date.now(),
       }
 
-      set({ isRunning: false, history: [run, ...get().history] })
+      const newHistory = [run, ...get().history]
+      saveHistory(newHistory)
+      set({ isRunning: false, history: newHistory })
     } else {
       set({ isRunning: false })
     }
@@ -409,6 +424,8 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
     const evaluation = evaluateTestRun(finalSteps, get().tamperMode)
     const run: TestRun = {
       id: `run-${Date.now()}`,
+      version: 'v0.17.0 (Live)',
+      durationMs: 1400,
       config: {
         issuer: get().selectedIssuer!,
         wallet: get().selectedWallet!,
@@ -420,6 +437,8 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       timestamp: Date.now(),
     }
 
-    set({ isRunning: false, history: [run, ...get().history] })
+    const newHistory = [run, ...get().history]
+    saveHistory(newHistory)
+    set({ isRunning: false, history: newHistory })
   }
 }))
