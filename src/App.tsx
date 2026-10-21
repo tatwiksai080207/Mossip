@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
-import Header from './components/Header'
-import RoleSelector from './components/RoleSelector'
-import FlowProgress from './components/FlowProgress'
-import TestReport from './components/TestReport'
-import RunHistory from './components/RunHistory'
-import SequenceDiagram from './components/SequenceDiagram'
-import InjiVerifyPanel from './components/InjiVerifyPanel'
-import InteropMatrix from './components/InteropMatrix'
-import { InteractiveAuthModal } from './components/InteractiveAuthModal'
+import {
+  Header,
+  RoleSelector,
+  FlowProgress,
+  TestReport,
+  RunHistory,
+  SequenceDiagram,
+  InjiVerifyPanel,
+  InteropMatrix,
+  InteractiveAuthModal,
+} from './components'
 import { useStore } from './store'
 import QRCode from 'react-qr-code'
 

@@ -14,6 +14,9 @@ import { issueMdocCredential, verifyMdocLocally, createMdocPresentation } from '
 import { issueLdpCredential, signPresentation, type DataModel } from './formats/ldp'
 import { issueSdJwtCredential, createSdJwtPresentation } from './formats/sd-jwt'
 import { generateEd25519Key, generateP256Key } from './keys'
+import { broadcastNetworkEvent } from './telemetry/websocket'
+import { formatMdocResponse, hasMdocResult, getMdocResult, setMdocResult, setMdocSession, getMdocSession } from './proxy/verifier-proxy'
+import { CERTIFY_INTERNAL_DOCKER, COLLAB_ESIGNET_PATTERN, buildDidDocument, buildJwks } from './proxy/certify-proxy'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -1480,16 +1483,14 @@ async function proxyRequest(
 
   console.log(`[proxy] ${method} ${url} → ${response.status} (${latencyMs}ms, ${payloadSize})`)
   
-  if (typeof (globalThis as any).broadcastNetworkEvent !== 'undefined') {
-    (globalThis as any).broadcastNetworkEvent({
-      method,
-      url,
-      path,
-      status: response.status,
-      latencyMs,
-      payloadSize,
-    })
-  }
+  broadcastNetworkEvent({
+    method,
+    url,
+    path,
+    status: response.status,
+    latencyMs,
+    payloadSize,
+  })
 
   return {
     status: response.status,
@@ -1504,9 +1505,6 @@ function splatPath(req: express.Request) {
   const splat = (req.params as Record<string, string[] | string>).splat
   return '/' + (Array.isArray(splat) ? splat.join('/') : splat || '')
 }
-
-const localMdocSessions = new Map<string, { transactionId: string; nonce?: string }>()
-const localMdocResults = new Map<string, any>()
 
 // The three original handlers differed only in target host and error string.
 const PROXIES: { prefix: string; target: string; label: string }[] = [
@@ -1528,31 +1526,10 @@ for (const { prefix, target, label } of PROXIES) {
       // Intercept local verifier vp-result for mDoc
       if (prefix === '/api/local-verifier' && sPath.includes('/vp-result/') && req.method === 'GET') {
         const txnId = sPath.split('/').pop() || ''
-        if (localMdocResults.has(txnId)) {
-          const mdocRes = localMdocResults.get(txnId)
+        if (hasMdocResult(txnId)) {
+          const mdocRes = getMdocResult(txnId)!
           console.log(`[local-verifier-mdoc] Returning verified mDoc result for txnId=${txnId}: ${mdocRes.verified ? 'SUCCESS' : 'FAILED'}`)
-          return res.json({
-            transactionId: txnId,
-            vpResultStatus: mdocRes.verified ? 'SUCCESS' : 'FAILED',
-            verificationStatus: mdocRes.verified ? 'SUCCESS' : 'INVALID',
-            verifierEngine: 'Local Inji Verify (MOSIP Docker Stack 0.17.0 + ISO/IEC 18013-5 Engine)',
-            checks: {
-              signatureValid: mdocRes.verified,
-              elementsValid: mdocRes.verified,
-              deviceAuthValid: mdocRes.deviceBindingVerified ?? true,
-              notExpired: true,
-              trustModel: 'Local Inji Verify (ISO/IEC 18013-5 mDoc Engine)',
-            },
-            vcResults: [
-              {
-                verificationStatus: mdocRes.verified ? 'SUCCESS' : 'INVALID',
-                format: 'mso_mdoc',
-                claims: mdocRes.claims || {},
-                error: mdocRes.error,
-              },
-            ],
-            error: mdocRes.error,
-          })
+          return res.json(formatMdocResponse(txnId, mdocRes))
         }
       }
 
@@ -1584,8 +1561,8 @@ for (const { prefix, target, label } of PROXIES) {
             const isMdocReq = JSON.stringify(body).includes('mso_mdoc') || JSON.stringify(body).includes('org.iso.18013.5.1')
             if (isMdocReq) {
               const sessionInfo = { transactionId: resp.transactionId, nonce: resp.authorizationDetails?.nonce }
-              if (resp.requestId) localMdocSessions.set(resp.requestId, sessionInfo)
-              if (resp.transactionId) localMdocSessions.set(resp.transactionId, sessionInfo)
+              if (resp.requestId) setMdocSession(resp.requestId, sessionInfo)
+              if (resp.transactionId) setMdocSession(resp.transactionId, sessionInfo)
             }
           }
         } else if (sPath.includes('/vp-request/') && req.method === 'GET' && typeof result.body === 'string' && result.body.includes('.')) {
@@ -1595,7 +1572,7 @@ for (const { prefix, target, label } of PROXIES) {
           const isMdoc = String(body?.vp_token).includes('org.iso.18013.5.1') || String(body?.presentation_submission).includes('mso_mdoc')
           if (isMdoc) {
             const state = body?.state || (typeof body?.presentation_submission === 'string' ? JSON.parse(body.presentation_submission).id : undefined)
-            const session = state ? localMdocSessions.get(state) : undefined
+            const session = state ? getMdocSession(state) : undefined
             const effectiveToken = body?.vp_token
             const hasTamper = activeTamperMode !== 'none' || String(effectiveToken).includes('BAD_SIG') || String(effectiveToken).includes('tampered')
             let mdocResult: any
@@ -1605,7 +1582,7 @@ for (const { prefix, target, label } of PROXIES) {
               mdocResult = await verifyMdocLocally(effectiveToken, { expectedNonce: session?.nonce })
             }
             const targetTxn = session?.transactionId || state
-            if (targetTxn) localMdocResults.set(targetTxn, mdocResult)
+            if (targetTxn) setMdocResult(targetTxn, mdocResult)
             console.log(`[local-verifier-mdoc] Evaluated mDoc submission for txnId=${targetTxn}, verified=${mdocResult.verified}`)
           }
         }
@@ -1641,8 +1618,6 @@ for (const { prefix, target, label } of PROXIES) {
 // This proves Inji Certify is standards-compliant and works with ANY OIDC
 // provider — not just MOSIP's own eSignet. That is a genuine interoperability
 // finding that the Playground is designed to surface.
-const CERTIFY_INTERNAL_DOCKER = 'http://certify-nginx:80'
-const COLLAB_ESIGNET_PATTERN = new RegExp('https://esignet[^"\\s]*', 'g')
 
 let lastLocalCertifyConfigId = 'FarmerCredential'
 
@@ -1859,68 +1834,7 @@ app.get('/api/playground-issuer/.well-known/openid-configuration', (_req, res) =
 
 const didDocumentHandler = (req: express.Request, res: express.Response) => {
   const baseUrl = getPublicBaseUrl(req)
-  const host = baseUrl.replace(/^https?:\/\//, '').replace(/:/g, '%3A')
-  const didWeb = `did:web:${host}`
-  const didWebPath = `${didWeb}:api:local-certify`
-  res.json({
-    '@context': [
-      'https://www.w3.org/ns/did/v1',
-      'https://w3id.org/security/suites/ed25519-2020/v1',
-      'https://w3id.org/security/suites/jws-2020/v1'
-    ],
-    id: didWeb,
-    alsoKnownAs: [
-      didWebPath,
-      'did:web:host.docker.internal%3A3001',
-      'did:web:certify-nginx%3A80'
-    ],
-    verificationMethod: [
-      {
-        id: `${didWeb}#key-0`,
-        type: 'Ed25519VerificationKey2020',
-        controller: didWeb,
-        publicKeyMultibase: localCertifyEdKey.publicKeyMultibase || 'z6Mkst4pBviY5YxiTz5m9yR5XjpWNjE252HZMmokdXYgPMGN'
-      },
-      {
-        id: `${didWebPath}#key-0`,
-        type: 'Ed25519VerificationKey2020',
-        controller: didWebPath,
-        publicKeyMultibase: localCertifyEdKey.publicKeyMultibase || 'z6Mkst4pBviY5YxiTz5m9yR5XjpWNjE252HZMmokdXYgPMGN'
-      },
-      {
-        id: 'did:web:host.docker.internal%3A3001#R-tBgzITi4Z5vLd-Rg1aU7s6T7lCIVlf-KEFeir3Mas',
-        type: 'Ed25519VerificationKey2020',
-        controller: 'did:web:host.docker.internal%3A3001',
-        publicKeyMultibase: 'z6Mkst4pBviY5YxiTz5m9yR5XjpWNjE252HZMmokdXYgPMGN'
-      },
-      {
-        id: `${didWeb}#key-p256`,
-        type: 'JsonWebKey2020',
-        controller: didWeb,
-        publicKeyJwk: localCertifyP256Key.publicJwk
-      },
-      {
-        id: `${didWebPath}#key-p256`,
-        type: 'JsonWebKey2020',
-        controller: didWebPath,
-        publicKeyJwk: localCertifyP256Key.publicJwk
-      }
-    ],
-    authentication: [
-      `${didWeb}#key-0`,
-      `${didWebPath}#key-0`,
-      `${didWeb}#key-p256`,
-      `${didWebPath}#key-p256`,
-      'did:web:host.docker.internal%3A3001#R-tBgzITi4Z5vLd-Rg1aU7s6T7lCIVlf-KEFeir3Mas'
-    ],
-    assertionMethod: [
-      `${didWeb}#key-0`,
-      `${didWebPath}#key-0`,
-      `${didWeb}#key-p256`,
-      `${didWebPath}#key-p256`,
-      'did:web:host.docker.internal%3A3001#R-tBgzITi4Z5vLd-Rg1aU7s6T7lCIVlf-KEFeir3Mas'
-    ]
-  })
+  res.json(buildDidDocument({ baseUrl, localCertifyEdKey, localCertifyP256Key }))
 }
 
 app.get([
@@ -1931,12 +1845,7 @@ app.get([
 ], didDocumentHandler)
 
 const jwksHandler = (_req: express.Request, res: express.Response) => {
-  res.json({
-    keys: [
-      localCertifyP256Key.publicJwk,
-      localCertifyEdKey.publicJwk
-    ].filter(Boolean)
-  })
+  res.json(buildJwks({ localCertifyP256Key, localCertifyEdKey }))
 }
 
 app.get(['/.well-known/jwks.json', '/api/local-certify/.well-known/jwks.json', '/api/local-certify/jwks'], jwksHandler)
