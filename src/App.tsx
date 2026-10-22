@@ -12,6 +12,8 @@ import {
   TamperBanner,
   ManualIssuanceSection,
   ManualPresentationSection,
+  InteractiveWalletModal,
+  ManualModePreRunBanner,
 } from './components'
 import { useStore } from './store/index'
 
@@ -128,6 +130,12 @@ function App() {
         <div className="mb-8">
           <RoleSelector />
         </div>
+
+        <ManualModePreRunBanner
+          selectedWallet={selectedWallet}
+          tunnelUrl={tunnelUrl}
+          isRunning={isRunning}
+        />
 
         {/* Summary + run */}
         <div className="flex flex-wrap items-center justify-between gap-4 border border-slate-800 rounded-lg px-4 py-3 mb-6 bg-slate-900/30">
@@ -283,6 +291,22 @@ function App() {
         </div>
 
         <InteractiveAuthModal />
+
+        {isManualMode && (
+          <InteractiveWalletModal
+            selectedWallet={selectedWallet}
+            selectedIssuer={selectedIssuer}
+            selectedCredType={selectedCredType}
+            offerUri={offerUri}
+            vpRequestDeepLink={vpRequestDeepLink}
+            vpRequestStep={vpRequestStep}
+            vpClientId={vpClientId}
+            requestUri={requestUri}
+            isRunning={isRunning}
+            onContinueVerification={continueVerification}
+            onCheckVerificationResult={checkVerificationResult}
+          />
+        )}
       </main>
     </div>
   )
