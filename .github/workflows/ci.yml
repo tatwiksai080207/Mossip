@@ -1,0 +1,66 @@
+name: Inji Interoperability Playground CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Nightly conformance run against MOSIP Collab Sandbox at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-and-unit-tests:
+    name: Code Quality, Typecheck & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Static Typecheck (tsc -b)
+        run: npm run typecheck
+
+      - name: Code Linter (oxlint)
+        run: npm run lint
+
+      - name: Automated Unit Tests (Format Encoders, DIDs & Tamper Engine)
+        run: npm test
+
+      - name: Production Bundle Build (Vite)
+        run: npm run build
+
+  conformance-matrix:
+    name: Multi-Format Cryptographic Conformance & Live Interop
+    runs-on: ubuntu-latest
+    needs: quality-and-unit-tests
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Multi-Format Conformance Suite (W3C VC 1.1/2.0, SD-JWT, mDoc)
+        run: npm run check:suite
+        env:
+          NODE_ENV: test

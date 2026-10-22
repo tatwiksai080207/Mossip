@@ -7,8 +7,25 @@ services:
       dockerfile: Dockerfile
     container_name: inji-playground
     ports:
-      - "3001:3001"
+      - "${PORT:-3001}:3001"
     environment:
       - PORT=3001
-      - PUBLIC_BASE_URL=http://localhost:3001
+      - NODE_ENV=production
+      - SERVE_STATIC=true
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:3001}
+      - COLLAB_CERTIFY_URL=${COLLAB_CERTIFY_URL:-https://injicertify-mock.collab.mosip.net}
+      - COLLAB_VERIFY_URL=${COLLAB_VERIFY_URL:-https://injiverify.collab.mosip.net}
+      - COLLAB_ESIGNET_URL=${COLLAB_ESIGNET_URL:-https://esignet.collab.mosip.net}
+      - COLLAB_MIMOTO_URL=${COLLAB_MIMOTO_URL:-https://api.collab.mosip.net/v1/mimoto}
+      - DATABASE_HOST=${DATABASE_HOST:-database}
+      - DATABASE_PORT=${DATABASE_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-inji_mimoto}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped

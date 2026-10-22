@@ -9,6 +9,8 @@
     "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
+    "test": "tsx --test tests/*.test.ts",
+    "test:all": "npm run typecheck && npm run test && npm run check:suite",
     "check:suite": "tsx scripts/check-suite.ts",
     "lint": "oxlint",
     "preview": "vite preview"

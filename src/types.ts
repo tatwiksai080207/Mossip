@@ -1,5 +1,5 @@
-// Credential format types supported by the Inji ecosystem
-export type CredentialFormat = 'ldp_vc' | 'vc+sd-jwt' | 'mso_mdoc'
+export type { CredentialFormat, DataModel, TamperMode, FlowStepId, FlowStepStatus } from './shared/types'
+import type { CredentialFormat, DataModel, TamperMode } from './shared/types'
 
 export interface CredentialType {
   id: string
@@ -13,7 +13,7 @@ export interface CredentialType {
   /** SD-JWT VC type identifier, used to build a DCQL `vct_values`. */
   vct?: string
   /** VC Data Model version, so the report can distinguish 1.1 from 2.0 runs. */
-  dataModel?: '1.1' | '2.0'
+  dataModel?: DataModel
   /** mDoc doctype, e.g. `org.iso.18013.5.1.mDL`. */
   doctype?: string
 }
@@ -24,7 +24,7 @@ export interface IssuerConfig {
   name: string
   description: string
   credentialTypes: CredentialType[]
-  /** Credential issuer base URL, e.g. `https://injicertify-farmer.collab.mosip.net`. */
+  /** Credential issuer base URL, e.g. `http://localhost:3001/api/local-certify`. */
   host?: string
   /** OIDC client the Collab sandbox has registered for this issuer, from Mimoto. */
   clientId?: string
@@ -56,7 +56,7 @@ export interface TestRunConfig {
   wallet: WalletConfig
   verifier: VerifierConfig
   credentialType: CredentialType
-  tamperMode?: 'none' | 'signature' | 'expired'
+  tamperMode?: TamperMode
 }
 
 export interface NetworkEvent {

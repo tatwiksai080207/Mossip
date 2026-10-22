@@ -12,9 +12,9 @@ Per Mandatory Task #6, the playground natively supports multiple credential form
 
 | Credential Format | Specification Baseline | Signature Suite | Holder Binding Method | Status |
 |---|---|---|---|---|
-| **W3C VC JSON-LD 1.1** | W3C VC Data Model v1.1 | `Ed25519Signature2020` | `did:key` (Ed25519) | ✅ Verified (Local & Collab) |
-| **W3C VC JSON-LD 2.0** | W3C VC Data Model v2.0 | `Ed25519Signature2020` | `did:key` (Ed25519) | ✅ Verified (Local & Collab) |
-| **IETF SD-JWT VC** | `draft-ietf-oauth-sd-jwt-vc` | `ES256` (ECDSA P-256) | Key Binding JWT (`kb+jwt`, `cnf.jwk`) | ✅ Verified (Playground & Wire Engine) |
+| **W3C VC JSON-LD 1.1** | W3C VC Data Model v1.1 | `Ed25519Signature2020` | `did:key` (Ed25519) | VERIFIED (Local & Collab) |
+| **W3C VC JSON-LD 2.0** | W3C VC Data Model v2.0 | `Ed25519Signature2020` | `did:key` (Ed25519) | VERIFIED (Local & Collab) |
+| **IETF SD-JWT VC** | `draft-ietf-oauth-sd-jwt-vc` | `ES256` (ECDSA P-256) | Key Binding JWT (`kb+jwt`, `cnf.jwk`) | VERIFIED (Playground & Wire Engine) |
 
 Each test run in the playground UI prominently displays the active format badge (`Format: ldp_vc` or `Format: vc+sd-jwt`) and passes format metadata to the downstream protocol inspector and exportable reports.
 

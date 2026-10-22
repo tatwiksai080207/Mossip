@@ -1,6 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../../store/index'
 import type { CredentialFormat } from '../../types'
+import { RunHistoryStats } from './RunHistoryStats'
+import { RunHistoryFilters } from './RunHistoryFilters'
+
 
 const FORMAT_LABELS: Record<string, string> = {
   'ldp_vc': 'W3C VC (JSON-LD)',
@@ -144,125 +147,31 @@ export default function RunHistory() {
       </div>
 
       {/* 2. Release Regression Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 sm:p-5 bg-slate-950/40 border-b border-slate-800">
-        {Object.entries(releaseStats).map(([ver, stats]) => {
-          const rate = Math.round((stats.pass / stats.total) * 100)
-          const isSelected = selectedVersion === ver
-          return (
-            <button
-              key={ver}
-              onClick={() => setSelectedVersion(selectedVersion === ver ? 'all' : ver)}
-              className={`p-3.5 rounded-lg border text-left transition-all cursor-pointer ${
-                isSelected
-                  ? 'border-blue-500 bg-blue-500/10 ring-1 ring-blue-500/50'
-                  : 'border-slate-800 hover:border-slate-700 bg-slate-900/60'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className={`px-2 py-0.5 text-xs font-semibold rounded border ${getVersionBadge(ver)}`}>
-                  Release {ver}
-                </span>
-                <span className={`text-xs font-bold ${rate === 100 ? 'text-emerald-400' : rate >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
-                  {rate}% Pass
-                </span>
-              </div>
-              <div className="mt-2.5 flex items-center justify-between text-xs text-slate-400">
-                <span>{stats.pass} passed / {stats.total} total</span>
-                <span className="text-[11px] text-slate-500">
-                  {stats.fail === 0 ? '✓ 0 Regressions' : `✗ ${stats.fail} gap(s)`}
-                </span>
-              </div>
-              {/* Progress bar */}
-              <div className="mt-2 h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                <div
-                  className={`h-full transition-all duration-500 ${
-                    rate === 100 ? 'bg-emerald-500' : rate >= 60 ? 'bg-amber-500' : 'bg-red-500'
-                  }`}
-                  style={{ width: `${rate}%` }}
-                />
-              </div>
-            </button>
-          )
-        })}
-      </div>
+      <RunHistoryStats
+        releaseStats={releaseStats}
+        selectedVersion={selectedVersion}
+        onSelectVersion={(ver) => setSelectedVersion(selectedVersion === ver ? 'all' : ver)}
+        getVersionBadge={getVersionBadge}
+      />
 
       {/* 3. Interactive Filter Bar */}
-      <div className="p-4 border-b border-slate-800 bg-slate-900/20 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Release Filter */}
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5">
-            <span className="text-slate-500 font-medium">Release:</span>
-            <select
-              value={selectedVersion}
-              onChange={(e) => setSelectedVersion(e.target.value)}
-              className="bg-transparent text-slate-200 focus:outline-none cursor-pointer"
-            >
-              <option value="all" className="bg-slate-900">All Releases</option>
-              {availableVersions.map(v => (
-                <option key={v} value={v} className="bg-slate-900">{v}</option>
-              ))}
-            </select>
-          </div>
+      <RunHistoryFilters
+        selectedVersion={selectedVersion}
+        setSelectedVersion={setSelectedVersion}
+        availableVersions={availableVersions}
+        selectedFormat={selectedFormat}
+        setSelectedFormat={setSelectedFormat}
+        selectedOutcome={selectedOutcome}
+        setSelectedOutcome={setSelectedOutcome}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        hasActiveFilters={hasActiveFilters}
+        onResetFilters={handleResetFilters}
+        totalCount={history.length}
+        filteredCount={filteredRuns.length}
+        onExportFilteredJSON={exportFilteredJSON}
+      />
 
-          {/* Format Filter */}
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5">
-            <span className="text-slate-500 font-medium">Format:</span>
-            <select
-              value={selectedFormat}
-              onChange={(e) => setSelectedFormat(e.target.value)}
-              className="bg-transparent text-slate-200 focus:outline-none cursor-pointer"
-            >
-              <option value="all" className="bg-slate-900">All Formats</option>
-              <option value="ldp_vc" className="bg-slate-900">W3C VC (JSON-LD)</option>
-              <option value="vc+sd-jwt" className="bg-slate-900">SD-JWT VC</option>
-              <option value="mso_mdoc" className="bg-slate-900">ISO 18013-5 mDoc</option>
-            </select>
-          </div>
-
-          {/* Outcome Filter */}
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5">
-            <span className="text-slate-500 font-medium">Outcome:</span>
-            <select
-              value={selectedOutcome}
-              onChange={(e) => setSelectedOutcome(e.target.value)}
-              className="bg-transparent text-slate-200 focus:outline-none cursor-pointer"
-            >
-              <option value="all" className="bg-slate-900">All Outcomes</option>
-              <option value="pass" className="bg-slate-900 text-emerald-400">PASS (✓)</option>
-              <option value="fail" className="bg-slate-900 text-red-400">FAIL (✗)</option>
-            </select>
-          </div>
-
-          {/* Search Input */}
-          <input
-            type="text"
-            placeholder="Search runs..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-slate-700 w-40 sm:w-52"
-          />
-
-          {hasActiveFilters && (
-            <button
-              onClick={handleResetFilters}
-              className="px-2.5 py-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors"
-            >
-              Reset Filters
-            </button>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3 text-slate-400">
-          <span>Showing <strong>{filteredRuns.length}</strong> of {history.length} runs</span>
-          <button
-            onClick={exportFilteredJSON}
-            disabled={filteredRuns.length === 0}
-            className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors disabled:opacity-50"
-          >
-            Export Filtered JSON
-          </button>
-        </div>
-      </div>
 
       {/* 4. Run List / Table */}
       {filteredRuns.length === 0 ? (

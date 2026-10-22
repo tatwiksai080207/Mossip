@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/crates/oxc_linter/configuration_schema.json",
+  "plugins": [
+    "eslint",
+    "typescript",
+    "unicorn"
+  ],
+  "rules": {
+    "eqeqeq": "warn",
+    "no-console": "off",
+    "no-unused-vars": "warn",
+    "no-debugger": "error"
+  }
+}

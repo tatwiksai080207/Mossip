@@ -1,2 +1,6 @@
-export * from './api'
+export * from './http-client'
+export * from './crypto-pkce'
+export * from './issuance'
+export * from './presentation'
+export * from './verification'
 export * from './dcql'
