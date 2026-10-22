@@ -21,12 +21,23 @@ import { useStore } from './store/index'
 function App() {
   const {
     selectedIssuer, selectedWallet, selectedVerifier, selectedCredType,
-    steps, isRunning, runFlow, stopFlow, resumeOAuthFlow, continueVerification, checkVerificationResult,
+    steps, isRunning, isTestActive, sessionStatus, runFlow, abortTest, resetTest, resumeOAuthFlow, continueVerification, checkVerificationResult,
     tamperMode, setTamperMode,
   } = useStore()
 
   const [tunnelUrl, setTunnelUrl] = useState<string>('http://host.docker.internal:3001')
   const [diagramExpanded, setDiagramExpanded] = useState<boolean>(false)
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isTestActive) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [isTestActive])
 
   useEffect(() => {
     fetch('/api/tunnel')
@@ -60,7 +71,7 @@ function App() {
         if (data.type === 'network_event') {
           useStore.getState().addNetworkEvent(data)
         }
-      } catch (err) { }
+      } catch { }
     }
     
     return () => ws.close()
@@ -78,9 +89,9 @@ function App() {
     return <div className="p-10 text-red-400 font-mono">Authentication failed: No code provided.</div>
   }
 
-  const canRun = selectedIssuer && selectedWallet && selectedVerifier && selectedCredType && !isRunning
-  const isManualMode = selectedWallet?.id === 'inji-web-manual' || selectedWallet?.id === 'inji-mobile'
-  const flowHasRun = !isRunning && steps.length > 0 && steps.every(s => (s.status !== 'pending' || isManualMode) && s.status !== 'running')
+  const canRun = selectedIssuer && selectedWallet && selectedVerifier && selectedCredType && !isTestActive
+  const isManualMode = selectedWallet?.id === 'inji-wallet-interactive' || selectedWallet?.id === 'inji-web-manual' || selectedWallet?.id === 'inji-mobile'
+  const flowHasRun = !isTestActive && steps.length > 0 && (sessionStatus === 'completed' || sessionStatus === 'failed' || (!isManualMode && steps.every(s => s.status !== 'pending' && s.status !== 'running')))
 
   const offerStep = steps.find(s => s.id === 'credential-offer')
   const offerUri = offerStep?.status === 'done' ? (offerStep.payload as Record<string, unknown>)?._offer_uri as string : null
@@ -134,7 +145,7 @@ function App() {
         <ManualModePreRunBanner
           selectedWallet={selectedWallet}
           tunnelUrl={tunnelUrl}
-          isRunning={isRunning}
+          isRunning={isTestActive}
         />
 
         {/* Summary + run */}
@@ -157,13 +168,22 @@ function App() {
 
           <div className="flex items-center gap-3">
             {/* Tamper & Negative Testing Mode Selector */}
-            <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-md px-2.5 py-1.5">
-              <span className="text-xs text-slate-400 font-medium">Tamper Test:</span>
+            <div className={`flex items-center gap-2 bg-slate-900 border rounded-md px-2.5 py-1.5 transition-colors ${
+              isTestActive ? 'border-slate-800/60 opacity-60' : 'border-slate-800'
+            }`}>
+              <span className="text-xs text-slate-400 font-medium flex items-center gap-1">
+                {isTestActive && (
+                  <svg className="w-3 h-3 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                )}
+                Tamper Test:
+              </span>
               <select
                 value={tamperMode}
                 onChange={(e) => setTamperMode(e.target.value as any)}
-                disabled={isRunning}
-                className="bg-transparent text-xs text-slate-200 focus:outline-none cursor-pointer"
+                disabled={isTestActive}
+                className={`bg-transparent text-xs text-slate-200 focus:outline-none ${isTestActive ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer'}`}
               >
                 <option value="none" className="bg-slate-900 text-slate-200">Normal (Valid VP)</option>
                 <option value="signature" className="bg-slate-900 text-amber-300">Corrupt Signature (Negative)</option>
@@ -171,29 +191,41 @@ function App() {
               </select>
             </div>
 
-            {isRunning ? (
+            {isTestActive ? (
               <button
                 type="button"
-                onClick={stopFlow}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-red-600 hover:bg-red-500 text-white flex items-center gap-2 transition-colors shadow-sm cursor-pointer"
-                title="Stop the current test"
+                onClick={abortTest}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-500 text-white flex items-center gap-2 transition-all shadow-md hover:shadow-red-900/30 cursor-pointer animate-pulse-subtle"
+                title="Abort current test run and unlock configuration"
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                   <rect x="5" y="5" width="14" height="14" rx="2" />
                 </svg>
-                <span>Stop Test</span>
+                <span>Abort Test</span>
               </button>
             ) : (
-              <button
-                disabled={!canRun}
-                onClick={runFlow}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${canRun
-                    ? 'bg-blue-600 text-white hover:bg-blue-500 cursor-pointer'
-                    : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                  }`}
-              >
-                Run Test
-              </button>
+              <div className="flex items-center gap-2">
+                {steps.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={resetTest}
+                    className="px-3 py-2 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+                    title="Clear diagram and reset test"
+                  >
+                    Reset
+                  </button>
+                )}
+                <button
+                  disabled={!canRun}
+                  onClick={runFlow}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${canRun
+                      ? 'bg-blue-600 text-white hover:bg-blue-500 cursor-pointer'
+                      : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                    }`}
+                >
+                  Run Test
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -220,7 +252,7 @@ function App() {
           <FlowProgress />
         )}
 
-        {isManualMode && (
+        {isManualMode && isTestActive && (
           <ManualIssuanceSection
             selectedWallet={selectedWallet}
             selectedIssuer={selectedIssuer}
@@ -233,7 +265,7 @@ function App() {
           />
         )}
 
-        {isManualMode && (
+        {isManualMode && isTestActive && (
           <ManualPresentationSection
             selectedWallet={selectedWallet}
             vpRequestDeepLink={vpRequestDeepLink}
@@ -247,7 +279,11 @@ function App() {
 
         {flowHasRun && steps.some(s => s.id === 'credential-issuance' && s.status === 'error') && (
           <div className="mt-4 border border-amber-500/30 bg-amber-500/5 rounded-lg px-4 py-3 flex gap-3">
-            <span className="text-amber-400 text-lg leading-none mt-0.5">⚠</span>
+            <div className="w-5 h-5 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0 mt-0.5">
+              <svg className="w-3.5 h-3.5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
             <div>
               <p className="text-sm font-medium text-amber-300">Interoperability Gap Discovered</p>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -303,8 +339,10 @@ function App() {
             vpClientId={vpClientId}
             requestUri={requestUri}
             isRunning={isRunning}
+            isTestActive={isTestActive}
             onContinueVerification={continueVerification}
             onCheckVerificationResult={checkVerificationResult}
+            onAbortTest={abortTest}
           />
         )}
       </main>

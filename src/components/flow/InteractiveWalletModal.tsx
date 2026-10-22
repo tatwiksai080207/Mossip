@@ -12,8 +12,10 @@ interface InteractiveWalletModalProps {
   vpClientId: string | null
   requestUri: string | null
   isRunning: boolean
+  isTestActive: boolean
   onContinueVerification: () => void
   onCheckVerificationResult: () => void
+  onAbortTest: () => void
 }
 
 export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
@@ -26,11 +28,14 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
   vpClientId,
   requestUri,
   isRunning,
+  isTestActive,
   onContinueVerification,
   onCheckVerificationResult,
+  onAbortTest,
 }) => {
   const [isOpen, setIsOpen] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [walletChannel, setWalletChannel] = useState<'mobile' | 'web'>('mobile')
 
   // Re-open modal whenever a new interactive step becomes active
   useEffect(() => {
@@ -52,7 +57,7 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
   const isIssuancePhase = Boolean(offerUri && !vpRequestDeepLink)
   const isPresentationPhase = Boolean(vpRequestDeepLink)
 
-  if (!isIssuancePhase && !isPresentationPhase) return null
+  if (!isTestActive || (!isIssuancePhase && !isPresentationPhase)) return null
 
   const activeUri = isIssuancePhase ? offerUri : vpRequestDeepLink
 
@@ -144,9 +149,43 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
           </button>
         </div>
 
+        {/* Channel Segmented Switcher */}
+        <div className="px-5 pt-4 pb-1 bg-slate-900 flex justify-center border-b border-slate-800/60">
+          <div className="bg-slate-950/80 p-1 rounded-xl border border-slate-800 flex items-center gap-1 w-full max-w-xs">
+            <button
+              type="button"
+              onClick={() => setWalletChannel('mobile')}
+              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                walletChannel === 'mobile'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              <span>Inji Mobile (QR)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setWalletChannel('web')}
+              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                walletChannel === 'web'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+              </svg>
+              <span>Inji Web (Browser)</span>
+            </button>
+          </div>
+        </div>
+
         {/* Modal Body */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1">
-          {selectedWallet?.id === 'inji-mobile' ? (
+          {walletChannel === 'mobile' ? (
             /* Inji Mobile QR Flow */
             <div className="flex flex-col items-center text-center">
               <p className="text-xs sm:text-sm text-slate-300 mb-4 max-w-md">
@@ -231,7 +270,7 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
                         rel="noreferrer"
                         className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2"
                       >
-                        <span>Open &amp; Directly Download in Web Wallet (Port 3004)</span>
+                        <span>Open &amp; Directly Download in Web Wallet</span>
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                         </svg>
@@ -245,7 +284,7 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
                         1. Unlock / Login to Web Wallet first
                       </a>
                       <p className="text-xs text-blue-400/90 text-center max-w-lg bg-blue-500/10 border border-blue-500/20 px-3 py-2 rounded-lg mt-2">
-                        💡 <strong>Direct Flow:</strong> Routes directly to <strong>{selectedIssuer?.name || 'Playground Issuer'}</strong> and auto-selects <strong>{selectedCredType?.name || targetCredId}</strong>.
+                        <strong>Direct Flow:</strong> Routes directly to <strong>{selectedIssuer?.name || 'Playground Issuer'}</strong> and auto-selects <strong>{selectedCredType?.name || targetCredId}</strong>.
                       </p>
                     </div>
                   )
@@ -258,7 +297,7 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
                     rel="noreferrer"
                     className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2"
                   >
-                    <span>Present from Local Web Wallet (Port 3004)</span>
+                    <span>Present from Local Web Wallet</span>
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
@@ -279,13 +318,19 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
 
         {/* Modal Footer Actions */}
         <div className="p-4 sm:p-5 bg-slate-950/70 border-t border-slate-800 flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => setIsOpen(false)}
-            className="text-xs text-slate-400 hover:text-slate-200 px-3 py-2 rounded-lg hover:bg-slate-800/80 transition-colors cursor-pointer"
-          >
-            Minimize &amp; View Diagram
-          </button>
+          <div>
+            <button
+              type="button"
+              onClick={onAbortTest}
+              className="text-xs text-red-400 hover:text-red-200 px-3 py-2 rounded-lg border border-red-500/30 hover:bg-red-950/40 transition-colors cursor-pointer flex items-center gap-1.5"
+              title="Abort this test run"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="5" y="5" width="14" height="14" rx="2" />
+              </svg>
+              <span>Abort Test</span>
+            </button>
+          </div>
 
           {isIssuancePhase ? (
             <button

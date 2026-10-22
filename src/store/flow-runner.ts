@@ -35,6 +35,9 @@ export async function runFlowExecution(get: StoreGet, set: StoreSet): Promise<vo
   const startTime = Date.now()
   set({
     isRunning: true,
+    isTestActive: true,
+    isStepBusy: true,
+    sessionStatus: 'executing',
     steps: [],
     pausedStep: null,
     oauthUrl: null,
@@ -62,7 +65,7 @@ export async function runFlowExecution(get: StoreGet, set: StoreSet): Promise<vo
   let manualWait = false
 
   for (let i = 0; i < FLOW_STEPS.length; i++) {
-    if (!get().isRunning) return
+    if (!get().isTestActive) return
 
     const stepId = FLOW_STEPS[i].id
 
@@ -72,7 +75,7 @@ export async function runFlowExecution(get: StoreGet, set: StoreSet): Promise<vo
 
     try {
       const result = await stepActions[stepId]()
-      if (!get().isRunning) return
+      if (!get().isTestActive) return
 
       set(state => ({
         steps: state.steps.map((s, idx) =>
@@ -81,7 +84,7 @@ export async function runFlowExecution(get: StoreGet, set: StoreSet): Promise<vo
       }))
 
       if (
-        (selectedWallet.id === 'inji-web-manual' || selectedWallet.id === 'inji-mobile') &&
+        (selectedWallet.id === 'inji-wallet-interactive' || selectedWallet.id === 'inji-web-manual' || selectedWallet.id === 'inji-mobile') &&
         stepId === 'credential-offer'
       ) {
         set(state => ({
@@ -90,12 +93,16 @@ export async function runFlowExecution(get: StoreGet, set: StoreSet): Promise<vo
               ? { ...s, status: 'pending', payload: { _note: 'Manual mode: waiting for user to complete flow.' } }
               : s
           ),
+          isRunning: false,
+          isStepBusy: false,
+          sessionStatus: 'waiting_for_wallet',
+          isTestActive: true,
         }))
         manualWait = true
         break
       }
     } catch (err: unknown) {
-      if (!get().isRunning) return
+      if (!get().isTestActive) return
 
       const errObj = err as { stepPayload?: Record<string, unknown>; message?: string; oauthUrl?: string }
 
@@ -112,9 +119,12 @@ export async function runFlowExecution(get: StoreGet, set: StoreSet): Promise<vo
 
         set({ pausedStep: null, oauthUrl: null, _resumeResolver: null } as Partial<PlaygroundStore>)
 
-        if (!code || !get().isRunning) {
+        if (!code || !get().isTestActive) {
           set(state => ({
             isRunning: false,
+            isTestActive: false,
+            isStepBusy: false,
+            sessionStatus: 'aborted',
             steps: state.steps.map((s, idx) =>
               idx === i
                 ? {
@@ -131,7 +141,7 @@ export async function runFlowExecution(get: StoreGet, set: StoreSet): Promise<vo
 
         if (stepId === 'token-exchange') {
           const result = await api.exchangeToken(get().selectedIssuer!, get().selectedCredType!, code)
-          if (!get().isRunning) return
+          if (!get().isTestActive) return
 
           set(state => ({
             steps: state.steps.map((s, idx) =>
@@ -147,11 +157,16 @@ export async function runFlowExecution(get: StoreGet, set: StoreSet): Promise<vo
         : { _error: String(err) }
       set(state => ({
         steps: state.steps.map((s, idx) => (idx === i ? { ...s, status: 'error', payload, source: 'live' } : s)),
+        isRunning: false,
+        isTestActive: false,
+        isStepBusy: false,
+        sessionStatus: 'failed',
       }))
+      return
     }
   }
 
-  if (!manualWait && get().isRunning) {
+  if (!manualWait && get().isTestActive) {
     const finalSteps = get().steps
     const evaluation = evaluateTestRun(finalSteps, get().runTamperMode)
     const run: TestRun = {
@@ -172,9 +187,13 @@ export async function runFlowExecution(get: StoreGet, set: StoreSet): Promise<vo
 
     const newHistory = [run, ...get().history]
     saveHistory(newHistory)
-    set({ isRunning: false, history: newHistory })
-  } else {
-    set({ isRunning: false })
+    set({
+      isRunning: false,
+      isTestActive: false,
+      isStepBusy: false,
+      sessionStatus: evaluation.passed ? 'completed' : 'failed',
+      history: newHistory,
+    })
   }
 }
 
@@ -188,7 +207,7 @@ export async function continueVerificationExecution(get: StoreGet, set: StoreSet
     body: JSON.stringify({ tamperMode }),
   }).catch(err => console.error('Failed to sync tamper mode on continueVerification:', err))
 
-  set({ isRunning: true })
+  set({ isRunning: true, isStepBusy: true, isTestActive: true, sessionStatus: 'executing' })
 
   const vpRequestIdx = steps.findIndex(s => s.id === 'vp-request')
   if (vpRequestIdx === -1) return
@@ -199,7 +218,7 @@ export async function continueVerificationExecution(get: StoreGet, set: StoreSet
 
   try {
     const result = await api.createVPRequest(selectedCredType, selectedVerifier)
-    if (!get().isRunning) return
+    if (!get().isTestActive) return
     set(state => ({
       steps: state.steps.map((s, idx) => {
         if (idx === vpRequestIdx) return { ...s, status: 'done', payload: result.payload, source: result.source }
@@ -207,9 +226,13 @@ export async function continueVerificationExecution(get: StoreGet, set: StoreSet
           return { ...s, status: 'pending', payload: { _note: 'Manual mode: waiting for user to verify.' } }
         return s
       }) as FlowStepInfo[],
+      isRunning: false,
+      isStepBusy: false,
+      isTestActive: true,
+      sessionStatus: 'waiting_for_wallet',
     }))
   } catch (err: unknown) {
-    if (!get().isRunning) return
+    if (!get().isTestActive) return
     const errObj = err as { stepPayload?: Record<string, unknown>; message?: string }
     const payload = errObj.stepPayload ? { _error: errObj.message, ...errObj.stepPayload } : { _error: String(err) }
 
@@ -217,17 +240,19 @@ export async function continueVerificationExecution(get: StoreGet, set: StoreSet
       steps: state.steps.map((s, idx) =>
         idx === vpRequestIdx ? { ...s, status: 'error', payload, source: 'live' } : s
       ),
+      isRunning: false,
+      isStepBusy: false,
+      isTestActive: false,
+      sessionStatus: 'failed',
     }))
   }
-
-  set({ isRunning: false })
 }
 
 export async function checkVerificationResultExecution(get: StoreGet, set: StoreSet): Promise<void> {
   const { steps, selectedVerifier } = get()
   if (!selectedVerifier) return
 
-  set({ isRunning: true })
+  set({ isRunning: true, isStepBusy: true, isTestActive: true, sessionStatus: 'executing' })
 
   const verificationIdx = steps.findIndex(s => s.id === 'verification')
   if (verificationIdx === -1) return
@@ -238,8 +263,8 @@ export async function checkVerificationResultExecution(get: StoreGet, set: Store
 
   try {
     const result = await api.verifyPresentation(selectedVerifier)
-    if (!get().isRunning) return
-    const isManual = get().selectedWallet?.id === 'inji-web-manual' || get().selectedWallet?.id === 'inji-mobile'
+    if (!get().isTestActive) return
+    const isManual = get().selectedWallet?.id === 'inji-wallet-interactive' || get().selectedWallet?.id === 'inji-web-manual' || get().selectedWallet?.id === 'inji-mobile'
     set(state => ({
       steps: state.steps.map((s, idx) => {
         if (idx === verificationIdx) return { ...s, status: 'done', payload: result.payload, source: result.source }
@@ -257,8 +282,35 @@ export async function checkVerificationResultExecution(get: StoreGet, set: Store
         return s
       }) as FlowStepInfo[],
     }))
+
+    const finalSteps = get().steps
+    const evaluation = evaluateTestRun(finalSteps, get().tamperMode)
+    const run: TestRun = {
+      id: `run-${Date.now()}`,
+      version: 'v0.17.0 (Live)',
+      durationMs: 1400,
+      config: {
+        issuer: get().selectedIssuer!,
+        wallet: get().selectedWallet!,
+        verifier: get().selectedVerifier!,
+        credentialType: get().selectedCredType!,
+      },
+      steps: finalSteps,
+      result: evaluation.passed ? 'pass' : 'fail',
+      timestamp: Date.now(),
+    }
+
+    const newHistory = [run, ...get().history]
+    saveHistory(newHistory)
+    set({
+      isRunning: false,
+      isStepBusy: false,
+      isTestActive: false,
+      sessionStatus: evaluation.passed ? 'completed' : 'failed',
+      history: newHistory,
+    })
   } catch (err: unknown) {
-    if (!get().isRunning) return
+    if (!get().isTestActive) return
     const errObj = err as { stepPayload?: Record<string, unknown>; message?: string }
     const payload = errObj.stepPayload ? { _error: errObj.message, ...errObj.stepPayload } : { _error: String(err) }
 
@@ -266,27 +318,10 @@ export async function checkVerificationResultExecution(get: StoreGet, set: Store
       steps: state.steps.map((s, idx) =>
         idx === verificationIdx ? { ...s, status: 'error', payload, source: 'live' } : s
       ),
+      isRunning: false,
+      isStepBusy: false,
+      isTestActive: false,
+      sessionStatus: 'failed',
     }))
   }
-
-  const finalSteps = get().steps
-  const evaluation = evaluateTestRun(finalSteps, get().tamperMode)
-  const run: TestRun = {
-    id: `run-${Date.now()}`,
-    version: 'v0.17.0 (Live)',
-    durationMs: 1400,
-    config: {
-      issuer: get().selectedIssuer!,
-      wallet: get().selectedWallet!,
-      verifier: get().selectedVerifier!,
-      credentialType: get().selectedCredType!,
-    },
-    steps: finalSteps,
-    result: evaluation.passed ? 'pass' : 'fail',
-    timestamp: Date.now(),
-  }
-
-  const newHistory = [run, ...get().history]
-  saveHistory(newHistory)
-  set({ isRunning: false, history: newHistory })
 }

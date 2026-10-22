@@ -227,10 +227,18 @@ export default function RunHistory() {
 
                   <div className="flex items-center gap-4 text-slate-500 shrink-0">
                     {run.durationMs && (
-                      <span className="font-mono text-slate-400">⏱ {(run.durationMs / 1000).toFixed(1)}s</span>
+                      <span className="font-mono text-slate-400 flex items-center gap-1 text-xs">
+                        <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <circle cx="12" cy="12" r="9" strokeWidth="2" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 7v5l3 3" />
+                        </svg>
+                        {(run.durationMs / 1000).toFixed(1)}s
+                      </span>
                     )}
                     <span>{formatRelativeTime(run.timestamp)}</span>
-                    <span className="text-slate-600 text-sm">{isExpanded ? '▴' : '▾'}</span>
+                    <svg className={`w-4 h-4 text-slate-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                   </div>
                 </div>
 
@@ -266,9 +274,17 @@ export default function RunHistory() {
                           {run.steps.map((st, idx) => (
                             <div key={idx} className="flex items-center justify-between py-1 px-2 rounded bg-slate-950/40 border border-slate-800/40 text-slate-300">
                               <div className="flex items-center gap-2">
-                                <span className={st.status === 'done' ? 'text-emerald-400' : st.status === 'error' ? 'text-red-400' : 'text-slate-500'}>
-                                  {st.status === 'done' ? '✓' : st.status === 'error' ? '✗' : '○'}
-                                </span>
+                                {st.status === 'done' ? (
+                                  <svg className="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                ) : st.status === 'error' ? (
+                                  <svg className="w-3.5 h-3.5 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                ) : (
+                                  <div className="w-2.5 h-2.5 rounded-full border border-slate-600 shrink-0 mx-0.5" />
+                                )}
                                 <span>{idx + 1}. {st.label}</span>
                               </div>
                               <div className="flex items-center gap-2">

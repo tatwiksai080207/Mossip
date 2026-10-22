@@ -81,6 +81,8 @@ export type FlowStep =
 
 export type StepStatus = 'pending' | 'running' | 'done' | 'error'
 
+export type TestSessionStatus = 'idle' | 'executing' | 'waiting_for_wallet' | 'completed' | 'failed' | 'aborted'
+
 export interface FlowStepInfo {
   id: FlowStep
   label: string

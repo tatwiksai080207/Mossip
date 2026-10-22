@@ -27,11 +27,16 @@ export function generateFullFlowDSL(params: {
 }): string {
   const { issuerName, walletName, verifierName, credFormat, steps, tamperMode, networkEvents } = params
 
-  const getStepStatus = (id: FlowStep) => steps.find(s => s.id === id)?.status || 'pending'
-  const getIcon = (st: StepStatus) => {
-    if (st === 'done') return ' ✓'
-    if (st === 'running') return ' ◌ [Active]'
-    if (st === 'error') return ' ✗ [Failed]'
+  const getStep = (id: FlowStep) => steps.find(s => s.id === id)
+  const getStepStatus = (id: FlowStep) => getStep(id)?.status || 'pending'
+  const getIcon = (st: StepStatus, id?: FlowStep) => {
+    if (id) {
+      const step = getStep(id)
+      if (step && (step.payload as any)?._cancelled) return ' [Aborted]'
+    }
+    if (st === 'done') return ' [Done]'
+    if (st === 'running') return ' [Active]'
+    if (st === 'error') return ' [Failed]'
     return ''
   }
 
@@ -55,10 +60,10 @@ export function generateFullFlowDSL(params: {
 
   rect rgb(15, 23, 42)
   Note over I,W: Phase 1: OpenID4VCI (Credential Issuance)
-  W->>I: 1. Fetch Metadata (.well-known)${getIcon(s1)}
-  I-->>W: 2. Credential Offer (${credFormat})${getIcon(s2)}
-  W->>I: 3. Token Request (OAuth / DPoP)${getIcon(s3)}
-  I-->>W: 4. Issue Credential Payload${getIcon(s4)}
+  W->>I: 1. Fetch Metadata (.well-known)${getIcon(s1, 'issuer-metadata')}
+  I-->>W: 2. Credential Offer (${credFormat})${getIcon(s2, 'credential-offer')}
+  W->>I: 3. Token Request (OAuth / DPoP)${getIcon(s3, 'token-exchange')}
+  I-->>W: 4. Issue Credential Payload${getIcon(s4, 'credential-issuance')}
   end
 `
   if (s4 === 'done') {
@@ -68,30 +73,30 @@ export function generateFullFlowDSL(params: {
   dsl += `
   rect rgb(15, 23, 42)
   Note over W,V: Phase 2: OpenID4VP (Presentation & Verification)
-  V->>W: 5. VP Authorization Request (DCQL)${getIcon(s5)}
+  V->>W: 5. VP Authorization Request (DCQL)${getIcon(s5, 'vp-request')}
 `
   if (tamperMode !== 'none') {
     dsl += `  Note over W,V: [Negative Test] ${tamperMode === 'signature' ? 'Mutated Signature' : 'Corrupted Token'}\n`
     if (s6 === 'done' || s6 === 'running') {
-      dsl += `  W-->>V: 6. Send Tampered VP Token${getIcon(s6)}\n`
+      dsl += `  W-->>V: 6. Send Tampered VP Token${getIcon(s6, 'vp-response')}\n`
     } else {
-      dsl += `  W-->>V: 6. VP Token Response${getIcon(s6)}\n`
+      dsl += `  W-->>V: 6. VP Token Response${getIcon(s6, 'vp-response')}\n`
     }
     if (s7 === 'done') {
-      dsl += `  V->>V: 7. Presentation Rejected (Test Passed ✓)\n`
+      dsl += `  V->>V: 7. Presentation Rejected (Test Passed)\n`
     } else if (s7 === 'error') {
-      dsl += `  V-xV: 7. Verification Failed (Negative Assertion Met ✓)\n`
+      dsl += `  V-xV: 7. Verification Failed (Negative Assertion Met)\n`
     } else {
-      dsl += `  V->>V: 7. Cryptographic Verification & Tamper Check${getIcon(s7)}\n`
+      dsl += `  V->>V: 7. Cryptographic Verification & Tamper Check${getIcon(s7, 'verification')}\n`
     }
   } else {
-    dsl += `  W-->>V: 6. VP Token Response (Holder Binding)${getIcon(s6)}\n`
+    dsl += `  W-->>V: 6. VP Token Response (Holder Binding)${getIcon(s6, 'vp-response')}\n`
     if (s7 === 'done') {
-      dsl += `  V->>V: 7. Verification Success (Signature & Claims Valid ✓)\n`
+      dsl += `  V->>V: 7. Verification Success (Signature & Claims Valid)\n`
     } else if (s7 === 'error') {
-      dsl += `  V-xV: 7. Verification Failed ✗\n`
+      dsl += `  V-xV: 7. Verification Failed\n`
     } else {
-      dsl += `  V->>V: 7. Verify Signature & Status List${getIcon(s7)}\n`
+      dsl += `  V->>V: 7. Verify Signature & Status List${getIcon(s7, 'verification')}\n`
     }
   }
   dsl += `  end\n`
@@ -106,7 +111,7 @@ export function generateFullFlowDSL(params: {
       else { from = 'W'; to = 'I' }
       
       const cleanPath = evt.path || new URL(evt.url).pathname
-      dsl += `  ${from}->>${to}: ${evt.method} ${cleanPath} [${evt.status}] ⏱${evt.latencyMs}ms 📦${evt.payloadSize}\n`
+      dsl += `  ${from}->>${to}: ${evt.method} ${cleanPath} [${evt.status}] [${evt.latencyMs}ms, ${evt.payloadSize}]\n`
     })
     dsl += `  end\n`
   }
@@ -129,10 +134,15 @@ export function generateVpFocusedDSL(params: {
   const cleanWallet = sanitizeName(walletName)
   const cleanVerifier = sanitizeName(verifierName)
 
-  const getIcon = (st: StepStatus) => {
-    if (st === 'done') return ' ✓'
-    if (st === 'running') return ' ◌ [Active]'
-    if (st === 'error') return ' ✗ [Failed]'
+  const getStep = (id: FlowStep) => steps.find(s => s.id === id)
+  const getIcon = (st: StepStatus, id?: FlowStep) => {
+    if (id) {
+      const step = getStep(id)
+      if (step && (step.payload as any)?._cancelled) return ' [Aborted]'
+    }
+    if (st === 'done') return ' [Done]'
+    if (st === 'running') return ' [Active]'
+    if (st === 'error') return ' [Failed]'
     return ''
   }
 
@@ -144,7 +154,7 @@ export function generateVpFocusedDSL(params: {
 
   rect rgb(15, 23, 42)
   Note over V,C: OpenID4VP Protocol Exchange (Task #3)
-  V->>W: 1. Authorization Request (request_uri & DCQL)${getIcon(s5)}
+  V->>W: 1. Authorization Request (request_uri & DCQL)${getIcon(s5, 'vp-request')}
   Note over W: Parse DCQL query & match format (${credFormat})
   
   W->>C: 2. Request Selective Disclosures & Nonce Binding
@@ -152,14 +162,14 @@ export function generateVpFocusedDSL(params: {
 `
   if (tamperMode !== 'none') {
     dsl += `  Note over W,C: [Negative Test] Corrupted ${tamperMode}
-  W->>V: 4. Direct Post VP Token (Tampered Payload)${getIcon(s6)}
+  W->>V: 4. Direct Post VP Token (Tampered Payload)${getIcon(s6, 'vp-response')}
   V->>C: 5. Verify Cryptographic Integrity
-  C-->>V: 6. Integrity Check: INVALID (Tamper Detected)${getIcon(s7)}
+  C-->>V: 6. Integrity Check: INVALID (Tamper Detected)${getIcon(s7, 'verification')}
 `
   } else {
-    dsl += `  W->>V: 4. Direct Post VP Token Response${getIcon(s6)}
+    dsl += `  W->>V: 4. Direct Post VP Token Response${getIcon(s6, 'vp-response')}
   V->>C: 5. Verify Cryptographic Signature & Issuer Trust
-  C-->>V: 6. Status: Presentation Valid & Revocation Checked ✓${getIcon(s7)}
+  C-->>V: 6. Status: Presentation Valid & Revocation Checked${getIcon(s7, 'verification')}
 `
   }
   dsl += `  end\n`

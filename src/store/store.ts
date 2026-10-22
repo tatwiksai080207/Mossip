@@ -8,6 +8,7 @@ import type {
   FlowStepInfo,
   TestRun,
   NetworkEvent,
+  TestSessionStatus,
 } from '../types'
 import { issuers, wallets, verifiers } from '../config'
 import { loadHistory, saveHistory, clearSavedHistory, getBaselineHistory } from './history-data'
@@ -28,6 +29,9 @@ export interface PlaygroundStore {
   selectedCredType: CredentialType | null
   steps: FlowStepInfo[]
   isRunning: boolean
+  isTestActive: boolean
+  isStepBusy: boolean
+  sessionStatus: TestSessionStatus
   pausedStep: FlowStepInfo['id'] | null
   oauthUrl: string | null
   history: TestRun[]
@@ -45,6 +49,8 @@ export interface PlaygroundStore {
   selectStep: (id: FlowStepInfo['id'] | null) => void
   runFlow: () => Promise<void>
   stopFlow: () => void
+  abortTest: () => void
+  resetTest: () => void
   resumeOAuthFlow: (code: string) => void
   cancelOAuthFlow: () => void
   clearHistory: () => void
@@ -62,6 +68,9 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
   selectedCredType: issuers[0]?.credentialTypes[0] || null,
   steps: [],
   isRunning: false,
+  isTestActive: false,
+  isStepBusy: false,
+  sessionStatus: 'idle',
   pausedStep: null,
   oauthUrl: null,
   history: loadHistory(),
@@ -84,17 +93,28 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
   clearNetworkEvents: () => set({ networkEvents: [] }),
 
   selectIssuer: (issuer) => {
+    if (get().isTestActive) return
     set({
       selectedIssuer: issuer,
       selectedCredType: issuer.credentialTypes[0] || null,
     })
   },
 
-  selectWallet: (wallet) => set({ selectedWallet: wallet }),
-  selectVerifier: (verifier) => set({ selectedVerifier: verifier }),
-  selectCredType: (ct) => set({ selectedCredType: ct }),
+  selectWallet: (wallet) => {
+    if (get().isTestActive) return
+    set({ selectedWallet: wallet })
+  },
+  selectVerifier: (verifier) => {
+    if (get().isTestActive) return
+    set({ selectedVerifier: verifier })
+  },
+  selectCredType: (ct) => {
+    if (get().isTestActive) return
+    set({ selectedCredType: ct })
+  },
 
   setTamperMode: (mode) => {
+    if (get().isTestActive) return
     set({ tamperMode: mode })
     fetch('/api/tamper', {
       method: 'POST',
@@ -121,9 +141,9 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
     }
   },
 
-  stopFlow: () => {
-    const { isRunning, _resumeResolver } = get() as any
-    if (!isRunning) return
+  abortTest: () => {
+    const { isTestActive, _resumeResolver } = get() as any
+    if (!isTestActive && !get().isRunning) return
 
     api.abortPendingRequests()
 
@@ -131,22 +151,49 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
       _resumeResolver('')
     }
 
+    const firstPendingIdx = get().steps.findIndex((s) => s.status === 'pending')
+    const updatedSteps = get().steps.map((s, idx) => {
+      if (s.status === 'running' || (firstPendingIdx !== -1 && idx === firstPendingIdx)) {
+        return {
+          ...s,
+          status: 'error' as const,
+          payload: { _cancelled: true, _note: 'Test aborted by user' },
+          source: 'live' as const,
+        }
+      }
+      return s
+    })
+
     set({
       isRunning: false,
+      isTestActive: false,
+      isStepBusy: false,
+      sessionStatus: 'aborted',
       pausedStep: null,
       oauthUrl: null,
       _resumeResolver: null,
-      steps: get().steps.map((s) =>
-        s.status === 'running'
-          ? { ...s, status: 'error', payload: { _cancelled: true, _note: 'Test stopped by user' }, source: 'live' }
-          : s
-      ),
+      steps: updatedSteps,
+    })
+  },
+
+  stopFlow: () => {
+    get().abortTest()
+  },
+
+  resetTest: () => {
+    if (get().isTestActive) return
+    set({
+      steps: [],
+      sessionStatus: 'idle',
+      selectedStepId: null,
+      networkEvents: [],
+      pausedStep: null,
+      oauthUrl: null,
     })
   },
 
   cancelOAuthFlow: () => {
-    const { stopFlow } = get()
-    stopFlow()
+    get().abortTest()
   },
 
   runFlow: () => runFlowExecution(get, set),

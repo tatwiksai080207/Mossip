@@ -75,8 +75,8 @@ export const RunHistoryFilters: React.FC<RunHistoryFiltersProps> = ({
             className="bg-transparent text-slate-200 focus:outline-none cursor-pointer"
           >
             <option value="all" className="bg-slate-900">All Outcomes</option>
-            <option value="pass" className="bg-slate-900 text-emerald-400">PASS (✓)</option>
-            <option value="fail" className="bg-slate-900 text-red-400">FAIL (✗)</option>
+            <option value="pass" className="bg-slate-900 text-emerald-400">PASS</option>
+            <option value="fail" className="bg-slate-900 text-red-400">FAIL</option>
           </select>
         </div>
 

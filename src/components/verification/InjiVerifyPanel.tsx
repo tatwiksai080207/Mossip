@@ -74,7 +74,9 @@ export default function InjiVerifyPanel({ onResult }: Props) {
       {status === 'result' && results && (
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-green-400">✓</span>
+            <svg className="w-4 h-4 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
             <span className="text-sm text-slate-300">Verification Complete</span>
           </div>
           {results.map((r, i) => (
@@ -103,7 +105,9 @@ export default function InjiVerifyPanel({ onResult }: Props) {
       {status === 'error' && (
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-red-400">✗</span>
+            <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
             <span className="text-sm text-red-300">Verification Failed</span>
           </div>
           <p className="text-xs text-slate-400">{error}</p>

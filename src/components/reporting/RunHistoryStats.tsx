@@ -38,8 +38,8 @@ export const RunHistoryStats: React.FC<RunHistoryStatsProps> = ({
             </div>
             <div className="mt-2.5 flex items-center justify-between text-xs text-slate-400">
               <span>{stats.pass} passed / {stats.total} total</span>
-              <span className="text-[11px] text-slate-500">
-                {stats.fail === 0 ? '✓ 0 Regressions' : `✗ ${stats.fail} gap(s)`}
+              <span className={`text-[11px] ${stats.fail === 0 ? 'text-emerald-500/80' : 'text-red-400/80'}`}>
+                {stats.fail === 0 ? '0 Regressions' : `${stats.fail} gap(s)`}
               </span>
             </div>
             {/* Progress bar */}

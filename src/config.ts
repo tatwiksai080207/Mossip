@@ -201,15 +201,9 @@ export const wallets: WalletConfig[] = [
     env: 'local',
   },
   {
-    id: 'inji-web-manual',
-    name: 'Inji Web (Manual / Real App)',
-    description: 'Generates an offer QR code for the real local Inji Web app',
-    env: 'local',
-  },
-  {
-    id: 'inji-mobile',
-    name: 'Inji Wallet (Mobile)',
-    description: 'React Native wallet, cross-device via QR',
+    id: 'inji-wallet-interactive',
+    name: 'Inji Wallet (Real App / Mobile & Web)',
+    description: 'Interactive real Inji wallet — scan with Inji Mobile (QR) or launch local Inji Web',
     env: 'local',
   },
   {

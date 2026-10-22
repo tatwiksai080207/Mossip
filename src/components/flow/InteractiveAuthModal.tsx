@@ -3,10 +3,19 @@ import { useStore } from '../../store/index'
 
 export const InteractiveAuthModal: React.FC = () => {
   const { pausedStep, oauthUrl, resumeOAuthFlow, cancelOAuthFlow, selectedIssuer, selectedWallet } = useStore()
+  const [isOpen, setIsOpen] = useState(true)
   const [manualInput, setManualInput] = useState('')
   const [isOpeningPopup, setIsOpeningPopup] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [copiedUin, setCopiedUin] = useState(false)
+
+  // Re-open modal whenever pausedStep becomes active
+  useEffect(() => {
+    if (pausedStep && oauthUrl) {
+      setIsOpen(true)
+      setErrorMsg(null)
+    }
+  }, [pausedStep, oauthUrl])
 
   const extractCode = (input: string): string => {
     const trimmed = input.trim()
@@ -26,24 +35,26 @@ export const InteractiveAuthModal: React.FC = () => {
     return trimmed.split('#')[0].trim()
   }
 
-  // Escape key and global Ctrl+V listener
+  // Escape key and paste helper (never auto-submits)
   useEffect(() => {
     if (!pausedStep) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        cancelOAuthFlow()
+        setIsOpen(false)
       }
     }
 
     const handlePaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement
+      if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') {
+        // Native input handles paste directly
+        return
+      }
       const text = e.clipboardData?.getData('text') || ''
-      if (text.includes('code=')) {
-        const code = extractCode(text)
-        if (code) {
-          setManualInput(text)
-          resumeOAuthFlow(code)
-        }
+      if (text) {
+        setManualInput(text.trim())
+        setErrorMsg(null)
       }
     }
 
@@ -53,9 +64,31 @@ export const InteractiveAuthModal: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('paste', handlePaste)
     }
-  }, [pausedStep, resumeOAuthFlow, cancelOAuthFlow])
+  }, [pausedStep])
 
   if (!pausedStep || !oauthUrl) return null
+
+  // Floating Minimized Button
+  if (!isOpen) {
+    return (
+      <aside
+        aria-label="Pending authentication action"
+        className="fixed bottom-6 right-6 z-50 animate-bounce"
+      >
+        <button
+          type="button"
+          onClick={() => setIsOpen(true)}
+          className="flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-sm rounded-full shadow-2xl border border-blue-400/40 cursor-pointer transition-all hover:scale-105"
+        >
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+          <span>Action Required: Complete eSignet Login</span>
+          <svg className="w-4 h-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+          </svg>
+        </button>
+      </aside>
+    )
+  }
 
   const handleOpenPopup = () => {
     setIsOpeningPopup(true)
@@ -81,13 +114,8 @@ export const InteractiveAuthModal: React.FC = () => {
         setErrorMsg('Clipboard is empty. Copy the URL from the popup address bar first.')
         return
       }
-      setManualInput(text)
-      const code = extractCode(text)
-      if (code) {
-        resumeOAuthFlow(code)
-      } else {
-        setErrorMsg('No valid authorization code found in clipboard.')
-      }
+      setManualInput(text.trim())
+      setErrorMsg(null)
     } catch {
       setErrorMsg('Unable to read clipboard. Please paste the URL into the input field below.')
     }
@@ -115,19 +143,24 @@ export const InteractiveAuthModal: React.FC = () => {
   const isCollab = selectedIssuer?.env === 'collab' || selectedWallet?.id === 'inji-web-collab-interactive'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 animate-in fade-in duration-150">
-      <div className="relative w-full max-w-lg rounded-xl border border-slate-800 bg-slate-900 shadow-2xl p-6 text-slate-200">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="interactive-auth-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in"
+    >
+      <div className="relative w-full max-w-lg rounded-2xl border border-slate-700/80 bg-slate-900 shadow-2xl p-6 text-slate-200 animate-scale-up">
         
         {/* Header */}
         <div className="flex items-start justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
             </div>
             <div>
-              <h3 className="text-base font-semibold text-white">
+              <h3 id="interactive-auth-title" className="text-base font-semibold text-white">
                 {isCollab ? 'eSignet Authentication' : 'Authentication Required'}
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -136,12 +169,13 @@ export const InteractiveAuthModal: React.FC = () => {
             </div>
           </div>
 
-          {/* Close / Cross Button */}
+          {/* Close / Minimize Button */}
           <button
             type="button"
-            onClick={cancelOAuthFlow}
-            aria-label="Close dialog"
-            className="rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors focus:outline-none"
+            onClick={() => setIsOpen(false)}
+            aria-label="Minimize dialog"
+            title="Minimize modal (Escape)"
+            className="rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors focus:outline-none cursor-pointer"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -244,19 +278,24 @@ export const InteractiveAuthModal: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex items-center justify-between gap-3 pt-1">
+            <div className="flex items-center justify-between gap-3 pt-2">
               <button
                 type="button"
                 onClick={cancelOAuthFlow}
-                className="px-4 py-2 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-900 hover:bg-slate-800/80 text-slate-300 hover:text-white text-xs font-medium transition-colors"
+                className="px-3 py-2 rounded-lg border border-red-500/30 hover:bg-red-950/40 text-red-400 hover:text-red-200 text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+                title="Abort this test run"
               >
-                Cancel
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="5" y="5" width="14" height="14" rx="2" />
+                </svg>
+                <span>Abort Test</span>
               </button>
+
               <button
                 type="submit"
-                className="flex-1 py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors shadow-sm"
+                className="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors shadow-sm cursor-pointer"
               >
-                Submit Code & Complete Issuance
+                Submit Code &amp; Complete Issuance
               </button>
             </div>
           </form>

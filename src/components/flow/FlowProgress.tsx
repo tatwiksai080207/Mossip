@@ -2,27 +2,50 @@ import { useState, useEffect } from 'react'
 import { useStore, evaluateTestRun } from '../../store/index'
 import type { StepStatus } from '../../types'
 
-function statusIcon(status: StepStatus) {
+function StatusBadge({ status, isCancelled }: { status: StepStatus; isCancelled: boolean }) {
+  if (isCancelled) {
+    return (
+      <span className="w-5 h-5 rounded-full flex items-center justify-center bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0">
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+        </svg>
+      </span>
+    )
+  }
   switch (status) {
-    case 'pending': return '○'
-    case 'running': return '◌'
-    case 'done': return '✓'
-    case 'error': return '✗'
+    case 'pending':
+      return (
+        <span className="w-5 h-5 rounded-full flex items-center justify-center bg-slate-800/60 text-slate-500 border border-slate-700/60 shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+        </span>
+      )
+    case 'running':
+      return (
+        <span className="w-5 h-5 rounded-full flex items-center justify-center bg-blue-500/10 text-blue-400 border border-blue-500/30 shrink-0">
+          <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
+        </span>
+      )
+    case 'done':
+      return (
+        <span className="w-5 h-5 rounded-full flex items-center justify-center bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0">
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </span>
+      )
+    case 'error':
+      return (
+        <span className="w-5 h-5 rounded-full flex items-center justify-center bg-red-500/10 text-red-400 border border-red-500/30 shrink-0">
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </span>
+      )
   }
 }
-
-function statusColor(status: StepStatus) {
-  switch (status) {
-    case 'pending': return 'text-slate-600'
-    case 'running': return 'text-blue-400'
-    case 'done': return 'text-green-400'
-    case 'error': return 'text-red-400'
-  }
-}
-
 
 export default function FlowProgress() {
-  const { steps, isRunning, pausedStep, oauthUrl, selectedStepId, selectStep, runTamperMode, stopFlow } = useStore()
+  const { steps, isRunning, isTestActive, pausedStep, oauthUrl, selectedStepId, selectStep, runTamperMode, abortTest } = useStore()
   const [expandedStep, setExpandedStep] = useState<string | null>(null)
 
   useEffect(() => {
@@ -45,14 +68,14 @@ export default function FlowProgress() {
           <p className="text-xs text-slate-500 mt-0.5">Click a step or diagram arrow to inspect its payload</p>
         </div>
         <div className="flex items-center gap-2">
-          {isRunning && (
+          {isTestActive && (
             <button
-              onClick={stopFlow}
+              onClick={abortTest}
               className="text-xs font-medium px-2.5 py-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30 transition-colors flex items-center gap-1.5 cursor-pointer"
-              title="Stop running test"
+              title="Abort running test"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-              <span>Stop Test</span>
+              <span>Abort Test</span>
             </button>
           )}
           {selectedStepId && (
@@ -69,6 +92,7 @@ export default function FlowProgress() {
       <div className="divide-y divide-slate-800/50">
         {steps.map((step) => {
           const isSelected = selectedStepId === step.id
+          const isCancelled = Boolean((step.payload as any)?._cancelled)
 
           return (
             <div
@@ -87,16 +111,16 @@ export default function FlowProgress() {
                   (step.status === 'done' || step.status === 'error') && !!step.payload ? 'cursor-pointer hover:bg-slate-800/30' : ''
                 } ${step.status === 'running' ? 'bg-slate-800/20' : ''}`}
               >
-                <span className={`font-mono text-base ${statusColor(step.status)} ${step.status === 'running' ? 'step-running' : ''}`}>
-                  {statusIcon(step.status)}
-                </span>
+                <StatusBadge status={step.status} isCancelled={isCancelled} />
                 <span className={
+                  isCancelled ? 'text-amber-300 font-medium' :
                   step.status === 'done' ? (isSelected ? 'text-sky-300 font-medium' : 'text-slate-300') :
                   step.status === 'running' ? 'text-white' :
                   step.status === 'error' ? 'text-red-300' :
                   'text-slate-500'
                 }>
                   {step.label}
+                  {isCancelled && <span className="ml-2 text-[10px] text-amber-400 font-normal border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 rounded">Aborted</span>}
                 </span>
               {step.status === 'running' && pausedStep !== step.id && (
                 <div className="flex items-center gap-2 ml-auto">
@@ -104,12 +128,12 @@ export default function FlowProgress() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      stopFlow()
+                      abortTest()
                     }}
                     className="text-[11px] font-medium px-2 py-0.5 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors cursor-pointer"
-                    title="Stop this test"
+                    title="Abort this test"
                   >
-                    Stop
+                    Abort
                   </button>
                 </div>
               )}
@@ -127,12 +151,12 @@ export default function FlowProgress() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      stopFlow()
+                      abortTest()
                     }}
                     className="text-xs font-medium px-2 py-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors cursor-pointer"
-                    title="Stop this test"
+                    title="Abort this test"
                   >
-                    Stop
+                    Abort
                   </button>
                 </div>
               )}
@@ -148,9 +172,15 @@ export default function FlowProgress() {
                     </span>
                   )}
                   {!!step.payload && (
-                    <span className="text-xs text-slate-600">
-                      {expandedStep === step.id ? '▾' : '▸'}
-                    </span>
+                    <svg
+                      className={`w-3.5 h-3.5 text-slate-500 transition-transform ${expandedStep === step.id ? 'rotate-90' : ''}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
                   )}
                 </span>
               )}
@@ -163,9 +193,15 @@ export default function FlowProgress() {
                   )}
                   <span className="text-xs text-red-400">failed</span>
                   {!!step.payload && (
-                    <span className="text-xs text-slate-600">
-                      {expandedStep === step.id ? '▾' : '▸'}
-                    </span>
+                    <svg
+                      className={`w-3.5 h-3.5 text-slate-500 transition-transform ${expandedStep === step.id ? 'rotate-90' : ''}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
                   )}
                 </span>
               )}
