@@ -1,31 +1,58 @@
-export default function Header() {
+import React from 'react'
+import type { NavTabId } from './Sidebar'
+
+interface HeaderProps {
+  activeTab: NavTabId
+}
+
+const TAB_META: Record<NavTabId, { title: string; subtitle: string }> = {
+  runner: {
+    title: 'Test Runner',
+    subtitle: 'Select issuer, wallet, and verifier roles to execute tests',
+  },
+  history: {
+    title: 'Run History',
+    subtitle: 'Regression benchmarks, pass rates, and test telemetry',
+  },
+  matrix: {
+    title: 'Interop Matrix',
+    subtitle: 'Compatibility grid across MOSIP, walt.id, and Inji',
+  },
+}
+
+export const Header: React.FC<HeaderProps> = ({ activeTab }) => {
+  const currentMeta = TAB_META[activeTab] || TAB_META.runner
+
   return (
-    <header className="border-b border-slate-800 px-4 sm:px-8 py-4 bg-slate-950">
-      <div className="max-w-[1720px] mx-auto flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-md bg-blue-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-            I
-          </div>
-          <div>
-            <h1 className="text-base font-semibold text-white leading-tight">Inji Interoperability Playground</h1>
-            <p className="text-xs text-slate-400">OpenID4VCI · OpenID4VP · W3C VC · SD-JWT</p>
-          </div>
+    <header className="border-b border-slate-800/80 px-6 sm:px-8 py-4 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30">
+      <div className="flex items-center justify-between gap-4">
+        {/* Dynamic Context Title based on selected Tab */}
+        <div>
+          <h2 className="text-base sm:text-lg font-semibold text-white tracking-tight leading-tight">
+            {currentMeta.title}
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">
+            {currentMeta.subtitle}
+          </p>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2">
-            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20">
+
+        {/* Global Action Badges & External Links */}
+        <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+          <div className="hidden md:flex items-center gap-2">
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
               MOSIP Collab
             </span>
-            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/25">
               Hackathon 2026
             </span>
           </div>
-          <div className="flex items-center gap-3">
+
+          <div className="flex items-center gap-2.5">
             <a
               href="https://docs.inji.io/"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-slate-400 hover:text-slate-200 transition-colors inline-flex items-center gap-1"
+              className="text-xs text-slate-400 hover:text-slate-200 transition-colors inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-slate-900 border border-transparent hover:border-slate-800"
             >
               <span>Docs</span>
               <svg className="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -36,7 +63,7 @@ export default function Header() {
               href="https://github.com/mosip/inji"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-slate-400 hover:text-slate-200 transition-colors inline-flex items-center gap-1"
+              className="text-xs text-slate-400 hover:text-slate-200 transition-colors inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-slate-900 border border-transparent hover:border-slate-800"
             >
               <span>GitHub</span>
               <svg className="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -49,3 +76,5 @@ export default function Header() {
     </header>
   )
 }
+
+export default Header

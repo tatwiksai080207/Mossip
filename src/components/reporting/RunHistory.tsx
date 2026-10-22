@@ -1,14 +1,14 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../../store/index'
-import type { CredentialFormat } from '../../types'
+import type { CredentialFormat, TestRun } from '../../types'
 import { RunHistoryStats } from './RunHistoryStats'
 import { RunHistoryFilters } from './RunHistoryFilters'
-
+import { RunInspector } from './RunInspector'
 
 const FORMAT_LABELS: Record<string, string> = {
-  'ldp_vc': 'W3C VC (JSON-LD)',
+  ldp_vc: 'W3C VC (JSON-LD)',
   'vc+sd-jwt': 'SD-JWT VC',
-  'mso_mdoc': 'ISO 18013-5 mDoc',
+  mso_mdoc: 'ISO 18013-5 mDoc',
 }
 
 function formatRelativeTime(timestamp: number): string {
@@ -25,34 +25,34 @@ function formatRelativeTime(timestamp: number): string {
 function getVersionBadge(version?: string) {
   const ver = version || 'v0.17.0'
   if (ver.includes('17')) {
-    return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+    return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
   }
   if (ver.includes('16')) {
-    return 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+    return 'bg-amber-500/15 text-amber-300 border-amber-500/30'
   }
-  return 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+  return 'bg-purple-500/15 text-purple-300 border-purple-500/30'
 }
 
 function getFormatBadge(format: CredentialFormat | string) {
-  if (format === 'vc+sd-jwt') return 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-  if (format === 'mso_mdoc') return 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-  return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+  if (format === 'vc+sd-jwt') return 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+  if (format === 'mso_mdoc') return 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+  return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
 }
 
 export default function RunHistory() {
   const { history, clearHistory, resetToBaseline } = useStore()
-  
+
   // Filter States
   const [selectedVersion, setSelectedVersion] = useState<string>('all')
   const [selectedFormat, setSelectedFormat] = useState<string>('all')
   const [selectedOutcome, setSelectedOutcome] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState<string>('')
-  const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
 
   // Unique release versions present in history
   const availableVersions = useMemo(() => {
     const set = new Set<string>()
-    history.forEach(r => {
+    history.forEach((r) => {
       if (r.version) set.add(r.version.replace(' (Live)', ''))
       else set.add('v0.17.0')
     })
@@ -62,7 +62,7 @@ export default function RunHistory() {
   // Regression Tracking per Release Version
   const releaseStats = useMemo(() => {
     const stats: Record<string, { total: number; pass: number; fail: number }> = {}
-    history.forEach(r => {
+    history.forEach((r) => {
       const verKey = (r.version || 'v0.17.0').replace(' (Live)', '')
       if (!stats[verKey]) stats[verKey] = { total: 0, pass: 0, fail: 0 }
       stats[verKey].total++
@@ -72,9 +72,22 @@ export default function RunHistory() {
     return stats
   }, [history])
 
+  // Top level aggregates for the full-width KPI strip
+  const totalRuns = history.length
+  const totalPassed = history.filter((r) => r.result === 'pass').length
+  const overallPassRate = totalRuns > 0 ? Math.round((totalPassed / totalRuns) * 100) : 0
+  const totalGaps = history.filter((r) => r.result === 'fail').length
+
+  const avgLatencySec = useMemo(() => {
+    const runsWithDuration = history.filter((r) => typeof r.durationMs === 'number' && r.durationMs > 0)
+    if (runsWithDuration.length === 0) return '—'
+    const totalMs = runsWithDuration.reduce((acc, r) => acc + (r.durationMs || 0), 0)
+    return `${(totalMs / runsWithDuration.length / 1000).toFixed(1)}s`
+  }, [history])
+
   // Filtered runs
   const filteredRuns = useMemo(() => {
-    return history.filter(run => {
+    return history.filter((run) => {
       const runVer = (run.version || 'v0.17.0').replace(' (Live)', '')
       if (selectedVersion !== 'all' && runVer !== selectedVersion) {
         return false
@@ -94,7 +107,11 @@ export default function RunHistory() {
     })
   }, [history, selectedVersion, selectedFormat, selectedOutcome, searchQuery])
 
-  const hasActiveFilters = selectedVersion !== 'all' || selectedFormat !== 'all' || selectedOutcome !== 'all' || searchQuery.trim() !== ''
+  const hasActiveFilters =
+    selectedVersion !== 'all' ||
+    selectedFormat !== 'all' ||
+    selectedOutcome !== 'all' ||
+    searchQuery.trim() !== ''
 
   const handleResetFilters = () => {
     setSelectedVersion('all')
@@ -113,48 +130,50 @@ export default function RunHistory() {
     URL.revokeObjectURL(url)
   }
 
+  const selectedRun: TestRun | undefined = useMemo(() => {
+    return history.find((r) => r.id === selectedRunId)
+  }, [history, selectedRunId])
+
   return (
-    <div className="border border-slate-800 rounded-xl bg-slate-900/40 overflow-hidden shadow-sm">
-      {/* 1. Header */}
-      <div className="p-4 sm:p-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="w-full flex-1 flex flex-col min-h-[640px] border border-slate-800/80 rounded-2xl bg-slate-900/40 backdrop-blur-md overflow-hidden shadow-sm">
+      {/* 1. Header Bar */}
+      <div className="p-4 sm:p-5 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
         <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold text-slate-100">Historical Regression Dashboard</h3>
-            <span className="px-2 py-0.5 text-xs font-mono rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
-              Task #5: Cross-Release Tracking
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Historical test runs and regression tracking across Inji releases (v0.15.0 → v0.16.2 → v0.17.0).
+          <h3 className="text-base font-semibold text-white tracking-tight">Historical Regression Dashboard</h3>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Cross-release benchmarks and verifiable credential protocol telemetry
           </p>
         </div>
 
         <div className="flex items-center gap-2 text-xs">
           <button
             onClick={resetToBaseline}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors cursor-pointer"
             title="Restore multi-release baseline regression test history"
           >
             Reset Baseline Runs
           </button>
           <button
             onClick={clearHistory}
-            className="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors"
+            className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors cursor-pointer"
           >
             Clear All
           </button>
         </div>
       </div>
 
-      {/* 2. Release Regression Summary Cards */}
+      {/* 2. Top Metric KPI Strip & Quick Release Filter */}
       <RunHistoryStats
+        totalRuns={totalRuns}
+        overallPassRate={overallPassRate}
+        avgLatencySec={avgLatencySec}
+        totalGaps={totalGaps}
         releaseStats={releaseStats}
         selectedVersion={selectedVersion}
         onSelectVersion={(ver) => setSelectedVersion(selectedVersion === ver ? 'all' : ver)}
-        getVersionBadge={getVersionBadge}
       />
 
-      {/* 3. Interactive Filter Bar */}
+      {/* 3. Filter & Search Toolbar */}
       <RunHistoryFilters
         selectedVersion={selectedVersion}
         setSelectedVersion={setSelectedVersion}
@@ -172,155 +191,121 @@ export default function RunHistory() {
         onExportFilteredJSON={exportFilteredJSON}
       />
 
+      {/* 4. Master-Detail Responsive Workspace */}
+      <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden relative">
+        {/* Left Master Data Table */}
+        <div
+          className={`h-full flex flex-col overflow-hidden transition-all duration-300 ${
+            selectedRun ? 'w-full lg:w-[60%] xl:w-[63%]' : 'w-full'
+          }`}
+        >
+          {filteredRuns.length === 0 ? (
+            <div className="p-12 text-center text-slate-400 text-sm flex-1 flex flex-col items-center justify-center">
+              <p>No historical runs match the selected filters.</p>
+              <button onClick={handleResetFilters} className="mt-2 text-xs text-blue-400 hover:underline cursor-pointer">
+                Clear all filters
+              </button>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="bg-slate-950/70 border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider sticky top-0 z-10 backdrop-blur-md">
+                  <tr>
+                    <th className="py-2.5 px-4 w-20">Status</th>
+                    <th className="py-2.5 px-3 w-28">Timestamp</th>
+                    <th className="py-2.5 px-3 w-24">Release</th>
+                    <th className="py-2.5 px-3">Route (Issuer → Wallet → Verifier)</th>
+                    <th className="py-2.5 px-3 w-36">Format</th>
+                    <th className="py-2.5 px-3 w-20 text-right">Latency</th>
+                    <th className="py-2.5 px-3 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-sans">
+                  {filteredRuns.map((run) => {
+                    const isSelected = selectedRunId === run.id
+                    const format = run.config.credentialType.format
+                    const ver = run.version || 'v0.17.0'
 
-      {/* 4. Run List / Table */}
-      {filteredRuns.length === 0 ? (
-        <div className="p-8 text-center text-slate-500 text-sm">
-          No historical runs match the selected filters.
-          <div className="mt-2">
-            <button
-              onClick={handleResetFilters}
-              className="text-xs text-blue-400 hover:underline"
-            >
-              Clear filters
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="divide-y divide-slate-800/60 max-h-[500px] overflow-y-auto">
-          {filteredRuns.map((run) => {
-            const isExpanded = expandedRunId === run.id
-            const format = run.config.credentialType.format
-            const ver = run.version || 'v0.17.0'
-
-            return (
-              <div key={run.id} className="transition-colors hover:bg-slate-900/30">
-                <div
-                  onClick={() => setExpandedRunId(isExpanded ? null : run.id)}
-                  className="px-4 py-3 flex items-center justify-between text-xs cursor-pointer select-none"
-                >
-                  <div className="flex items-center gap-3">
-                    {/* Outcome Badge */}
-                    <span className={`w-14 text-center font-bold px-1.5 py-0.5 rounded text-[11px] ${
-                      run.result === 'pass'
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                    }`}>
-                      {run.result.toUpperCase()}
-                    </span>
-
-                    {/* Version Badge */}
-                    <span className={`px-1.5 py-0.5 text-[10px] font-mono rounded border ${getVersionBadge(ver)}`}>
-                      {ver}
-                    </span>
-
-                    {/* Format Badge */}
-                    <span className={`px-2 py-0.5 text-[10px] font-semibold rounded border ${getFormatBadge(format)}`}>
-                      {FORMAT_LABELS[format] || format}
-                    </span>
-
-                    {/* Configuration Chain */}
-                    <div className="text-slate-300 font-medium truncate max-w-xs sm:max-w-md md:max-w-xl">
-                      {run.config.issuer.name} <span className="text-slate-600">→</span> {run.config.wallet.name} <span className="text-slate-600">→</span> {run.config.verifier.name}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4 text-slate-500 shrink-0">
-                    {run.durationMs && (
-                      <span className="font-mono text-slate-400 flex items-center gap-1 text-xs">
-                        <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <circle cx="12" cy="12" r="9" strokeWidth="2" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 7v5l3 3" />
-                        </svg>
-                        {(run.durationMs / 1000).toFixed(1)}s
-                      </span>
-                    )}
-                    <span>{formatRelativeTime(run.timestamp)}</span>
-                    <svg className={`w-4 h-4 text-slate-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </div>
-
-                {/* Expanded Diagnostic Details */}
-                {isExpanded && (
-                  <div className="px-4 pb-4 pt-1 bg-slate-950/60 border-t border-slate-800/80">
-                    <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/80 text-xs space-y-3">
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-slate-400 pb-2 border-b border-slate-800">
-                        <div>
-                          <span className="text-slate-500 block text-[10px] uppercase">Credential Name</span>
-                          <span className="text-slate-200 font-medium">{run.config.credentialType.name}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block text-[10px] uppercase">Proof Suite</span>
-                          <span className="text-slate-200 font-mono">{run.config.credentialType.proofTypes.join(', ')}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block text-[10px] uppercase">Tamper Mode</span>
-                          <span className="text-slate-200">{run.config.tamperMode || 'Normal (none)'}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block text-[10px] uppercase">Run Timestamp</span>
-                          <span className="text-slate-200">{new Date(run.timestamp).toLocaleString()}</span>
-                        </div>
-                      </div>
-
-                      {/* Step Execution Breakdown */}
-                      <div>
-                        <span className="text-slate-400 font-semibold block mb-1.5 text-[11px] uppercase tracking-wider">
-                          Protocol Step Execution Logs
-                        </span>
-                        <div className="space-y-1">
-                          {run.steps.map((st, idx) => (
-                            <div key={idx} className="flex items-center justify-between py-1 px-2 rounded bg-slate-950/40 border border-slate-800/40 text-slate-300">
-                              <div className="flex items-center gap-2">
-                                {st.status === 'done' ? (
-                                  <svg className="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                  </svg>
-                                ) : st.status === 'error' ? (
-                                  <svg className="w-3.5 h-3.5 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                ) : (
-                                  <div className="w-2.5 h-2.5 rounded-full border border-slate-600 shrink-0 mx-0.5" />
-                                )}
-                                <span>{idx + 1}. {st.label}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {st.source && (
-                                  <span className={`text-[10px] px-1 rounded ${st.source === 'live' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
-                                    {st.source}
-                                  </span>
-                                )}
-                                <span className={`text-[11px] uppercase font-mono ${st.status === 'done' ? 'text-emerald-400' : st.status === 'error' ? 'text-red-400' : 'text-slate-500'}`}>
-                                  {st.status}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Error details if failed */}
-                      {run.result === 'fail' && (
-                        <div className="p-2.5 rounded bg-red-950/30 border border-red-500/20 text-red-300">
-                          <strong className="block text-red-200 mb-0.5">Failure Diagnostic:</strong>
-                          <span className="font-mono text-[11px]">
-                            {run.steps.find(s => s.status === 'error')?.payload
-                              ? JSON.stringify(run.steps.find(s => s.status === 'error')?.payload)
-                              : 'Step execution rejected by relying party.'}
+                    return (
+                      <tr
+                        key={run.id}
+                        onClick={() => setSelectedRunId(isSelected ? null : run.id)}
+                        className={`transition-colors cursor-pointer select-none group ${
+                          isSelected
+                            ? 'bg-blue-600/15 border-l-2 border-l-blue-500'
+                            : 'hover:bg-slate-900/60'
+                        }`}
+                      >
+                        {/* Status */}
+                        <td className="py-3 px-4">
+                          <span
+                            className={`font-bold px-2 py-0.5 rounded text-[10px] tracking-wider border inline-block text-center w-14 ${
+                              run.result === 'pass'
+                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                : 'bg-red-500/15 text-red-400 border-red-500/30'
+                            }`}
+                          >
+                            {run.result.toUpperCase()}
                           </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+                        </td>
+
+                        {/* Timestamp */}
+                        <td className="py-3 px-3 text-slate-400 whitespace-nowrap">
+                          {formatRelativeTime(run.timestamp)}
+                        </td>
+
+                        {/* Release */}
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <span className={`px-1.5 py-0.5 text-[10px] font-mono rounded border ${getVersionBadge(ver)}`}>
+                            {ver}
+                          </span>
+                        </td>
+
+                        {/* Route */}
+                        <td className="py-3 px-3 text-slate-200 font-medium">
+                          <div className="flex items-center gap-1.5 truncate max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg">
+                            <span className="text-white truncate">{run.config.issuer.name}</span>
+                            <span className="text-slate-600 text-[10px]">→</span>
+                            <span className="text-white truncate">{run.config.wallet.name}</span>
+                            <span className="text-slate-600 text-[10px]">→</span>
+                            <span className="text-white truncate">{run.config.verifier.name}</span>
+                          </div>
+                        </td>
+
+                        {/* Format */}
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 text-[10px] font-semibold rounded border ${getFormatBadge(format)}`}>
+                            {FORMAT_LABELS[format] || format}
+                          </span>
+                        </td>
+
+                        {/* Duration */}
+                        <td className="py-3 px-3 text-right font-mono text-slate-400 whitespace-nowrap">
+                          {run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : '—'}
+                        </td>
+
+                        {/* Inspector indicator arrow */}
+                        <td className="py-3 px-3 text-center text-slate-600 group-hover:text-slate-300">
+                          <svg className={`w-4 h-4 transition-transform ${isSelected ? 'text-blue-400 rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      )}
+
+        {/* Right Detail Inspector Panel */}
+        {selectedRun && (
+          <div className="w-full lg:w-[40%] xl:w-[37%] h-full shrink-0 shadow-2xl z-20">
+            <RunInspector run={selectedRun} onClose={() => setSelectedRunId(null)} />
+          </div>
+        )}
+      </div>
     </div>
   )
 }

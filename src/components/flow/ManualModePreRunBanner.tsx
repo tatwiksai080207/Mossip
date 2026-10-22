@@ -31,13 +31,13 @@ export const ManualModePreRunBanner: React.FC<ManualModePreRunBannerProps> = ({
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <h4 className="text-sm font-semibold text-blue-100">Inji Wallet Selected (Mobile &amp; Web)</h4>
+            <h4 className="text-sm font-semibold text-blue-100">Inji Wallet (Interactive)</h4>
             <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
-              Interactive
+              Live
             </span>
           </div>
-          <p className="text-xs text-blue-300/80 mt-1 max-w-2xl leading-relaxed">
-            When you click <strong>Run Test</strong>, an interactive modal will prompt you to scan the QR code with your <strong>Inji Mobile App</strong> or launch your local <strong>Inji Web</strong> container.
+          <p className="text-xs text-blue-300/80 mt-0.5">
+            Click <strong>Run Test</strong> to scan with Inji Mobile or open Inji Web.
           </p>
         </div>
       </div>
@@ -60,7 +60,7 @@ export const ManualModePreRunBanner: React.FC<ManualModePreRunBannerProps> = ({
           Open Inji Web
         </a>
         <a
-          href="https://github.com/mosip/inji/releases"
+          href="https://drive.google.com/drive/folders/1gBjFSdpjxU4bsZi7-xS59W1-EIFKrkS8"
           target="_blank"
           rel="noreferrer"
           className="px-3 py-1.5 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/40 text-blue-200 rounded-lg text-xs font-medium transition-colors"

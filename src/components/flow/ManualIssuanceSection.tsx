@@ -77,8 +77,8 @@ export const ManualIssuanceSection: React.FC<ManualIssuanceSectionProps> = ({
 
           <p className="text-sm text-slate-400 mb-4 text-center max-w-lg">
             <strong className="text-slate-200">Where is the mobile app?</strong> Search for "Inji Wallet" on the Play Store/App Store, or download the APK directly from the{' '}
-            <a href="https://github.com/mosip/inji/releases" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">
-              MOSIP GitHub Releases
+            <a href="https://drive.google.com/drive/folders/1gBjFSdpjxU4bsZi7-xS59W1-EIFKrkS8" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">
+              Inji Wallet APK Drive
             </a>.
           </p>
         </>
