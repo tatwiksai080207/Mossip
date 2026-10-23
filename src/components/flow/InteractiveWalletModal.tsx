@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import QRCode from 'react-qr-code'
 import type { IssuerConfig, WalletConfig, CredentialType, FlowStepInfo } from '../../types'
+import { appLinks } from '../../config'
 
 interface InteractiveWalletModalProps {
   selectedWallet: WalletConfig | null
@@ -275,7 +276,7 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
               <p className="text-[11px] text-slate-400 text-center">
                 Need the official app? Download APK from{' '}
                 <a
-                  href="https://drive.google.com/drive/folders/1gBjFSdpjxU4bsZi7-xS59W1-EIFKrkS8"
+                  href={appLinks.injiMobileApkDrive}
                   target="_blank"
                   rel="noreferrer"
                   className="text-blue-400 hover:text-blue-300 hover:underline font-medium inline-flex items-center gap-1"
@@ -307,7 +308,7 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
                     Ensure your local Inji Web container is running and logged in with your PIN.
                   </p>
                   <a
-                    href="http://localhost:3004"
+                    href={appLinks.injiWebLocalUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="shrink-0 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-750 text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"

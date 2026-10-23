@@ -8,6 +8,7 @@ import { issueMdocCredential } from '../../formats/mdoc'
 import { issueLdpCredential } from '../../formats/ldp'
 import { issueSdJwtCredential } from '../../formats/sd-jwt'
 import { notifyFlowStep } from '../../events/flow-events'
+import identities from '../../config/identities.json'
 
 export interface CertifyMockIssuanceParams {
   req: Request
@@ -149,19 +150,19 @@ export async function handleCertifyMockIssuance(params: CertifyMockIssuanceParam
   if (isSdJwt) {
     console.log('[local-certify] Issuing fallback Farmer ID SD-JWT VC')
     const farmerClaims = {
-      fullName: 'Gorge Cooper',
-      farmerID: '2154189532',
-      mobileNumber: '9876543210',
-      dateOfBirth: '1990-05-25',
-      gender: 'Male',
-      state: 'Karnataka',
-      district: 'Bangalore',
-      villageOrTown: 'Koramangala',
-      postalCode: '453000',
-      landArea: '3 hectares',
-      landOwnershipType: 'Owner',
-      primaryCropType: 'Maize',
-      secondaryCropType: 'Rice',
+      fullName: identities.farmer.fullName,
+      farmerID: identities.farmer.farmerId,
+      mobileNumber: identities.farmer.mobileNumber,
+      dateOfBirth: identities.farmer.dateOfBirth,
+      gender: identities.farmer.gender,
+      state: identities.farmer.state,
+      district: identities.farmer.district,
+      villageOrTown: identities.farmer.villageOrTown,
+      postalCode: identities.farmer.postalCode,
+      landArea: identities.farmer.landArea,
+      landOwnershipType: identities.farmer.landOwnershipType,
+      primaryCropType: identities.farmer.primaryCrop,
+      secondaryCropType: identities.farmer.secondaryCrop,
     }
     const sdjwt = await issueSdJwtCredential({
       issuerKey: localCertifyP256Key,
@@ -187,15 +188,15 @@ export async function handleCertifyMockIssuance(params: CertifyMockIssuanceParam
   if (isMdoc) {
     console.log('[local-certify] Issuing fallback Driving License ISO 18013-5 mDoc')
     const dlClaims = {
-      family_name: 'Cooper',
-      given_name: 'Gorge',
-      birth_date: '1990-05-25',
-      issue_date: '2023-01-15',
-      expiry_date: '2033-01-15',
-      issuing_country: 'IN',
-      issuing_authority: 'Karnataka Transport Department',
-      document_number: 'DL-5720110023456',
-      driving_privileges: 'B',
+      family_name: identities.drivingLicense.familyName,
+      given_name: identities.drivingLicense.givenName,
+      birth_date: identities.drivingLicense.birthDate,
+      issue_date: identities.drivingLicense.issueDate,
+      expiry_date: identities.drivingLicense.expiryDate,
+      issuing_country: identities.drivingLicense.issuingCountry,
+      issuing_authority: identities.drivingLicense.issuingAuthority,
+      document_number: identities.drivingLicense.documentNumber,
+      driving_privileges: identities.drivingLicense.drivingPrivileges,
     }
     const mdoc = await issueMdocCredential({
       issuerKey: localCertifyP256Key,

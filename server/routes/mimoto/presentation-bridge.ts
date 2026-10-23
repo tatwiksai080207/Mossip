@@ -13,6 +13,23 @@ export interface PresentationBridgeDeps {
   localMimotoHost: string
 }
 
+export function parseAuthPayload(rawText: string): any {
+  if (!rawText) return null
+  const trimmed = rawText.trim()
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      return JSON.parse(trimmed)
+    } catch {}
+  }
+  const parts = trimmed.split('.')
+  if (parts.length >= 2) {
+    try {
+      return JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
+    } catch {}
+  }
+  return null
+}
+
 export function createMimotoPresentationRouter(deps: PresentationBridgeDeps): Router {
   const { playgroundIssuer, playgroundWallet, localMimotoHost } = deps
   const router = Router()
@@ -74,11 +91,7 @@ export function createMimotoPresentationRouter(deps: PresentationBridgeDeps): Ro
               fetchUri = fetchUri.replace(/host\.docker\.internal:3001|localhost:3001|inji-playground:3001/g, '127.0.0.1:3001')
               const r = await fetch(fetchUri)
               if (r.ok) {
-                const jwt = await r.text()
-                const parts = jwt.split('.')
-                if (parts.length >= 2) {
-                  authPayload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
-                }
+                authPayload = parseAuthPayload(await r.text())
               }
             } catch (fetchErr) {
               console.warn('[presentation-bridge] Could not fetch request_uri authPayload:', fetchErr)
@@ -131,11 +144,7 @@ export function createMimotoPresentationRouter(deps: PresentationBridgeDeps): Ro
           fetchUri = fetchUri.replace(/host\.docker\.internal:3001|localhost:3001|inji-playground:3001/g, '127.0.0.1:3001')
           const r = await fetch(fetchUri)
           if (r.ok) {
-            const jwt = await r.text()
-            const parts = jwt.split('.')
-            if (parts.length >= 2) {
-              authPayload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
-            }
+            authPayload = parseAuthPayload(await r.text())
           }
         } catch (fetchErr) {
           console.warn('[presentation-bridge] Fallback authPayload fetch error:', fetchErr)
@@ -271,11 +280,7 @@ export function createMimotoPresentationRouter(deps: PresentationBridgeDeps): Ro
           fetchUri = fetchUri.replace(/host\.docker\.internal:3001|localhost:3001|inji-playground:3001/g, '127.0.0.1:3001')
           const r = await fetch(fetchUri)
           if (r.ok) {
-            const jwt = await r.text()
-            const parts = jwt.split('.')
-            if (parts.length >= 2) {
-              authPayload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
-            }
+            authPayload = parseAuthPayload(await r.text())
           }
         } catch (fetchErr) {
           console.warn('[presentation-bridge] Error fetching requestUri authPayload in PATCH:', fetchErr)

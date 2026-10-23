@@ -5,6 +5,7 @@ import { getActiveTunnelUrl, getPublicBaseUrl } from '../tunnel'
 import { getActiveTamperMode, applyTamperingToVpToken } from '../tamper'
 import { proxyRequest, splatPath } from '../proxy/http-proxy'
 import { notifyFlowStep } from '../events/flow-events'
+import keysConfig from '../config/keys.json'
 
 export function maybeRewriteAndSignVpRequestJwt(jwtStr: string): string {
   if (typeof jwtStr !== 'string' || !jwtStr.includes('.')) return jwtStr
@@ -39,9 +40,9 @@ export function maybeRewriteAndSignVpRequestJwt(jwtStr: string): string {
       const privKey = crypto.createPrivateKey({
         key: {
           kty: 'OKP',
-          crv: 'Ed25519',
-          d: 'BOLjKdGvTf_uNoSW8dW6ZIRaUZ0_wTzu-LS3Rlcl4VI',
-          x: 'YT6KJVovMxNYJ-gxCEa3C0lCy0BSWaPjp30_BWLOr_k',
+          crv: keysConfig.verifierSigningKey.crv,
+          d: keysConfig.verifierSigningKey.d,
+          x: keysConfig.verifierSigningKey.x,
         },
         format: 'jwk',
       })
@@ -134,17 +135,17 @@ verifierRouter.get('/api/verifier/jwks.json', (_req: Request, res: Response) => 
     keys: [
       {
         kty: 'OKP',
-        crv: 'Ed25519',
-        x: 'YT6KJVovMxNYJ-gxCEa3C0lCy0BSWaPjp30_BWLOr_k',
-        use: 'sig',
-        kid: 'did:web:verify-service:v1:verify#key-0',
+        crv: keysConfig.verifierSigningKey.crv,
+        x: keysConfig.verifierSigningKey.x,
+        use: keysConfig.verifierSigningKey.use,
+        kid: keysConfig.verifierSigningKey.kid,
       },
       {
         kty: 'OKP',
-        crv: 'Ed25519',
-        x: 'YT6KJVovMxNYJ-gxCEa3C0lCy0BSWaPjp30_BWLOr_k',
-        use: 'sig',
-        kid: 'did:web:injiverify.collab.mosip.net:v1:verify#key-0',
+        crv: keysConfig.verifierSigningKey.crv,
+        x: keysConfig.verifierSigningKey.x,
+        use: keysConfig.verifierSigningKey.use,
+        kid: keysConfig.verifierSigningKey.collabKid,
       },
     ],
   })

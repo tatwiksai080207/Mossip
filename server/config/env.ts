@@ -2,7 +2,7 @@
  * Centralized, validated environment configuration with zero-config fallbacks.
  *
  * Provides a single source of truth for runtime ports, Collab sandbox endpoints,
- * local Docker URLs, database connection credentials, and feature flags.
+ * local Docker URLs, database connection credentials, key seeds, and feature flags.
  */
 
 export interface DatabaseConfig {
@@ -24,6 +24,20 @@ export interface EndpointsConfig {
   localMimoto: string
 }
 
+export interface SecretsConfig {
+  certifyKeySeed: string
+  oidcKeystorePassword?: string
+  walletBindingPartnerApiKey?: string
+  googleOAuthClientId?: string
+  googleOAuthClientSecret?: string
+}
+
+export interface PortsConfig {
+  server: number
+  vite: number
+  injiWeb: number
+}
+
 export interface AppConfig {
   port: number
   nodeEnv: string
@@ -31,6 +45,8 @@ export interface AppConfig {
   publicBaseUrl: string | null
   endpoints: EndpointsConfig
   database: DatabaseConfig
+  secrets: SecretsConfig
+  ports: PortsConfig
   waltidEnabled: boolean
 }
 
@@ -63,6 +79,20 @@ export const env: AppConfig = {
     user: process.env.POSTGRES_USER || 'postgres',
     password: process.env.POSTGRES_PASSWORD || 'postgres',
     database: process.env.POSTGRES_DB || 'inji_mimoto',
+  },
+
+  secrets: {
+    certifyKeySeed: process.env.CERTIFY_KEY_SEED || 'mossip-certify-ed25519-seed-32b!',
+    oidcKeystorePassword: process.env.OIDC_KEYSTORE_PASSWORD || 'xy4gh6swa2i',
+    walletBindingPartnerApiKey: process.env.WALLET_BINDING_PARTNER_API_KEY || 'dummywalletbindingpartnerapikey',
+    googleOAuthClientId: process.env.GOOGLE_OAUTH_CLIENT_ID || '',
+    googleOAuthClientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || '',
+  },
+
+  ports: {
+    server: parsePort(process.env.PORT, 3001),
+    vite: parsePort(process.env.VITE_PORT, 3000),
+    injiWeb: parsePort(process.env.INJI_WEB_PORT, 3004),
   },
 
   waltidEnabled: process.env.WALTID_ISSUER_ENABLED !== 'false',

@@ -6,6 +6,8 @@ import { generateP256Key, generateEd25519Key, type PlaygroundKey } from '../keys
 import { signCredential, issueLdpCredential } from '../formats/ldp'
 import { issueSdJwtCredential } from '../formats/sd-jwt'
 import { issueMdocCredential } from '../formats/mdoc'
+import identities from '../config/identities.json'
+import keysConfig from '../config/keys.json'
 
 export interface FallbackCredentialOptions {
   format: string
@@ -23,45 +25,51 @@ export async function createFallbackResidentCredential(opts: FallbackCredentialO
   console.log(`[wallet] Issuing authentic ${isFarmer ? 'Farmer' : 'Resident'} credential for format: ${format}`)
 
   const residentClaims = isFarmer ? {
-    fullName: 'Gorge Cooper',
-    farmerID: '2154189532',
-    mobileNumber: '9876543210',
-    dateOfBirth: '1990-05-25',
-    gender: 'Male',
-    state: 'Karnataka',
-    district: 'Bangalore',
-    villageOrTown: 'Koramangala',
-    postalCode: '453000',
-    landArea: '3 hectares',
-    landOwnershipType: 'Owner',
-    primaryCropType: 'Maize',
-    secondaryCropType: 'Rice',
+    fullName: identities.farmer.fullName,
+    farmerID: identities.farmer.farmerId,
+    mobileNumber: identities.farmer.mobileNumber,
+    dateOfBirth: identities.farmer.dateOfBirth,
+    gender: identities.farmer.gender,
+    state: identities.farmer.state,
+    district: identities.farmer.district,
+    villageOrTown: identities.farmer.villageOrTown,
+    postalCode: identities.farmer.postalCode,
+    landArea: identities.farmer.landArea,
+    landOwnershipType: identities.farmer.landOwnershipType,
+    primaryCropType: identities.farmer.primaryCrop,
+    secondaryCropType: identities.farmer.secondaryCrop,
   } : {
-    UIN: '6207495860',
-    fullName: 'Molleti Tatwik Sai',
-    dateOfBirth: '2007/02/08',
-    gender: 'MLE',
-    phone: '8639930924',
+    UIN: identities.resident.uin,
+    fullName: identities.resident.fullName,
+    dateOfBirth: identities.resident.dateOfBirth,
+    gender: identities.resident.gender,
+    phone: identities.resident.phone,
   }
 
   if (format === 'vc+sd-jwt') {
     let certBase64 = ''
     let privateKey: any
     try {
-      const certPem = fs.readFileSync(path.join(process.cwd(), 'server/certs/collab_p256.crt'), 'utf8')
-      const keyPem = fs.readFileSync(path.join(process.cwd(), 'server/certs/collab_p256.key'), 'utf8')
+      const certPem = fs.readFileSync(path.join(process.cwd(), keysConfig.collabCertificates.certRelativePath), 'utf8')
+      const keyPem = fs.readFileSync(path.join(process.cwd(), keysConfig.collabCertificates.keyRelativePath), 'utf8')
       certBase64 = certPem.replace(/-----BEGIN CERTIFICATE-----/, '').replace(/-----END CERTIFICATE-----/, '').replace(/\r?\n|\r/g, '').trim()
       privateKey = crypto.createPrivateKey(keyPem)
     } catch (e) {
       console.warn('[wallet] Could not read cert file:', e)
     }
 
+    let issuerHost = 'injicertify-mosipid.collab.mosip.net'
+    try {
+      issuerHost = new URL(issuerUrl).host
+    } catch {}
+    const dynamicDid = isFarmer ? 'did:web:host.docker.internal%3A3001' : `did:web:${encodeURIComponent(issuerHost)}`
+
     const issuerKey = privateKey
       ? {
-          did: isFarmer ? 'did:web:host.docker.internal%3A3001' : 'did:web:injicertify-mosipid.collab.mosip.net',
+          did: dynamicDid,
           privateKey,
           publicJwk: await jose.exportJWK(privateKey),
-          verificationMethod: isFarmer ? 'did:web:host.docker.internal%3A3001#key-1' : 'did:web:injicertify-mosipid.collab.mosip.net#key-1',
+          verificationMethod: `${dynamicDid}#key-1`,
           x5c: [certBase64],
           alg: 'ES256',
         }
@@ -82,15 +90,15 @@ export async function createFallbackResidentCredential(opts: FallbackCredentialO
   if (format === 'mso_mdoc') {
     const issuerKey = await generateP256Key()
     const dlClaims = isFarmer ? {
-      family_name: 'Cooper',
-      given_name: 'Gorge',
-      birth_date: '1990-05-25',
-      issue_date: '2023-01-15',
-      expiry_date: '2033-01-15',
-      issuing_country: 'IN',
-      issuing_authority: 'Karnataka Transport Department',
-      document_number: 'DL-5720110023456',
-      driving_privileges: 'B',
+      family_name: identities.drivingLicense.familyName,
+      given_name: identities.drivingLicense.givenName,
+      birth_date: identities.drivingLicense.birthDate,
+      issue_date: identities.drivingLicense.issueDate,
+      expiry_date: identities.drivingLicense.expiryDate,
+      issuing_country: identities.drivingLicense.issuingCountry,
+      issuing_authority: identities.drivingLicense.issuingAuthority,
+      document_number: identities.drivingLicense.documentNumber,
+      driving_privileges: identities.drivingLicense.drivingPrivileges,
     } : residentClaims
 
     const mdoc = await issueMdocCredential({

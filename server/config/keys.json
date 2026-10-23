@@ -1,0 +1,20 @@
+{
+  "verifierSigningKey": {
+    "kid": "did:web:verify-service:v1:verify#key-0",
+    "collabKid": "did:web:injiverify.collab.mosip.net:v1:verify#key-0",
+    "crv": "Ed25519",
+    "x": "YT6KJVovMxNYJ-gxCEa3C0lCy0BSWaPjp30_BWLOr_k",
+    "d": "BOLjKdGvTf_uNoSW8dW6ZIRaUZ0_wTzu-LS3Rlcl4VI",
+    "use": "sig"
+  },
+  "collabCertificates": {
+    "certRelativePath": "server/certs/collab_p256.crt",
+    "keyRelativePath": "server/certs/collab_p256.key"
+  },
+  "keycloakMock": {
+    "tokenSubject": "mimoto",
+    "clientId": "mimoto",
+    "roles": ["admin"],
+    "tokenExpiresIn": 3600
+  }
+}

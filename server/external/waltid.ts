@@ -18,6 +18,7 @@ import { documentLoader } from '../jsonld'
 import { verifySdJwtLocally } from '../formats/sd-jwt'
 import { verifyMdocLocally } from '../formats/mdoc'
 import { getActiveTamperMode, applyTamperingToVpToken } from '../index'
+import { getActiveTunnelUrl } from '../tunnel'
 
 export const waltidVerifierRouter = Router()
 
@@ -72,9 +73,12 @@ waltidVerifierRouter.post('/v1/verify/vp-request', (req: Request, res: Response)
   const reqNonce = nonce || crypto.randomUUID()
 
   // Base URL for callback
+  const activeTunnel = getActiveTunnelUrl().replace(/\/$/, '')
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http'
   const host = (req.headers['x-forwarded-host'] as string) || req.headers.host || 'localhost:3001'
-  const baseUrl = `${proto}://${host}`
+  const baseUrl = (activeTunnel && !activeTunnel.includes('localhost') && !activeTunnel.includes('127.0.0.1'))
+    ? activeTunnel
+    : `${proto}://${host}`
 
   const responseUri = `${baseUrl}/api/external/waltid/verifier/v1/verify/vp-submission/direct-post`
   const requestUri = `${baseUrl}/api/external/waltid/verifier/v1/verify/vp-request/${requestId}`

@@ -1,6 +1,6 @@
 import React from 'react'
 import type { FlowStepInfo, CredentialType, VerifierConfig } from '../../types'
-import { verifiers } from '../../config'
+import { verifiers, appLinks } from '../../config'
 import { useStore } from '../../store'
 
 interface InteropGapBannerProps {
@@ -186,7 +186,7 @@ export const InteropGapBanner: React.FC<InteropGapBannerProps> = ({
         </div>
 
         <a
-          href="https://docs.inji.io/inji-verify/technical-overview/standards-specifications-and-compliance.md"
+          href={appLinks.injiDocsRoadmap}
           target="_blank"
           rel="noopener noreferrer"
           className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent hover:border-slate-700 transition-all flex items-center gap-1.5"

@@ -1,0 +1,35 @@
+{
+  "resident": {
+    "uin": "6207495860",
+    "fullName": "Molleti Tatwik Sai",
+    "dateOfBirth": "2007/02/08",
+    "gender": "MLE",
+    "phone": "8639930924"
+  },
+  "farmer": {
+    "farmerId": "2154189532",
+    "fullName": "Gorge Cooper",
+    "mobileNumber": "9876543210",
+    "dateOfBirth": "1990-05-25",
+    "gender": "Male",
+    "state": "Karnataka",
+    "district": "Bangalore",
+    "villageOrTown": "Koramangala",
+    "postalCode": "453000",
+    "landArea": "3 hectares",
+    "landOwnershipType": "Owner",
+    "primaryCrop": "Maize",
+    "secondaryCrop": "Rice"
+  },
+  "drivingLicense": {
+    "documentNumber": "DL-5720110023456",
+    "familyName": "Cooper",
+    "givenName": "Gorge",
+    "birthDate": "1990-05-25",
+    "issueDate": "2023-01-15",
+    "expiryDate": "2033-01-15",
+    "issuingCountry": "IN",
+    "issuingAuthority": "Karnataka Transport Department",
+    "drivingPrivileges": "B"
+  }
+}

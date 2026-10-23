@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import { Router, type Request, type Response } from 'express'
 import { ENDPOINTS } from '../endpoints'
+import { env } from '../config/env'
 import { getPublicBaseUrl } from '../tunnel'
 import { proxyRequest, splatPath } from '../proxy/http-proxy'
 import { buildDidDocument, buildJwks } from '../proxy/certify-proxy'
@@ -19,7 +20,7 @@ export interface CertifyRouterResult {
 }
 
 export async function createCertifyRouter(): Promise<CertifyRouterResult> {
-  const localCertifyEdKey = await generateEd25519Key(Buffer.from('mossip-certify-ed25519-seed-32b!'))
+  const localCertifyEdKey = await generateEd25519Key(Buffer.from(env.secrets.certifyKeySeed))
   const localCertifyP256Key = await generateP256Key()
   const router = Router()
 

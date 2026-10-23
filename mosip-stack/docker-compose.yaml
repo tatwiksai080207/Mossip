@@ -32,7 +32,7 @@ services:
       - enable_certify_artifactory=false
       - download_hsm_client=false
       - mosip_certify_domain_url=http://certify-nginx:80
-      - mosip_certify_identifier=${PUBLIC_BASE_URL:-https://populace-viscosity-suitable.ngrok-free.dev}/api/local-certify
+      - mosip_certify_identifier=${PUBLIC_BASE_URL:-http://localhost:3001}/api/local-certify
       - mosip_certify_authorization_url=http://host.docker.internal:3001/api/oidc
     volumes:
       - ./config/certify-default.properties:/home/mosip/config/certify-default.properties
@@ -81,10 +81,10 @@ services:
       - SPRING_CONFIG_NAME=mimoto
       - SPRING_CONFIG_LOCATION=/home/mosip/
       - SPRING_CLOUD_BOOTSTRAP_LOCATION=/home/mosip/mimoto-bootstrap.properties
-      - oidc_p12_password=xy4gh6swa2i
-      - WALLET_BINDING_PARTNER_API_KEY=dummywalletbindingpartnerapikey
-      - GOOGLE_OAUTH_CLIENT_ID=297624953605-pdbaemggubg5jkp7nabefddp4kcftu9r.apps.googleusercontent.com
-      - GOOGLE_OAUTH_CLIENT_SECRET=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
+      - oidc_p12_password=${OIDC_KEYSTORE_PASSWORD:-xy4gh6swa2i}
+      - WALLET_BINDING_PARTNER_API_KEY=${WALLET_BINDING_PARTNER_API_KEY:-dummywalletbindingpartnerapikey}
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
       - SPRING_DATASOURCE_URL=jdbc:postgresql://database:5432/inji_mimoto
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -137,7 +137,7 @@ services:
       - DATABASE_USERNAME=postgres
       - DATABASE_PASSWORD=postgres
       - INJI_VP_REQUEST_LONG_POLLING_TIMEOUT=55000
-      - INJI_VP_SUBMISSION_BASE_URL=${PUBLIC_BASE_URL:-https://populace-viscosity-suitable.ngrok-free.dev}/v1/verify
+      - INJI_VP_SUBMISSION_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:3001}/v1/verify
       - INJI_DID_VERIFY_URI=did:web:verify-service:v1:verify
       - INJI_DID_VERIFY_PUBLIC_KEY_URI=did:web:verify-service:v1:verify#key-0
       - INJI_KEYSTORE_FILE_PASS=mosip

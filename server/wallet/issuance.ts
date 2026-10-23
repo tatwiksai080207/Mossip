@@ -9,10 +9,11 @@ import {
 } from './types'
 import { parseOffer } from './offer-parser'
 import { createFallbackResidentCredential } from './fallback-credentials'
+import { env } from '../config/env'
 
 const PRE_AUTH_GRANT = 'urn:ietf:params:oauth:grant-type:pre-authorized_code'
 const AUTH_CODE_GRANT = 'authorization_code'
-const PORT = Number(process.env.PORT || 3001)
+const PORT = env.ports.server
 
 export function resolveCandidateUrls(targetUrl: string): string[] {
   const list = [targetUrl]
@@ -193,7 +194,7 @@ export async function executeAcceptOffer(
       const isCollab = offer.credential_issuer.includes('collab.mosip.net')
 
       if (isCollab) {
-        tokenEndpoint = 'https://api.collab.mosip.net/v1/mimoto/get-token/Mosip'
+        tokenEndpoint = `${env.endpoints.mimoto}/get-token/Mosip`
       } else if (!tokenEndpoint) {
         const authServers = metadata.authorization_servers as string[] | undefined
         const asUrl = authServers?.[0]
@@ -212,7 +213,7 @@ export async function executeAcceptOffer(
 
       if (!tokenEndpoint) throw new Error('No token_endpoint discoverable from issuer or authorization server metadata')
 
-      const redirectUri = opts.redirectUri || (isCollab ? 'https://injiweb.collab.mosip.net/redirect' : 'http://localhost:3001/callback')
+      const redirectUri = opts.redirectUri || (isCollab ? 'https://injiweb.collab.mosip.net/redirect' : `http://localhost:${PORT}/callback`)
       const clientId = opts.clientId || (isCollab ? 'mpartner-default-mimoto-mosipid-oidc' : 'mock_client_id')
 
       const tokenParams: Record<string, string> = {
