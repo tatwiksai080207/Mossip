@@ -48,7 +48,7 @@ export async function verifyPresentation(
   if (isRejected) {
     const isMdoc = session?.dcqlQuery?.credentials?.[0]?.format === 'mso_mdoc' || JSON.stringify(data).includes('mso_mdoc')
     const findingMsg = isMdoc
-      ? 'Finding #7: Inji Verify (verify-service 0.17.0) backend has no native mso_mdoc parser in VerifiablePresentationSubmissionServiceImpl.java (throws InvalidVpTokenException). Verified via Local Inji Verify mDoc Engine & walt.id OpenID4VP Verifier.'
+      ? 'Upstream Specification Gap (Finding #7): Inji Verify (verify-service 0.17.0) backend has no native ISO/IEC 18013-5 mDoc parser in VerifiablePresentationSubmissionServiceImpl.java (throws InvalidVpTokenException). Native mDoc verification is scheduled for Inji Verify v0.18.0+ (per docs.inji.io). To execute genuine end-to-end OpenID4VP verification of this mDoc credential, select "walt.id Verifier".'
       : 'Inji Verify currently requires an X.509 certificate chain (x5c) for SD-JWT VC rather than decentralized did:key/did:jwk.'
 
     throw new StepError(`Inji Verify rejected the presentation (status: ${vpStatus || 'FAILED'})`, {
@@ -56,6 +56,8 @@ export async function verifyPresentation(
       _verification_results: vcResults || credResults,
       _response: data,
       _interop_finding: findingMsg,
+      _upstream_status: isMdoc ? 'Planned v0.18.0+ (ISO/IEC 18013-5)' : undefined,
+      _cross_ecosystem_alternative: isMdoc ? 'walt.id Verifier' : undefined,
     })
   }
 

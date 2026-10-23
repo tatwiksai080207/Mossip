@@ -13,4 +13,5 @@ export { default as InjiVerifyPanel } from './verification/InjiVerifyPanel'
 export { default as TestReport } from './reporting/TestReport'
 export { default as RunHistory } from './reporting/RunHistory'
 export { default as InteropMatrix } from './reporting/InteropMatrix'
+export { InteropGapBanner } from './flow/InteropGapBanner'
 

@@ -15,6 +15,7 @@ import {
   ManualPresentationSection,
   InteractiveWalletModal,
   ManualModePreRunBanner,
+  InteropGapBanner,
 } from './components'
 import { useStore } from './store/index'
 
@@ -250,6 +251,16 @@ function App() {
 
               <TamperBanner tamperMode={tamperMode} onReset={() => setTamperMode('none')} />
 
+              {/* Prominent Interoperability Finding Banner on Protocol Gaps */}
+              {flowHasRun && (
+                <InteropGapBanner
+                  steps={steps}
+                  selectedCredType={selectedCredType}
+                  selectedVerifier={selectedVerifier}
+                  onResetTest={resetTest}
+                />
+              )}
+
               {/* Dynamic Step Progression and Sequence Diagram */}
               {steps.length > 0 ? (
                 diagramExpanded ? (
@@ -306,28 +317,6 @@ function App() {
                 </div>
               )}
 
-              {/* Gap Alert Banner if eSignet headless token error occurs */}
-              {flowHasRun && steps.some(s => s.id === 'credential-issuance' && s.status === 'error') && (
-                <div className="border border-amber-500/30 bg-amber-500/5 rounded-xl px-4 py-3.5 flex gap-3 shadow-sm">
-                  <div className="w-5 h-5 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0 mt-0.5">
-                    <svg className="w-3.5 h-3.5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-amber-300">Interoperability Gap Discovered</p>
-                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                      Step 4 (Credential Issuance) requires an OAuth access token from eSignet, which mandates
-                      an interactive login with a dynamic email OTP. Automated &amp; headless issuance is not
-                      supported by the Collab sandbox. Steps 1–3 completed with live data. Steps 5–7 continue
-                      with mock data to demonstrate the full protocol flow.{' '}
-                      <a href="https://github.com" className="text-amber-400 underline font-medium" target="_blank" rel="noopener noreferrer">
-                        See INTEROPERABILITY_REPORT.md
-                      </a>
-                    </p>
-                  </div>
-                </div>
-              )}
 
               {/* Post-Run Test Report */}
               {flowHasRun && selectedIssuer && selectedWallet && selectedVerifier && selectedCredType && (

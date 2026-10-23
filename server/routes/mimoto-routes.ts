@@ -212,11 +212,31 @@ export function createMimotoRouter(deps: MimotoRouterDeps): Router {
       configId.toLowerCase().includes('mdoc') ||
       configId.toLowerCase().includes('drivinglicense') ||
       isFarmer
-    console.log(`[wallet-bridge] Interceptor hit! isPlayground=${isPlayground}, isFarmer=${isFarmer}, body:`, JSON.stringify(req.body))
 
+    // 1. Attempt genuine over-the-wire proxy to the real Mimoto container first
+    try {
+      const forwardHeaders = { ...req.headers }
+      delete forwardHeaders['host']
+      const proxyRes = await proxyRequest(
+        localMimotoHost,
+        `/v1/mimoto/wallets/${walletId}/credentials`,
+        req.method,
+        forwardHeaders as Record<string, string>,
+        req.body,
+      )
+      if (proxyRes.status >= 200 && proxyRes.status < 300) {
+        console.log(`[wallet-bridge] Real Mimoto service successfully handled credential issuance natively (HTTP ${proxyRes.status})`)
+        return res.status(proxyRes.status).json(proxyRes.body)
+      }
+      console.log(`[wallet-bridge] Real Mimoto returned HTTP ${proxyRes.status}; falling back to local bridge handler`)
+    } catch (proxyErr) {
+      console.warn('[wallet-bridge] Direct proxy to Mimoto container failed, using fallback:', proxyErr)
+    }
+
+    // 2. Fallback bridge for headless / simulated environments
     if (isPlayground || isFarmer) {
       try {
-        console.log(`[wallet-bridge] Intercepted credential download for wallet ${walletId}, config: ${configId}, issuer: ${issuer}`)
+        console.log(`[wallet-bridge] Bridge fallback active for wallet ${walletId}, config: ${configId}, issuer: ${issuer}`)
         const result = await handlePlaygroundIssuanceToMimoto({
           walletId,
           credentialConfigurationId: configId,
