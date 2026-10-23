@@ -137,7 +137,7 @@ services:
       - DATABASE_USERNAME=postgres
       - DATABASE_PASSWORD=postgres
       - INJI_VP_REQUEST_LONG_POLLING_TIMEOUT=55000
-      - INJI_VP_SUBMISSION_BASE_URL=http://host.docker.internal:3001/v1/verify
+      - INJI_VP_SUBMISSION_BASE_URL=${PUBLIC_BASE_URL:-https://populace-viscosity-suitable.ngrok-free.dev}/v1/verify
       - INJI_DID_VERIFY_URI=did:web:verify-service:v1:verify
       - INJI_DID_VERIFY_PUBLIC_KEY_URI=did:web:verify-service:v1:verify#key-0
       - INJI_KEYSTORE_FILE_PASS=mosip

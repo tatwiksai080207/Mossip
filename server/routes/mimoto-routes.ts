@@ -74,67 +74,29 @@ export function createMimotoRouter(deps: MimotoRouterDeps): Router {
       if (result.body && typeof result.body === 'object' && (result.body as any).response?.verifiers) {
         const verifiers = (result.body as any).response.verifiers
         const activeTunnelUrl = getActiveTunnelUrl().replace(/\/$/, '')
-        for (const v of verifiers) {
-          if (v.client_id === 'localhost-verifier' || v.client_id?.includes('ngrok')) {
-            v.jwks_uri = `${activeTunnelUrl}/api/verifier/jwks.json`
-            v.redirect_uris = [
-              'http://localhost:3000',
-              'http://localhost:3000/',
-              'http://host.docker.internal:3000',
-              `${activeTunnelUrl}`,
-            ]
-            v.redirect_uri = v.redirect_uris
-            v.response_uris = [
-              `${activeTunnelUrl}/v1/verify/v2/vp-submission/direct-post`,
-              `${activeTunnelUrl}/v1/verify/vp-submission/direct-post`,
-              'http://host.docker.internal:3001/v1/verify/v2/vp-submission/direct-post',
-              'http://host.docker.internal:3001/v1/verify/vp-submission/direct-post',
-              'http://inji-playground:3001/v1/verify/v2/vp-submission/direct-post',
-              'http://inji-playground:3001/v1/verify/vp-submission/direct-post',
-              'http://verify-service:8080/v1/verify/v2/vp-submission/direct-post',
-              'http://verify-service:8080/v1/verify/vp-submission/direct-post',
-              'http://localhost:8095/v1/verify/v2/vp-submission/direct-post',
-              'http://localhost:8095/v1/verify/vp-submission/direct-post',
-            ]
+
+        // Fallback safety synchronization: ensure dynamic tunnel URL is accepted if ngrok domain rotates
+        if (activeTunnelUrl && !activeTunnelUrl.includes('localhost') && !activeTunnelUrl.includes('127.0.0.1')) {
+          for (const v of verifiers) {
+            if (v.client_id === 'localhost-verifier' || v.client_id === 'did:web:verify-service:v1:verify' || v.client_id === 'waltid-verifier') {
+              if (Array.isArray(v.response_uris)) {
+                const tunnelPost = `${activeTunnelUrl}/v1/verify/vp-submission/direct-post`
+                const tunnelV2Post = `${activeTunnelUrl}/v1/verify/v2/vp-submission/direct-post`
+                const waltidTunnelPost = `${activeTunnelUrl}/api/external/waltid/verifier/v1/verify/vp-submission/direct-post`
+                if (v.client_id === 'waltid-verifier') {
+                  if (!v.response_uris.includes(waltidTunnelPost)) v.response_uris.unshift(waltidTunnelPost)
+                } else {
+                  if (!v.response_uris.includes(tunnelPost)) v.response_uris.unshift(tunnelPost)
+                  if (!v.response_uris.includes(tunnelV2Post)) v.response_uris.unshift(tunnelV2Post)
+                }
+              }
+              if (Array.isArray(v.redirect_uris) && !v.redirect_uris.includes(activeTunnelUrl)) {
+                v.redirect_uris.push(activeTunnelUrl)
+              }
+            }
           }
         }
-        const hasCollabHttps = verifiers.some((v: any) => v.client_id === 'https://injiverify.collab.mosip.net')
-        if (!hasCollabHttps) {
-          verifiers.push({
-            client_id: 'https://injiverify.collab.mosip.net',
-            redirect_uris: ['https://injiverify.collab.mosip.net/'],
-            response_uris: ['https://injiverify.collab.mosip.net/v1/verify/v2/vp-submission/direct-post'],
-            jwks_uri: 'https://injiverify.collab.mosip.net/v1/verify/jwks.json',
-            allow_unsigned_request: true,
-            spec_version: 'v2',
-          })
-        }
-        const hasCollabSlash = verifiers.some((v: any) => v.client_id === 'injiverify.collab.mosip.net/')
-        if (!hasCollabSlash) {
-          verifiers.push({
-            client_id: 'injiverify.collab.mosip.net/',
-            redirect_uris: ['https://injiverify.collab.mosip.net/'],
-            response_uris: ['https://injiverify.collab.mosip.net/v1/verify/v2/vp-submission/direct-post'],
-            jwks_uri: 'https://injiverify.collab.mosip.net/v1/verify/jwks.json',
-            allow_unsigned_request: true,
-            spec_version: 'v1',
-          })
-        }
-        const hasWaltid = verifiers.some((v: any) => v.client_id === 'waltid-verifier')
-        if (!hasWaltid) {
-          verifiers.push({
-            client_id: 'waltid-verifier',
-            redirect_uris: ['http://localhost:3001/api/external/waltid/verifier'],
-            response_uris: [
-              `${activeTunnelUrl}/api/external/waltid/verifier/v1/verify/vp-submission/direct-post`,
-              'http://localhost:3001/api/external/waltid/verifier/v1/verify/vp-submission/direct-post',
-              'http://inji-playground:3001/api/external/waltid/verifier/v1/verify/vp-submission/direct-post',
-            ],
-            jwks_uri: `${activeTunnelUrl}/api/verifier/jwks.json`,
-            allow_unsigned_request: true,
-            spec_version: 'v1',
-          })
-        }
+        console.log(`[mimoto-proxy] Serving native Mimoto trusted verifiers registry (${verifiers.length} verifiers)`)
       }
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
       res.setHeader('Pragma', 'no-cache')

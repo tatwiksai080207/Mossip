@@ -16,16 +16,21 @@ export function maybeRewriteAndSignVpRequestJwt(jwtStr: string): string {
     let changed = false
 
     if (payload.response_uri) {
+      const isInternal =
+        payload.response_uri.includes('host.docker.internal') ||
+        payload.response_uri.includes('localhost') ||
+        payload.response_uri.includes('127.0.0.1') ||
+        payload.response_uri.includes('verify-service')
+
+      if (!isInternal) {
+        console.log('[verifier-proxy] Serving native Inji Verify signed JWT without re-signing (response_uri:', payload.response_uri, ')')
+        return jwtStr
+      }
+
       if (activeTunnel && !activeTunnel.includes('localhost') && !activeTunnel.includes('127.0.0.1')) {
-        if (
-          payload.response_uri.includes('host.docker.internal') ||
-          payload.response_uri.includes('localhost') ||
-          payload.response_uri.includes('verify-service')
-        ) {
-          payload.response_uri = payload.response_uri.replace(/^https?:\/\/[^\/]+/, activeTunnel)
-          changed = true
-          console.log('[verifier-proxy] Rewrote JWT response_uri to:', payload.response_uri)
-        }
+        payload.response_uri = payload.response_uri.replace(/^https?:\/\/[^\/]+/, activeTunnel)
+        changed = true
+        console.log('[verifier-proxy] Fallback: Rewrote internal response_uri to active tunnel:', payload.response_uri)
       }
     }
 

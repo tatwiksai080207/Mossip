@@ -2,16 +2,43 @@
   "verifiers": [
     {
       "client_id": "https://injiverify.collab.mosip.net",
+      "redirect_uris": [
+        "https://injiverify.collab.mosip.net/"
+      ],
       "redirect_uri": [
         "https://injiverify.collab.mosip.net/"
       ],
       "response_uris": [
         "https://injiverify.collab.mosip.net/v1/verify/v2/vp-submission/direct-post"
       ],
+      "jwks_uri": "https://injiverify.collab.mosip.net/v1/verify/jwks.json",
+      "spec_version": "v2",
       "allow_unsigned_request": true
     },
     {
-      "client_id": "localhost-verifier",
+      "client_id": "injiverify.collab.mosip.net/",
+      "redirect_uris": [
+        "https://injiverify.collab.mosip.net/"
+      ],
+      "redirect_uri": [
+        "https://injiverify.collab.mosip.net/"
+      ],
+      "response_uris": [
+        "https://injiverify.collab.mosip.net/v1/verify/v2/vp-submission/direct-post"
+      ],
+      "jwks_uri": "https://injiverify.collab.mosip.net/v1/verify/jwks.json",
+      "spec_version": "v1",
+      "allow_unsigned_request": true
+    },
+    {
+      "client_id": "did:web:verify-service:v1:verify",
+      "redirect_uris": [
+        "http://localhost:3000",
+        "http://localhost:3000/",
+        "http://host.docker.internal:3000",
+        "https://populace-viscosity-suitable.ngrok-free.dev",
+        "https://populace-viscosity-suitable.ngrok-free.dev/"
+      ],
       "redirect_uri": [
         "http://localhost:3000",
         "http://localhost:3000/",
@@ -19,7 +46,27 @@
         "https://populace-viscosity-suitable.ngrok-free.dev",
         "https://populace-viscosity-suitable.ngrok-free.dev/"
       ],
+      "response_uris": [
+        "https://populace-viscosity-suitable.ngrok-free.dev/v1/verify/vp-submission/direct-post",
+        "https://populace-viscosity-suitable.ngrok-free.dev/v1/verify/v2/vp-submission/direct-post",
+        "http://host.docker.internal:3001/v1/verify/vp-submission/direct-post",
+        "http://host.docker.internal:3001/v1/verify/v2/vp-submission/direct-post",
+        "http://localhost:8095/v1/verify/vp-submission/direct-post",
+        "http://verify-service:8080/v1/verify/vp-submission/direct-post"
+      ],
+      "jwks_uri": "https://populace-viscosity-suitable.ngrok-free.dev/api/verifier/jwks.json",
+      "allow_unsigned_request": true
+    },
+    {
+      "client_id": "localhost-verifier",
       "redirect_uris": [
+        "http://localhost:3000",
+        "http://localhost:3000/",
+        "http://host.docker.internal:3000",
+        "https://populace-viscosity-suitable.ngrok-free.dev",
+        "https://populace-viscosity-suitable.ngrok-free.dev/"
+      ],
+      "redirect_uri": [
         "http://localhost:3000",
         "http://localhost:3000/",
         "http://host.docker.internal:3000",
@@ -38,12 +85,36 @@
         "http://localhost:8095/v1/verify/v2/vp-submission/direct-post",
         "http://localhost:8095/v1/verify/vp-submission/direct-post"
       ],
-      "jwks_uri": "http://host.docker.internal:3001/api/verifier/jwks.json",
+      "jwks_uri": "https://populace-viscosity-suitable.ngrok-free.dev/api/verifier/jwks.json",
       "allow_unsigned_request": true
     },
     {
+      "client_id": "waltid-verifier",
+      "redirect_uris": [
+        "http://localhost:3001/api/external/waltid/verifier",
+        "https://populace-viscosity-suitable.ngrok-free.dev/api/external/waltid/verifier"
+      ],
+      "redirect_uri": [
+        "http://localhost:3001/api/external/waltid/verifier",
+        "https://populace-viscosity-suitable.ngrok-free.dev/api/external/waltid/verifier"
+      ],
+      "response_uris": [
+        "https://populace-viscosity-suitable.ngrok-free.dev/api/external/waltid/verifier/v1/verify/vp-submission/direct-post",
+        "http://localhost:3001/api/external/waltid/verifier/v1/verify/vp-submission/direct-post",
+        "http://inji-playground:3001/api/external/waltid/verifier/v1/verify/vp-submission/direct-post"
+      ],
+      "jwks_uri": "https://populace-viscosity-suitable.ngrok-free.dev/api/verifier/jwks.json",
+      "allow_unsigned_request": true,
+      "spec_version": "v1"
+    },
+    {
       "client_id": "http://host.docker.internal:3001",
-      "redirect_uri": [],
+      "redirect_uris": [
+        "http://host.docker.internal:3001"
+      ],
+      "redirect_uri": [
+        "http://host.docker.internal:3001"
+      ],
       "response_uris": [
         "http://host.docker.internal:3001/v1/verify/v2/vp-submission/direct-post",
         "http://host.docker.internal:3001/v1/verify/vp-submission/direct-post",
@@ -55,7 +126,12 @@
     },
     {
       "client_id": "http://localhost:8095",
-      "redirect_uri": [],
+      "redirect_uris": [
+        "http://localhost:8095"
+      ],
+      "redirect_uri": [
+        "http://localhost:8095"
+      ],
       "response_uris": [
         "http://localhost:8095/v1/verify/v2/vp-submission/direct-post",
         "http://localhost:8095/v1/verify/vp-submission/direct-post",
@@ -65,7 +141,12 @@
     },
     {
       "client_id": "http://verify-service:8080",
-      "redirect_uri": [],
+      "redirect_uris": [
+        "http://verify-service:8080"
+      ],
+      "redirect_uri": [
+        "http://verify-service:8080"
+      ],
       "response_uris": [
         "http://verify-service:8080/v1/verify/vp-submission/direct-post",
         "http://localhost:8095/v1/verify/vp-submission/direct-post"
