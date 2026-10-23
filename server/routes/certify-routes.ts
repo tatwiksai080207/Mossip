@@ -8,6 +8,7 @@ import { generateEd25519Key, generateP256Key, type PlaygroundKey } from '../keys
 import { rewriteLocalCertifyMetadata } from './certify/metadata'
 import { handleCertifyMockIssuance } from './certify/mock-issuance'
 import { registerPreAuthCode } from '../oidc'
+import { notifyFlowStep } from '../events/flow-events'
 
 export { rewriteLocalCertifyMetadata, handleCertifyMockIssuance }
 
@@ -131,6 +132,10 @@ export async function createCertifyRouter(): Promise<CertifyRouterResult> {
       JSON.stringify(credentialOffer)
     )}`
     console.log('[local-certify] Generated credential offer for', configurationId, 'grantType:', grantType || 'both', 'preAuth:', preAuthorizedCode)
+    notifyFlowStep('credential-offer', 'done', {
+      source: 'live_mobile',
+      configurationId,
+    })
     res.json({
       credential_offer: credentialOffer,
       credential_offer_uri,

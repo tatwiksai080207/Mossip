@@ -1,6 +1,7 @@
 import type express from 'express'
 import { getPublicBaseUrl } from '../../tunnel'
 import { CERTIFY_INTERNAL_DOCKER, COLLAB_ESIGNET_PATTERN } from '../../proxy/certify-proxy'
+import { notifyFlowStep } from '../../events/flow-events'
 
 export function rewriteLocalCertifyMetadata(
   body: Record<string, unknown>,
@@ -23,7 +24,6 @@ export function rewriteLocalCertifyMetadata(
     typeof result.credential_issuer === 'string'
       ? rewriteBase(result.credential_issuer)
       : localCertifyHost
-  result._internal_credential_issuer = result.credential_issuer
   result.credential_endpoint =
     typeof result.credential_endpoint === 'string'
       ? rewritePath(result.credential_endpoint)
@@ -239,5 +239,11 @@ export function rewriteLocalCertifyMetadata(
   }
 
   result.credential_configurations_supported = configs
+  if (req) {
+    notifyFlowStep('issuer-metadata', 'done', {
+      source: 'live_mobile',
+      credential_issuer: result.credential_issuer,
+    })
+  }
   return result
 }

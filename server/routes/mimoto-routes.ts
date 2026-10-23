@@ -6,7 +6,9 @@ import {
   generateDrivingLicencePdf,
   generateIdentityCredentialPdf,
   generateFarmerCredentialPdf,
+  parseCredentialClaims,
 } from './mimoto/pdf-generator'
+import { enrichMimotoProperties } from './mimoto/properties'
 import { getMimotoDbClient, handlePlaygroundIssuanceToMimoto } from './mimoto/db-bridge'
 import { createMimotoPresentationRouter } from './mimoto/presentation-bridge'
 
@@ -14,6 +16,8 @@ export {
   generateDrivingLicencePdf,
   generateIdentityCredentialPdf,
   generateFarmerCredentialPdf,
+  parseCredentialClaims,
+  enrichMimotoProperties,
   getMimotoDbClient,
   handlePlaygroundIssuanceToMimoto,
 }
@@ -42,12 +46,11 @@ export function createMimotoRouter(deps: MimotoRouterDeps): Router {
         forwardHeaders as Record<string, string>,
       )
       if (result.body && typeof result.body === 'object' && (result.body as any).response) {
-        const resp = (result.body as any).response
-        const activeTunnel = getActiveTunnelUrl().replace(/\/$/, '')
-        resp.warningDomainName = activeTunnel
-        resp.cacheTTLInMilliSeconds = '1'
-        resp.openid4vpClientValidation = 'true'
-        resp.disableCredentialOfferVcVerification = true
+        const activeTunnel = getActiveTunnelUrl()
+        ;(result.body as any).response = enrichMimotoProperties(
+          (result.body as any).response,
+          activeTunnel,
+        )
       }
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
       res.setHeader('Pragma', 'no-cache')
@@ -136,15 +139,20 @@ export function createMimotoRouter(deps: MimotoRouterDeps): Router {
     const isFarmer = credType.includes('Farmer') || credType.toLowerCase().includes('farmer')
     const formatLabel =
       credType.includes('SD_JWT') || credType.includes('sd-jwt') || credType.includes('SDJWT')
-        ? 'IETF SD-JWT VC'
+        ? 'IETF SD-JWT VC (Selective Disclosure)'
         : credType.includes('2.0') || credType.includes('VCDM20')
         ? 'W3C Verifiable Credential 2.0 (JSON-LD)'
         : 'W3C Verifiable Credential 1.1 (JSON-LD)'
+
+    const name = (req.query.name as string) || (req.query.fullName as string) || undefined
+    const farmerId = (req.query.farmerId as string) || undefined
+    const docNumber = (req.query.docNumber as string) || undefined
+
     const pdfBuffer = isMdoc
-      ? generateDrivingLicencePdf()
+      ? generateDrivingLicencePdf({ docNumber, name, formatLabel })
       : isFarmer
-      ? generateFarmerCredentialPdf({ formatLabel })
-      : generateIdentityCredentialPdf(credType)
+      ? generateFarmerCredentialPdf({ formatLabel, name, farmerId })
+      : generateIdentityCredentialPdf(credType, { name, formatLabel })
     const filename = isMdoc
       ? 'DrivingLicense_mDoc.pdf'
       : isFarmer
@@ -269,24 +277,68 @@ export function createMimotoRouter(deps: MimotoRouterDeps): Router {
       try {
         const client = await getMimotoDbClient()
         const dbRes = await client.query(
-          `SELECT id, credential_metadata FROM public.verifiable_credentials WHERE id = $1 AND wallet_id = $2`,
+          `SELECT id, credential, credential_metadata FROM public.verifiable_credentials WHERE id = $1 AND wallet_id = $2`,
           [credentialId, walletId]
         )
         await client.end().catch(() => {})
 
         if (dbRes.rows.length > 0) {
-          const credType = dbRes.rows[0].credential_metadata?.credentialType || ''
+          const row = dbRes.rows[0]
+          const claims = parseCredentialClaims(row.credential, row.credential_metadata)
+          const credType = claims.credentialType || row.credential_metadata?.credentialType || ''
           const isMdoc =
             credType.includes('mDoc') || credType.includes('DrivingLicense') || credType.toLowerCase().includes('mdoc')
           const isFarmer = credType.includes('Farmer') || credType.toLowerCase().includes('farmer')
-          const isSupported = credType.startsWith('Playground') || isMdoc || isFarmer
+          const isSupported = credType.startsWith('Playground') || isMdoc || isFarmer || credType.includes('Credential')
+
           if (isSupported) {
+            const formatLabel = isMdoc
+              ? 'ISO/IEC 18013-5 (mDoc / mDL)'
+              : credType.includes('SD_JWT') || credType.includes('sd-jwt')
+              ? 'IETF SD-JWT VC (Selective Disclosure)'
+              : credType.includes('2.0') || credType.includes('VCDM2.0')
+              ? 'W3C Verifiable Credential 2.0 (JSON-LD)'
+              : 'W3C Verifiable Credential 1.1 (JSON-LD)'
+
             const filename = isMdoc ? 'PlaygroundDrivingLicense_mDoc.pdf' : isFarmer ? 'FarmerCredential.pdf' : `${credType}.pdf`
             const pdfBuffer = isMdoc
-              ? generateDrivingLicencePdf()
+              ? generateDrivingLicencePdf({
+                  name: claims.fullName || claims.name,
+                  docNumber: claims.docNumber || claims.licenseNumber || claims.id,
+                  dob: claims.dateOfBirth || claims.dob,
+                  gender: claims.gender,
+                  state: claims.state || claims.region,
+                  formatLabel,
+                  status: 'Active & Valid',
+                })
               : isFarmer
-              ? generateFarmerCredentialPdf()
-              : generateIdentityCredentialPdf(credType)
+              ? generateFarmerCredentialPdf({
+                  name: claims.fullName || claims.name,
+                  farmerId: claims.farmerID || claims.farmerId || claims.id,
+                  dob: claims.dateOfBirth || claims.dob,
+                  gender: claims.gender,
+                  mobile: claims.mobileNumber || claims.mobile,
+                  state: claims.state,
+                  district: claims.district,
+                  villageOrTown: claims.villageOrTown,
+                  landArea: claims.landArea ? `${claims.landArea} (${claims.landOwnershipType || 'Owner'})` : undefined,
+                  primaryCropType: claims.primaryCropType,
+                  secondaryCropType: claims.secondaryCropType,
+                  formatLabel,
+                  issuer: claims.issuer,
+                  issuanceDate: claims.issuanceDate,
+                  expirationDate: claims.expirationDate,
+                  status: 'Active & Valid',
+                })
+              : generateIdentityCredentialPdf(credType, {
+                  name: claims.fullName || claims.name,
+                  docNumber: claims.docNumber || claims.uin || claims.farmerID || claims.id,
+                  dob: claims.dateOfBirth || claims.dob,
+                  gender: claims.gender,
+                  region: claims.region || claims.state || claims.district,
+                  formatLabel,
+                  status: 'Active & Valid',
+                })
             res.setHeader('Content-Type', 'application/pdf')
             res.setHeader('Content-Disposition', action === 'download' ? `attachment; filename="${filename}"` : `inline; filename="${filename}"`)
             return res.send(pdfBuffer)

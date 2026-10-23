@@ -19,7 +19,51 @@ export type StoreSet = (
   partial: Partial<PlaygroundStore> | ((state: PlaygroundStore) => Partial<PlaygroundStore>)
 ) => void
 
+let activeEventSource: EventSource | null = null
+
+export function initFlowStreamListener(get: StoreGet, set: StoreSet): void {
+  if (typeof window === 'undefined' || activeEventSource) return
+
+  try {
+    activeEventSource = new EventSource('/api/events/flow-stream')
+    activeEventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as {
+          stepId: string
+          status: 'pending' | 'running' | 'done' | 'error'
+          details?: Record<string, unknown>
+        }
+        if (!data || !data.stepId) return
+
+        const currentSteps = get().steps
+        const stepIndex = currentSteps.findIndex(s => s.id === data.stepId)
+        if (stepIndex === -1) return
+
+        // Update step status in real-time as the mobile device calls the backend
+        set(state => ({
+          steps: state.steps.map((s, idx) => {
+            if (idx === stepIndex) {
+              return {
+                ...s,
+                status: data.status,
+                payload: data.details ? { ...(typeof s.payload === 'object' ? s.payload : {}), ...data.details } : s.payload,
+                source: 'live',
+              }
+            }
+            return s
+          }) as FlowStepInfo[],
+        }))
+      } catch (err) {
+        console.warn('[flow-stream] Error parsing SSE payload:', err)
+      }
+    }
+  } catch (err) {
+    console.warn('[flow-stream] EventSource initialization failed:', err)
+  }
+}
+
 export async function runFlowExecution(get: StoreGet, set: StoreSet): Promise<void> {
+  initFlowStreamListener(get, set)
   const { selectedIssuer, selectedWallet, selectedVerifier, selectedCredType, tamperMode } = get()
   if (!selectedIssuer || !selectedWallet || !selectedVerifier || !selectedCredType) return
 
@@ -198,6 +242,7 @@ export async function runFlowExecution(get: StoreGet, set: StoreSet): Promise<vo
 }
 
 export async function continueVerificationExecution(get: StoreGet, set: StoreSet): Promise<void> {
+  initFlowStreamListener(get, set)
   const { steps, selectedCredType, selectedVerifier, tamperMode } = get()
   if (!selectedCredType || !selectedVerifier) return
 
@@ -249,6 +294,7 @@ export async function continueVerificationExecution(get: StoreGet, set: StoreSet
 }
 
 export async function checkVerificationResultExecution(get: StoreGet, set: StoreSet): Promise<void> {
+  initFlowStreamListener(get, set)
   const { steps, selectedVerifier } = get()
   if (!selectedVerifier) return
 

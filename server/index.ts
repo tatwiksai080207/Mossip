@@ -17,6 +17,7 @@ import { registryRouter } from './routes/registry-routes'
 import { keycloakMockRouter } from './routes/keycloak-mock'
 import { standardProxyRouter } from './routes/proxy-routes'
 import { diagnosticsRouter } from './routes/diagnostics-routes'
+import { createFlowEventsRouter } from './events/flow-events'
 import { errorHandlerMiddleware } from './errors'
 import { env } from './config/env'
 
@@ -89,6 +90,7 @@ app.use(keycloakMockRouter)
 app.use(standardProxyRouter)
 app.use(registryRouter)
 app.use(diagnosticsRouter)
+app.use(createFlowEventsRouter())
 
 // ── OAuth 2.0 Callback Endpoint ─────────────────────────────────────────────
 app.get('/callback', (req, res) => {

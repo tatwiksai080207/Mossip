@@ -337,7 +337,6 @@ export async function executeAcceptOffer(
 
   // 5 — proof of possession
   const proofAudience =
-    (metadata._internal_credential_issuer as string | undefined) ??
     (metadata.credential_issuer as string | undefined) ??
     offer.credential_issuer
 
@@ -350,7 +349,6 @@ export async function executeAcceptOffer(
     typ: 'openid4vci-proof+jwt',
     kid: format === 'ldp_vc' ? presentationKey.verificationMethod : key.verificationMethod,
     aud: proofAudience,
-    internal_issuer_used: Boolean(metadata._internal_credential_issuer),
     nonce_bound: Boolean(cNonce),
     jwt_length: proofJwt.length,
     decoded_header: jose.decodeProtectedHeader(proofJwt),

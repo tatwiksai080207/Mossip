@@ -7,6 +7,7 @@ import { type PlaygroundKey } from '../../keys'
 import { issueMdocCredential } from '../../formats/mdoc'
 import { issueLdpCredential } from '../../formats/ldp'
 import { issueSdJwtCredential } from '../../formats/sd-jwt'
+import { notifyFlowStep } from '../../events/flow-events'
 
 export interface CertifyMockIssuanceParams {
   req: Request
@@ -123,6 +124,11 @@ export async function handleCertifyMockIssuance(params: CertifyMockIssuanceParam
       console.log(`[local-certify] Successfully issued ${rawConfigId} (${draft11Body.format}) natively from Docker Inji Certify (port 8090)`)
       const bodyObj = typeof result.body === 'object' && result.body !== null ? (result.body as any) : {}
       const returnedFormat = isSdJwt ? 'vc+sd-jwt' : isMdoc ? 'mso_mdoc' : 'ldp_vc'
+      notifyFlowStep('credential-issuance', 'done', {
+        source: 'live_mobile',
+        format: returnedFormat,
+        configId: rawConfigId,
+      })
       return res.status(result.status).json({
         format: returnedFormat,
         credential: bodyObj.credential || result.body,

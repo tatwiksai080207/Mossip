@@ -4,6 +4,7 @@ import { ENDPOINTS } from '../endpoints'
 import { getActiveTunnelUrl, getPublicBaseUrl } from '../tunnel'
 import { getActiveTamperMode, applyTamperingToVpToken } from '../tamper'
 import { proxyRequest, splatPath } from '../proxy/http-proxy'
+import { notifyFlowStep } from '../events/flow-events'
 
 export function maybeRewriteAndSignVpRequestJwt(jwtStr: string): string {
   if (typeof jwtStr !== 'string' || !jwtStr.includes('.')) return jwtStr
@@ -85,6 +86,7 @@ verifierRouter.all('/v1/verify/*splat', async (req: Request, res: Response) => {
     // If fetching the signed authorization request JWT via GET /v1/verify/vp-request/:requestId
     if (req.method === 'GET' && path.includes('/vp-request/') && typeof result.body === 'string' && result.body.includes('.')) {
       const rewrittenJwt = maybeRewriteAndSignVpRequestJwt(result.body)
+      notifyFlowStep('vp-request', 'done', { source: 'live_mobile', requestId: path })
       return res.status(result.status).type('application/oauth-authz-req+jwt').send(rewrittenJwt)
     }
 
@@ -102,10 +104,18 @@ verifierRouter.all('/v1/verify/*splat', async (req: Request, res: Response) => {
 
     if (path.includes('vp-submission/direct-post') && result.status >= 200 && result.status < 300) {
       console.log(`[verifier-proxy] Submission succeeded! Providing redirect_uri to Playground`)
+      notifyFlowStep('vp-response', 'done', { source: 'live_mobile' })
       const respObj = typeof result.body === 'object' && result.body !== null ? { ...result.body } : {}
       respObj.redirect_uri = respObj.redirect_uri || 'http://localhost:3000'
       respObj.redirectUri = respObj.redirectUri || 'http://localhost:3000'
       return res.status(result.status).json(respObj)
+    }
+
+    if ((path.includes('/status') || path.includes('/vp-result') || path.includes('/vp-results')) && typeof result.body === 'object' && result.body !== null) {
+      const statusObj = result.body as any
+      if (statusObj.vpResultStatus === 'SUCCESS' || statusObj.status === 'SUCCESS' || statusObj.verificationStatus === 'SUCCESS') {
+        notifyFlowStep('verification', 'done', { source: 'live_mobile', details: statusObj })
+      }
     }
     if (typeof result.body === 'string') {
       res.status(result.status).type(result.contentType || 'text/plain').send(result.body)

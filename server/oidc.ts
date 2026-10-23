@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express'
 import crypto from 'crypto'
 import * as jose from 'jose'
 import { getPublicBaseUrl } from './tunnel'
+import { notifyFlowStep } from './events/flow-events'
 
 export const oidcRouter = Router()
 
@@ -648,6 +649,12 @@ const tokenHandler = async (req: Request, res: Response) => {
     .setAudience(clientId)
     .setExpirationTime('1h')
     .sign(privateKey)
+
+  notifyFlowStep('token-exchange', 'done', {
+    source: 'live_mobile',
+    sub: identity.id,
+    grantType,
+  })
 
   res.json({
     access_token: accessToken,
