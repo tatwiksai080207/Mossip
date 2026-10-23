@@ -41,6 +41,8 @@ export interface PlaygroundStore {
   networkEvents: NetworkEvent[]
   _resumeResolver?: ((code: string) => void) | null
 
+  localGrantType: 'pre-authorized_code' | 'authorization_code'
+  setLocalGrantType: (grant: 'pre-authorized_code' | 'authorization_code') => void
   selectIssuer: (issuer: IssuerConfig) => void
   selectWallet: (wallet: WalletConfig) => void
   selectVerifier: (verifier: VerifierConfig) => void
@@ -79,6 +81,8 @@ export const useStore = create<PlaygroundStore>((set, get) => ({
   selectedStepId: null,
   networkEvents: [],
   _resumeResolver: null as ((code: string) => void) | null,
+  localGrantType: 'pre-authorized_code',
+  setLocalGrantType: (grant) => set({ localGrantType: grant }),
 
   selectStep: (id) =>
     set((state) => ({

@@ -7,6 +7,7 @@ import { buildDidDocument, buildJwks } from '../proxy/certify-proxy'
 import { generateEd25519Key, generateP256Key, type PlaygroundKey } from '../keys'
 import { rewriteLocalCertifyMetadata } from './certify/metadata'
 import { handleCertifyMockIssuance } from './certify/mock-issuance'
+import { registerPreAuthCode } from '../oidc'
 
 export { rewriteLocalCertifyMetadata, handleCertifyMockIssuance }
 
@@ -98,27 +99,38 @@ export async function createCertifyRouter(): Promise<CertifyRouterResult> {
 
   router.post(['/api/local-certify/offer', '/api/local-certify/issuance/offer'], (req: Request, res: Response) => {
     const baseUrl = getPublicBaseUrl(req)
-    const { configurationId = 'FarmerCredential' } = req.body || {}
+    const { configurationId = 'FarmerCredential', grantType, farmerId } = req.body || {}
     lastLocalCertifyConfigId = configurationId
     const preAuthorizedCode = 'preauth-' + crypto.randomBytes(16).toString('hex')
+    registerPreAuthCode(preAuthorizedCode, farmerId || '2154189532')
     const authServer = `${baseUrl}/api/oidc`
+
+    // OpenID4VCI grants:
+    // If grantType === 'authorization_code', only advertise authorization_code to trigger interactive PKCE flow
+    // If grantType === 'pre-authorized_code', only advertise pre-authorized_code
+    // Otherwise, advertise both per OpenID4VCI Draft 13 §4.1
+    const grants: Record<string, unknown> = {}
+    if (grantType !== 'authorization_code') {
+      grants['urn:ietf:params:oauth:grant-type:pre-authorized_code'] = {
+        'pre-authorized_code': preAuthorizedCode,
+        authorization_server: authServer,
+      }
+    }
+    if (grantType !== 'pre-authorized_code') {
+      grants['authorization_code'] = {
+        authorization_server: authServer,
+      }
+    }
+
     const credentialOffer = {
       credential_issuer: `${baseUrl}/api/local-certify`,
       credential_configuration_ids: [configurationId],
-      grants: {
-        'urn:ietf:params:oauth:grant-type:pre-authorized_code': {
-          'pre-authorized_code': preAuthorizedCode,
-          authorization_server: authServer,
-        },
-        authorization_code: {
-          authorization_server: authServer,
-        },
-      },
+      grants,
     }
     const credential_offer_uri = `openid-credential-offer://?credential_offer=${encodeURIComponent(
       JSON.stringify(credentialOffer)
     )}`
-    console.log('[local-certify] Generated credential offer for', configurationId, 'preAuth:', preAuthorizedCode)
+    console.log('[local-certify] Generated credential offer for', configurationId, 'grantType:', grantType || 'both', 'preAuth:', preAuthorizedCode)
     res.json({
       credential_offer: credentialOffer,
       credential_offer_uri,

@@ -42,8 +42,16 @@ export async function createCredentialOffer(
     const offerEndpoint = issuer.id === 'issuer-waltid' || issuer.env === 'external'
       ? '/api/external/waltid/issuer/offer'
       : (issuer.id === 'certify-local' ? '/api/local-certify/offer' : '/api/playground-issuer/offer')
+    let localGrantType: string | undefined = undefined
+    try {
+      // Dynamically read active grant preference for Local Inji Certify
+      const { useStore } = await import('../store/index')
+      localGrantType = useStore.getState().localGrantType
+    } catch {}
+
     const offerRes = await postJson(offerEndpoint, {
       configurationId: configId,
+      ...(issuer.id === 'certify-local' && localGrantType ? { grantType: localGrantType } : {}),
     })
 
     if (offerRes.res.ok) {

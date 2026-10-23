@@ -5,7 +5,7 @@ import { CERTIFY_INTERNAL_DOCKER, COLLAB_ESIGNET_PATTERN } from '../../proxy/cer
 export function rewriteLocalCertifyMetadata(
   body: Record<string, unknown>,
   req?: express.Request,
-  lastLocalCertifyConfigId = 'FarmerCredential'
+  _lastLocalCertifyConfigId = 'FarmerCredential'
 ): Record<string, unknown> {
   const baseUrl = getPublicBaseUrl(req)
   const localCertifyHost = `${baseUrl}/api/local-certify`
@@ -231,22 +231,8 @@ export function rewriteLocalCertifyMetadata(
   result.client_id = 'wallet'
   result.redirect_uri = 'io.mosip.residentapp.inji://oauthredirect'
 
-  let activeKey = lastLocalCertifyConfigId || 'FarmerCredential'
-  let activeConfig = configs[activeKey]
-  if (!activeConfig) {
-    if (activeKey.includes('sdjwt') || activeKey.includes('sd-jwt')) activeConfig = configs['FarmerCredential_SD_JWT']
-    else if (activeKey.includes('mdoc') || activeKey.includes('mdl')) activeConfig = configs['DrivingLicenseCredential']
-    else if (activeKey.includes('20') || activeKey.includes('2.0')) activeConfig = configs['FarmerCredential_VCDM2.0']
-    else activeConfig = configs['FarmerCredential']
-  }
-  configs[''] = {
-    ...activeConfig,
-    id: activeKey,
-    credential_configuration_id: activeKey,
-  }
-
   for (const [k, v] of Object.entries(configs)) {
-    if (v && typeof v === 'object') {
+    if (k && v && typeof v === 'object') {
       v.id = v.id || k
       v.credential_configuration_id = v.credential_configuration_id || k
     }

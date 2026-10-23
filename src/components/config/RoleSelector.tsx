@@ -6,6 +6,7 @@ export default function RoleSelector() {
     selectedIssuer, selectedWallet, selectedVerifier, selectedCredType,
     selectIssuer, selectWallet, selectVerifier, selectCredType,
     isTestActive,
+    localGrantType, setLocalGrantType,
   } = useStore()
 
   const EnvBadge = ({ env }: { env?: string }) => {
@@ -98,6 +99,51 @@ export default function RoleSelector() {
                     </div>
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+          {selectedIssuer?.id === 'certify-local' && (
+            <div className="mt-3 pt-3 border-t border-slate-800">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                  OpenID4VCI Grant Flow
+                </p>
+                <span className="text-[10px] text-slate-500 font-mono">Draft 13</span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  disabled={isTestActive}
+                  onClick={() => setLocalGrantType('pre-authorized_code')}
+                  className={`px-2.5 py-1.5 rounded text-xs border text-left transition-all ${
+                    localGrantType === 'pre-authorized_code'
+                      ? 'border-blue-500/80 bg-blue-500/15 text-blue-200 shadow-sm'
+                      : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="font-semibold text-[11px] flex items-center gap-1">
+                    Pre-Auth Code
+                  </div>
+                  <div className="text-[10px] text-slate-400 opacity-80 mt-0.5">Automated / Kiosk (§4.1)</div>
+                </button>
+                <button
+                  type="button"
+                  disabled={isTestActive}
+                  onClick={() => setLocalGrantType('authorization_code')}
+                  className={`px-2.5 py-1.5 rounded text-xs border text-left transition-all ${
+                    localGrantType === 'authorization_code'
+                      ? 'border-emerald-500/80 bg-emerald-500/15 text-emerald-200 shadow-sm'
+                      : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="font-semibold text-[11px] flex items-center gap-1">
+                    Auth Code + PKCE
+                  </div>
+                  <div className="text-[10px] text-slate-400 opacity-80 mt-0.5">Interactive Challenge (§4.2)</div>
+                </button>
               </div>
             </div>
           )}

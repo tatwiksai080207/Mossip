@@ -91,8 +91,57 @@ export async function handleCertifyMockIssuance(params: CertifyMockIssuanceParam
     } catch {}
   }
 
+  // 1. Build authentic Draft 11 / Draft 13 request payload for Docker Inji Certify (port 8090)
+  const draft11Body: Record<string, any> = {
+    proof: body.proof || (proofJwt ? { proof_type: 'jwt', jwt: proofJwt } : undefined),
+  }
+
   if (isSdJwt) {
-    console.log('[local-certify] Issuing Farmer ID SD-JWT VC')
+    draft11Body.format = 'vc+sd-jwt'
+    draft11Body.vct = body.vct || 'https://inji.mosip.io/credentials/farmer-identity'
+  } else if (isMdoc) {
+    draft11Body.format = 'mso_mdoc'
+    draft11Body.doctype = body.doctype || 'org.iso.18013.5.1.mDL'
+  } else {
+    draft11Body.format = 'ldp_vc'
+    draft11Body.credential_definition = body.credential_definition || {
+      type: ['FarmerCredential', 'VerifiableCredential'],
+      '@context': isVcdm2 ? ['https://www.w3.org/ns/credentials/v2'] : ['https://www.w3.org/2018/credentials/v1'],
+    }
+  }
+
+  // 2. Prioritize authentic Docker Inji Certify container (Port 8090)
+  try {
+    const result = await proxyRequest(
+      ENDPOINTS.localCertify,
+      path,
+      req.method,
+      req.headers as Record<string, string>,
+      draft11Body,
+    )
+    if (result.status >= 200 && result.status < 300) {
+      console.log(`[local-certify] Successfully issued ${rawConfigId} (${draft11Body.format}) natively from Docker Inji Certify (port 8090)`)
+      const bodyObj = typeof result.body === 'object' && result.body !== null ? (result.body as any) : {}
+      const returnedFormat = isSdJwt ? 'vc+sd-jwt' : isMdoc ? 'mso_mdoc' : 'ldp_vc'
+      return res.status(result.status).json({
+        format: returnedFormat,
+        credential: bodyObj.credential || result.body,
+        credential_configuration_id: rawConfigId,
+        credentialConfigurationId: rawConfigId,
+        credential_issuer: `${baseUrl}/api/local-certify`,
+        credentialIssuer: `${baseUrl}/api/local-certify`,
+        c_nonce: bodyObj.c_nonce || 'cnonce-' + crypto.randomBytes(16).toString('hex'),
+        c_nonce_expires_in: bodyObj.c_nonce_expires_in || 3600,
+      })
+    }
+    console.warn(`[local-certify] Docker returned status ${result.status} for ${rawConfigId}; invoking safe local fallback`)
+  } catch (err) {
+    console.warn(`[local-certify] Docker proxy failed (${err}); invoking safe local fallback`)
+  }
+
+  // 3. Graceful fallback if Docker container is unreachable or in non-2xx state
+  if (isSdJwt) {
+    console.log('[local-certify] Issuing fallback Farmer ID SD-JWT VC')
     const farmerClaims = {
       fullName: 'Gorge Cooper',
       farmerID: '2154189532',
@@ -130,7 +179,7 @@ export async function handleCertifyMockIssuance(params: CertifyMockIssuanceParam
   }
 
   if (isMdoc) {
-    console.log('[local-certify] Issuing Driving License ISO 18013-5 mDoc')
+    console.log('[local-certify] Issuing fallback Driving License ISO 18013-5 mDoc')
     const dlClaims = {
       family_name: 'Cooper',
       given_name: 'Gorge',
@@ -161,40 +210,6 @@ export async function handleCertifyMockIssuance(params: CertifyMockIssuanceParam
       c_nonce,
       c_nonce_expires_in: 3600,
     })
-  }
-
-  // Default: FarmerCredential (ldp_vc)
-  if (!isVcdm2) {
-    try {
-      const draft11Body: Record<string, any> = {
-        format: 'ldp_vc',
-        credential_definition: {
-          type: ['FarmerCredential', 'VerifiableCredential'],
-          '@context': ['https://www.w3.org/2018/credentials/v1'],
-        },
-        proof: body.proof || (proofJwt ? { proof_type: 'jwt', jwt: proofJwt } : undefined),
-      }
-      const result = await proxyRequest(
-        ENDPOINTS.localCertify,
-        path,
-        req.method,
-        req.headers as Record<string, string>,
-        draft11Body,
-      )
-      if (result.status >= 200 && result.status < 300) {
-        const bodyObj = typeof result.body === 'object' && result.body !== null ? (result.body as any) : {}
-        return res.status(result.status).json({
-          format: 'ldp_vc',
-          credential: bodyObj.credential || result.body,
-          credential_configuration_id: rawConfigId,
-          credentialConfigurationId: rawConfigId,
-          credential_issuer: `${baseUrl}/api/local-certify`,
-          credentialIssuer: `${baseUrl}/api/local-certify`,
-          c_nonce: bodyObj.c_nonce || 'cnonce-' + crypto.randomBytes(16).toString('hex'),
-          c_nonce_expires_in: bodyObj.c_nonce_expires_in || 3600,
-        })
-      }
-    } catch {}
   }
 
   // Fallback if Docker is offline or error
