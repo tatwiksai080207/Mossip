@@ -216,15 +216,48 @@ export async function verifySdJwtLocally(
     const hasKbJwt = lastPart.length > 0 && lastPart.split('.').length === 3
     const rawDisclosures = parts.slice(1, hasKbJwt ? parts.length - 1 : parts.length).filter(p => p.length > 0)
 
-    // Decode issuer JWT claims
+    // Decode issuer JWT claims and header
     const decodedIssuer = jose.decodeJwt(issuerJwt)
     const header = jose.decodeProtectedHeader(issuerJwt)
 
+    // Cryptographically verify issuer signature over issuerJwt
+    let issuerKey: any = null
     if (opts.issuerPublicKey) {
-      const key = (opts.issuerPublicKey instanceof CryptoKey)
+      issuerKey = (opts.issuerPublicKey instanceof CryptoKey)
         ? opts.issuerPublicKey
         : await jose.importJWK(opts.issuerPublicKey as jose.JWK, header.alg || 'ES256')
-      await jose.jwtVerify(issuerJwt, key as jose.CryptoKey)
+    } else if (header.kid && (header.kid.startsWith('did:key:') || header.kid.startsWith('did:jwk:'))) {
+      const resolved = resolveDid(header.kid.split('#')[0])
+      const alg = (resolved.publicJwk.alg as string) || (resolved.publicJwk.crv === 'Ed25519' ? 'EdDSA' : 'ES256')
+      issuerKey = await jose.importJWK(resolved.publicJwk, alg)
+    } else if (Array.isArray(header.x5c) && header.x5c.length > 0) {
+      const leafCert = header.x5c[0]
+      const pem = `-----BEGIN CERTIFICATE-----\n${leafCert.match(/.{1,64}/g)?.join('\n')}\n-----END CERTIFICATE-----`
+      issuerKey = await jose.importX509(pem, header.alg || 'ES256')
+    } else if (header.jwk) {
+      issuerKey = await jose.importJWK(header.jwk as jose.JWK, header.alg || 'ES256')
+    } else if (typeof decodedIssuer.iss === 'string' && (decodedIssuer.iss.startsWith('did:key:') || decodedIssuer.iss.startsWith('did:jwk:'))) {
+      const resolved = resolveDid(decodedIssuer.iss.split('#')[0])
+      const alg = (resolved.publicJwk.alg as string) || (resolved.publicJwk.crv === 'Ed25519' ? 'EdDSA' : 'ES256')
+      issuerKey = await jose.importJWK(resolved.publicJwk, alg)
+    }
+
+    if (issuerKey) {
+      try {
+        await jose.jwtVerify(issuerJwt, issuerKey)
+      } catch (jwtErr: any) {
+        return {
+          verified: false,
+          error: `Cryptographic signature verification failed: ${jwtErr?.message || String(jwtErr)}`,
+          claims: {},
+        }
+      }
+    } else {
+      return {
+        verified: false,
+        error: `Cannot verify SD-JWT: unable to resolve issuer public key from kid, x5c, jwk, or iss`,
+        claims: {},
+      }
     }
 
     // Check expiration

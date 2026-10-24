@@ -277,7 +277,14 @@ export function createMimotoPresentationRouter(deps: PresentationBridgeDeps): Ro
         const isFarmer = credType.includes('Farmer') || meta?.issuerId === 'Farmer'
         const isSphereon = credType.includes('sphereon') || credType.includes('European') || meta?.issuerId === 'Sphereon'
         const isMdoc = credType.includes('mDoc') || credType.includes('DrivingLicense') || credType.toLowerCase().includes('mdoc')
-        const isSdJwt = credType.includes('SD_JWT') || credType.includes('sd-jwt') || credType.includes('pid') || credType.includes('eudi') || meta?.format === 'vc+sd-jwt'
+        const isSdJwt =
+          credType.toLowerCase().includes('sd_jwt') ||
+          credType.toLowerCase().includes('sd-jwt') ||
+          credType.toLowerCase().includes('sdjwt') ||
+          credType.includes('pid') ||
+          credType.includes('eudi') ||
+          meta?.format === 'vc+sd-jwt' ||
+          (typeof row.credential === 'string' && row.credential.includes('~'))
 
         const displayName =
           meta?.credentialTypeDisplayName ||
@@ -287,10 +294,14 @@ export function createMimotoPresentationRouter(deps: PresentationBridgeDeps): Ro
             ? 'European Health Insurance Card'
             : isSphereon
             ? 'European Higher Education Diploma'
+            : isFarmer && isSdJwt
+            ? 'Farmer SD-JWT Credential'
             : isFarmer
             ? 'Farmer Verifiable Credential'
             : isMdoc
             ? 'Mobile Driving License'
+            : isSdJwt
+            ? 'walt.id Identity (SD-JWT VC)'
             : 'Playground Identity Credential')
         const logo =
           meta?.credentialTypeLogo ||
@@ -299,7 +310,14 @@ export function createMimotoPresentationRouter(deps: PresentationBridgeDeps): Ro
             : isFarmer
             ? 'https://mosip.github.io/inji-config/logos/agro-vertias-logo.png'
             : 'https://api.collab.mosip.net/inji/mosip-logo.png')
-        const format = meta?.format || (isMdoc ? 'mso_mdoc' : isSdJwt ? 'vc+sd-jwt' : 'ldp_vc')
+        let format = meta?.format || (isMdoc ? 'mso_mdoc' : isSdJwt ? 'vc+sd-jwt' : 'ldp_vc')
+        if (typeof row.credential === 'string') {
+          if (row.credential.includes('~')) {
+            format = 'vc+sd-jwt'
+          } else if (row.credential.trim().startsWith('{') && row.credential.includes('@context')) {
+            format = 'ldp_vc'
+          }
+        }
 
         let decodedPayloadStr = ''
         if (typeof row.credential === 'string' && isSdJwt) {
@@ -314,7 +332,11 @@ export function createMimotoPresentationRouter(deps: PresentationBridgeDeps): Ro
         // Filter against presentation_definition if provided
         if (pexDescriptor) {
           if (pexExpectedFormats.length > 0) {
-            const matchesFormat = pexExpectedFormats.some(f => f === format || (f === 'ldp_vp' && format === 'ldp_vc'))
+            const isLdp = format === 'ldp_vc' || format === 'ldp_vp'
+            const matchesFormat = pexExpectedFormats.some(f =>
+              f === format ||
+              (isLdp && (f === 'ldp_vc' || f === 'ldp_vp'))
+            )
             if (!matchesFormat) {
               console.log(`[presentation-bridge] Filter: credential ${row.id} (${format}) does not match requested format ${pexExpectedFormats.join('/')}`)
               continue

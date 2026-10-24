@@ -18,6 +18,7 @@ import { generateEd25519Key, resolveDid, didKeyDocument, type PlaygroundKey } fr
 import { issueLdpCredential, type DataModel } from '../formats/ldp'
 import { issueSdJwtCredential } from '../formats/sd-jwt'
 import { issueMdocCredential } from '../formats/mdoc'
+import { getActiveTunnelUrl } from '../tunnel'
 
 const PRE_AUTH_GRANT = 'urn:ietf:params:oauth:grant-type:pre-authorized_code'
 const ACCESS_TOKEN_TTL_S = 300
@@ -136,43 +137,42 @@ async function validateProof(proofJwt: string, validAudiences: string[], accessT
       publicJwk = header.jwk as jose.JWK
       holderDid = `did:jwk:${Buffer.from(JSON.stringify(publicJwk)).toString('base64url')}`
     } else {
-      holderDid = 'did:jwk:eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6Im1vY2sifQ'
-      return { ok: true, holderDid }
+      return { ok: false, description: 'Proof JWT missing holder public key: must supply kid starting with did: or jwk header' }
     }
 
     let payload: jose.JWTPayload | null = null
     const key = await jose.importJWK(publicJwk, header.alg)
 
-    // Accept any plausible audience (local, tunneled, or container host)
+    // Verify against valid candidate audiences (canonical issuer ID, request host, ngrok tunnel, localhost)
+    let audMatched = false
     for (const aud of validAudiences) {
       try {
         const res = await jose.jwtVerify(proofJwt, key, { audience: aud })
         payload = res.payload
+        audMatched = true
         break
       } catch {
         // Try next candidate audience
       }
     }
 
-    if (!payload) {
-      // Fallback: verify without audience validation if all audience checks fail
-      const res = await jose.jwtVerify(proofJwt, key)
-      payload = res.payload
+    if (!audMatched || !payload) {
+      return { ok: false, description: `Proof JWT audience mismatch. Must match issuer endpoint (accepted: ${validAudiences.slice(0, 3).join(', ')})` }
     }
 
-    const presented = payload?.nonce
+    const presented = payload.nonce
     if (typeof presented === 'string') {
       const record = nonces.get(presented)
-      if (record) {
-        if (record.accessToken === accessToken) {
-          nonces.delete(presented)
-        }
+      if (!record || record.expiresAt < Date.now() || record.accessToken !== accessToken) {
+        return { ok: false, description: 'Proof JWT contains invalid or expired c_nonce' }
       }
+      // Single-use: consume nonce upon successful validation
+      nonces.delete(presented)
     }
 
     return { ok: true, holderDid, publicJwk }
-  } catch (err) {
-    return { ok: false, description: `Proof JWT did not verify: ${String(err)}` }
+  } catch (err: any) {
+    return { ok: false, description: `Proof JWT cryptographic verification failed: ${err?.message || String(err)}` }
   }
 }
 
@@ -438,27 +438,13 @@ export async function createWaltIdIssuer(opts: { baseUrl: string; mountPath: str
     if (!header.toLowerCase().startsWith('bearer ')) return null
     const token = header.slice(7).trim()
     const record = accessTokens.get(token)
-    if (record) return { token, record }
-
-    // Fallback: decode JWT access tokens if token was self-issued
-    try {
-      const decoded = jose.decodeJwt(token)
-      if (decoded) {
-        const scope = (decoded.scope as string) || ''
-        const cfg = WALTID_CREDENTIAL_CONFIGS.find(c => scope.includes(c.id)) ?? WALTID_CREDENTIAL_CONFIGS[0]
-        return {
-          token,
-          record: {
-            configurationId: cfg.id,
-            subjectId: 'waltid-holder-1',
-            expiresAt: (decoded.exp ? decoded.exp * 1000 : Date.now() + 3600 * 1000),
-          }
-        }
+    if (record) {
+      if (record.expiresAt < Date.now()) {
+        accessTokens.delete(token)
+        return null
       }
-    } catch {
-      // Ignored
+      return { token, record }
     }
-
     return null
   }
 
@@ -486,26 +472,33 @@ export async function createWaltIdIssuer(opts: { baseUrl: string; mountPath: str
 
     const retry = () => ({ c_nonce: mintNonce(auth.token), c_nonce_expires_in: NONCE_TTL_S })
 
-    let holderDid = 'did:jwk:eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6Im1vY2sifQ'
+    let holderDid: string
     let holderJwk: jose.JWK | undefined
     const proof = body.proof as { proof_type?: string; jwt?: string } | undefined
     const baseUrl = getBaseUrl(req)
     const id = `${baseUrl}${mountPath}`
 
     if (proof?.jwt) {
+      const activeTunnel = getActiveTunnelUrl().replace(/\/$/, '')
       const validAudiences = [
         id,
         identifier,
+        `${baseUrl}${mountPath}`,
         'http://localhost:3001/api/external/waltid/issuer',
         'http://127.0.0.1:3001/api/external/waltid/issuer',
         'http://inji-playground:3001/api/external/waltid/issuer',
       ]
+      if (activeTunnel && !activeTunnel.includes('localhost') && !activeTunnel.includes('127.0.0.1')) {
+        validAudiences.push(`${activeTunnel}${mountPath}`)
+      }
       const outcome = await validateProof(proof.jwt, validAudiences, auth.token)
       if (!outcome.ok) {
         return fail(res, 400, 'invalid_proof', outcome.description, retry())
       }
       holderDid = outcome.holderDid
       holderJwk = outcome.publicJwk
+    } else {
+      return fail(res, 400, 'invalid_proof', 'Credential request missing required proof of possession', retry())
     }
 
     console.log(`[waltid-issuer] Issuing credential format=${cfg.format} for holder=${holderDid.slice(0, 30)}...`)

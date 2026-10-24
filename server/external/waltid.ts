@@ -40,6 +40,8 @@ interface WaltIdVpSession {
       verificationStatus: 'SUCCESS' | 'INVALID'
       format: string
       claims: Record<string, unknown>
+      vct?: string
+      docType?: string
       vc?: string
       error?: string
     }>
@@ -57,10 +59,11 @@ const PEX_PATTERN_ALIASES: Record<string, string[]> = {
   'sphereon-diploma-vcdm20': ['EuropeanHigherEducationDiploma'],
   'sphereon-ehic-vcdm11': ['EuropeanHealthInsuranceCard'],
   'sphereon-eudi-pid': ['EuropeanPersonIdentificationData', 'https://credential-issuer.sphereon.com/credentials/eudi-pid'],
-  'PlaygroundIdentityCredential': ['waltid-identity-ldp-vcdm11', 'waltid-identity-ldp-vcdm20', 'waltid-identity-sdjwt'],
+  'PlaygroundIdentityCredential': ['waltid-identity-ldp-vcdm11', 'waltid-identity-ldp-vcdm20', 'waltid-identity-sdjwt', 'https://walt.id/credentials/identity'],
   'waltid-identity-ldp-vcdm11': ['PlaygroundIdentityCredential', 'VerifiableId'],
   'waltid-identity-ldp-vcdm20': ['PlaygroundIdentityCredential', 'VerifiableId'],
   'waltid-identity-sdjwt': ['PlaygroundIdentityCredential', 'https://walt.id/credentials/identity'],
+  'https://walt.id/credentials/identity': ['waltid-identity-sdjwt', 'PlaygroundIdentityCredential'],
   'FarmerCredential': ['farmer-ldp-vcdm11', 'farmer-ldp-vcdm20'],
   'MOSIPVerifiableCredential': ['mosip-vcdm11', 'mosip-vcdm20'],
   'DrivingLicenseCredential': ['org.iso.18013.5.1.mDL', 'mock-mdl-drivinglicense', 'waltid-drivinglicense-mdoc'],
@@ -220,9 +223,7 @@ waltidVerifierRouter.post('/v1/verify/vp-submission/direct-post', async (req: Re
       effectiveVpToken = applyTamperingToVpToken(effectiveVpToken, activeTamper)
     }
 
-    // Check for negative test tamper indicators
     const rawStr = typeof effectiveVpToken === 'string' ? effectiveVpToken : JSON.stringify(effectiveVpToken)
-    const hasTamperIndicator = rawStr.includes('TAMPERED') || rawStr.includes('BAD_SIG') || rawStr.includes('.tampered')
 
     // Determine format
     const isMdoc = rawStr.includes('org.iso.18013.5.1') || rawStr.includes('deviceAuth') || rawStr.includes('issuerSigned')
@@ -232,137 +233,96 @@ waltidVerifierRouter.post('/v1/verify/vp-submission/direct-post', async (req: Re
       // ── ISO/IEC 18013-5 mDoc Verification ─────────────────────────────────
       console.log('[waltid-verifier] Verifying ISO/IEC 18013-5 mDoc / mDL with walt.id engine')
 
-      if (hasTamperIndicator) {
+      const mdocResult = await verifyMdocLocally(effectiveVpToken, {
+        expectedNonce: session.nonce,
+      })
+      if (mdocResult.verified) {
+        session.result = {
+          vpResultStatus: 'SUCCESS',
+          verificationStatus: 'SUCCESS',
+          checks: {
+            signatureValid: true,
+            elementsValid: true,
+            deviceAuthValid: mdocResult.deviceBindingVerified ?? true,
+            notExpired: true,
+            trustModel: 'walt.id OpenID4VP Engine (ISO/IEC 18013-5 mDoc verified)',
+          },
+          vcResults: [
+            {
+              verificationStatus: 'SUCCESS',
+              format: 'mso_mdoc',
+              claims: mdocResult.claims,
+              docType: mdocResult.docType,
+              vc: rawStr.slice(0, 100) + '...',
+            }
+          ],
+        }
+      } else {
         session.result = {
           vpResultStatus: 'FAILED',
           verificationStatus: 'INVALID',
-          error: 'Cryptographic signature verification failed (tampered mDoc token detected)',
+          error: mdocResult.error,
           checks: {
             signatureValid: false,
-            elementsValid: false,
-            deviceAuthValid: false,
-            tamperDetected: true,
-            trustModel: 'walt.id OpenID4VP Engine (ISO/IEC 18013-5 mDoc support)',
+            errorDetail: mdocResult.error,
+            trustModel: 'walt.id OpenID4VP Engine (ISO/IEC 18013-5 mDoc)',
           },
           vcResults: [
             {
               verificationStatus: 'INVALID',
               format: 'mso_mdoc',
-              claims: {},
-              error: 'Signature mismatch or corrupted claim element digest',
+              claims: mdocResult.claims || {},
+              docType: mdocResult.docType,
+              error: mdocResult.error,
             }
           ],
-        }
-      } else {
-        const mdocResult = await verifyMdocLocally(effectiveVpToken, {
-          expectedNonce: session.nonce,
-        })
-        if (mdocResult.verified) {
-          session.result = {
-            vpResultStatus: 'SUCCESS',
-            verificationStatus: 'SUCCESS',
-            checks: {
-              signatureValid: true,
-              elementsValid: true,
-              deviceAuthValid: mdocResult.deviceBindingVerified ?? true,
-              notExpired: true,
-              trustModel: 'walt.id OpenID4VP Engine (ISO/IEC 18013-5 mDoc verified)',
-            },
-            vcResults: [
-              {
-                verificationStatus: 'SUCCESS',
-                format: 'mso_mdoc',
-                claims: mdocResult.claims,
-                vc: rawStr.slice(0, 100) + '...',
-              }
-            ],
-          }
-        } else {
-          session.result = {
-            vpResultStatus: 'FAILED',
-            verificationStatus: 'INVALID',
-            error: mdocResult.error,
-            checks: {
-              signatureValid: false,
-              errorDetail: mdocResult.error,
-              trustModel: 'walt.id OpenID4VP Engine (ISO/IEC 18013-5 mDoc)',
-            },
-            vcResults: [
-              {
-                verificationStatus: 'INVALID',
-                format: 'mso_mdoc',
-                claims: mdocResult.claims || {},
-                error: mdocResult.error,
-              }
-            ],
-          }
         }
       }
     } else if (isSdJwt) {
       // ── SD-JWT VC Verification ──────────────────────────────────────────
       console.log('[waltid-verifier] Verifying IETF SD-JWT VC with walt.id decentralized engine')
 
-      if (hasTamperIndicator) {
+      const sdResult = await verifySdJwtLocally(effectiveVpToken)
+      if (sdResult.verified) {
+        session.result = {
+          vpResultStatus: 'SUCCESS',
+          verificationStatus: 'SUCCESS',
+          checks: {
+            signatureValid: true,
+            disclosuresValid: true,
+            keyBindingValid: true,
+            notExpired: true,
+            trustModel: 'walt.id OpenID4VP Engine (did:key resolved successfully without x5c constraint)',
+          },
+          vcResults: [
+            {
+              verificationStatus: 'SUCCESS',
+              format: 'vc+sd-jwt',
+              claims: sdResult.claims,
+              vct: sdResult.vct,
+              vc: effectiveVpToken.slice(0, 100) + '...',
+            }
+          ],
+        }
+      } else {
         session.result = {
           vpResultStatus: 'FAILED',
           verificationStatus: 'INVALID',
-          error: 'Cryptographic signature verification failed (tampered token detected)',
+          error: sdResult.error,
           checks: {
             signatureValid: false,
-            disclosuresValid: false,
-            tamperDetected: true,
-            trustModel: 'walt.id OpenID4VP Engine (did:key & did:jwk support)',
+            errorDetail: sdResult.error,
+            trustModel: 'walt.id OpenID4VP Engine',
           },
           vcResults: [
             {
               verificationStatus: 'INVALID',
               format: 'vc+sd-jwt',
-              claims: {},
-              error: 'Signature mismatch or corrupted disclosure hash',
+              claims: sdResult.claims || {},
+              vct: sdResult.vct,
+              error: sdResult.error,
             }
           ],
-        }
-      } else {
-        const sdResult = await verifySdJwtLocally(effectiveVpToken)
-        if (sdResult.verified) {
-          session.result = {
-            vpResultStatus: 'SUCCESS',
-            verificationStatus: 'SUCCESS',
-            checks: {
-              signatureValid: true,
-              disclosuresValid: true,
-              keyBindingValid: true,
-              notExpired: true,
-              trustModel: 'walt.id OpenID4VP Engine (did:key resolved successfully without x5c constraint)',
-            },
-            vcResults: [
-              {
-                verificationStatus: 'SUCCESS',
-                format: 'vc+sd-jwt',
-                claims: sdResult.claims,
-                vc: effectiveVpToken.slice(0, 100) + '...',
-              }
-            ],
-          }
-        } else {
-          session.result = {
-            vpResultStatus: 'FAILED',
-            verificationStatus: 'INVALID',
-            error: sdResult.error,
-            checks: {
-              signatureValid: false,
-              errorDetail: sdResult.error,
-              trustModel: 'walt.id OpenID4VP Engine',
-            },
-            vcResults: [
-              {
-                verificationStatus: 'INVALID',
-                format: 'vc+sd-jwt',
-                claims: sdResult.claims || {},
-                error: sdResult.error,
-              }
-            ],
-          }
         }
       }
     } else {
@@ -371,7 +331,7 @@ waltidVerifierRouter.post('/v1/verify/vp-submission/direct-post', async (req: Re
       let vpObj: any
       try {
         vpObj = typeof effectiveVpToken === 'string' ? JSON.parse(effectiveVpToken) : effectiveVpToken
-      } catch (err) {
+      } catch {
         vpObj = null
       }
 
@@ -383,33 +343,15 @@ waltidVerifierRouter.post('/v1/verify/vp-submission/direct-post', async (req: Re
           checks: { jsonParsed: false },
           vcResults: [],
         }
-      } else if (hasTamperIndicator) {
-        session.result = {
-          vpResultStatus: 'FAILED',
-          verificationStatus: 'INVALID',
-          error: 'Signature verification failed (tampered proofValue)',
-          checks: {
-            signatureValid: false,
-            tamperDetected: true,
-            trustModel: 'walt.id OpenID4VP Engine',
-          },
-          vcResults: [
-            {
-              verificationStatus: 'INVALID',
-              format: 'ldp_vp',
-              claims: vpObj.verifiableCredential?.[0]?.credentialSubject || {},
-              error: 'Invalid signature over URDNA2015 canonical document',
-            }
-          ],
-        }
       } else {
-        // Verify via @digitalbazaar/vc
+        // Real cryptographic verification via @digitalbazaar/vc
         try {
           const vcs = Array.isArray(vpObj.verifiableCredential)
             ? vpObj.verifiableCredential
             : [vpObj.verifiableCredential || vpObj]
 
           let allVcsValid = true
+          let failureReason: string | undefined
           const vcResultsList = []
 
           for (const rawVc of vcs) {
@@ -421,18 +363,21 @@ waltidVerifierRouter.post('/v1/verify/vp-submission/direct-post', async (req: Re
             })
             if (!check.verified) {
               allVcsValid = false
+              failureReason = (check as any).error?.message || 'Cryptographic signature verification failed over canonical document'
             }
             vcResultsList.push({
               verificationStatus: check.verified ? ('SUCCESS' as const) : ('INVALID' as const),
               format: 'ldp_vp',
               claims: parsedVc.credentialSubject || {},
               vc: JSON.stringify(parsedVc),
+              error: check.verified ? undefined : failureReason,
             })
           }
 
           session.result = {
             vpResultStatus: allVcsValid ? 'SUCCESS' : 'FAILED',
             verificationStatus: allVcsValid ? 'SUCCESS' : 'INVALID',
+            error: allVcsValid ? undefined : (failureReason || 'One or more credentials in presentation failed signature verification'),
             checks: {
               signatureValid: allVcsValid,
               ldpSuite: 'Ed25519Signature2020',
@@ -440,19 +385,19 @@ waltidVerifierRouter.post('/v1/verify/vp-submission/direct-post', async (req: Re
             },
             vcResults: vcResultsList,
           }
-        } catch (verErr) {
+        } catch (verErr: any) {
           console.error('[waltid-verifier] Verification error:', verErr)
           session.result = {
             vpResultStatus: 'FAILED',
             verificationStatus: 'INVALID',
-            error: String(verErr),
+            error: verErr?.message || String(verErr),
             checks: { signatureValid: false, exception: String(verErr) },
             vcResults: [
               {
                 verificationStatus: 'INVALID',
                 format: 'ldp_vp',
                 claims: vpObj.credentialSubject || {},
-                error: String(verErr),
+                error: verErr?.message || String(verErr),
               }
             ],
           }
@@ -489,7 +434,7 @@ waltidVerifierRouter.post('/v1/verify/vp-submission/direct-post', async (req: Re
           ]
           const vcResults = session.result.vcResults || []
           const satisfies = vcResults.some(r => {
-            const claimsStr = JSON.stringify(r.claims) + (r.vc || '')
+            const claimsStr = JSON.stringify(r.claims) + ' ' + (r.vct || '') + ' ' + (r.docType || '') + ' ' + (r.vc || '')
             return aliasCandidates.some(candidate => claimsStr.includes(candidate))
           })
           if (!satisfies) {

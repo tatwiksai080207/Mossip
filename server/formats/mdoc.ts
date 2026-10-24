@@ -14,6 +14,7 @@
 import crypto from 'crypto'
 import * as jose from 'jose'
 import type { PlaygroundKey } from '../keys'
+import { resolveDid } from '../keys'
 
 export interface IssueMdocOptions {
   issuerKey: PlaygroundKey
@@ -352,21 +353,27 @@ export async function verifyMdocLocally(
 
     // 1. Verify Issuer signature over MSO
     try {
+      let key: any = null
       if (opts.issuerPublicKey) {
-        const key = (opts.issuerPublicKey instanceof CryptoKey)
+        key = (opts.issuerPublicKey instanceof CryptoKey)
           ? opts.issuerPublicKey
           : await jose.importJWK(opts.issuerPublicKey as jose.JWK, 'ES256')
-        await jose.jwtVerify(issuerSignature, key as jose.CryptoKey)
       } else {
-        // Decode without verification if public key not provided, or verify if key in header
         const decodedHeader = jose.decodeProtectedHeader(issuerSignature)
-        if (decodedHeader.kid?.startsWith('did:key:')) {
-          // Resolve did:key if possible, otherwise decode
-          jose.decodeJwt(issuerSignature)
+        if (decodedHeader.kid && (decodedHeader.kid.startsWith('did:key:') || decodedHeader.kid.startsWith('did:jwk:'))) {
+          const resolved = resolveDid(decodedHeader.kid.split('#')[0])
+          const alg = (resolved.publicJwk.alg as string) || (resolved.publicJwk.crv === 'Ed25519' ? 'EdDSA' : 'ES256')
+          key = await jose.importJWK(resolved.publicJwk, alg)
         }
       }
+
+      if (key) {
+        await jose.jwtVerify(issuerSignature, key as jose.CryptoKey)
+      } else {
+        jose.decodeJwt(issuerSignature)
+      }
     } catch (sigErr: any) {
-      return { verified: false, error: `Issuer MSO signature verification failed: ${sigErr.message}`, claims: {} }
+      return { verified: false, error: `Issuer MSO signature verification failed: ${sigErr?.message || String(sigErr)}`, claims: {} }
     }
 
     // 2. Check Validity Info

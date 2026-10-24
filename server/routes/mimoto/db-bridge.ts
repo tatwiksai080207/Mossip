@@ -68,11 +68,16 @@ export async function handlePlaygroundIssuanceToMimoto(
   )
   const isSphereonDiploma = isSphereon && !isSphereonEudi && !isSphereonEhic
 
+  const isWaltId =
+    credType.includes('waltid') ||
+    issuerId === 'WaltId' ||
+    Boolean(issuerId && issuerId.toLowerCase().includes('walt'))
+
   const isSdJwt =
     isSphereonEudi ||
-    credType.includes('SDJWT') ||
-    credType.includes('sd-jwt') ||
-    credType.includes('SD_JWT')
+    credType.toLowerCase().includes('sdjwt') ||
+    credType.toLowerCase().includes('sd-jwt') ||
+    credType.toLowerCase().includes('sd_jwt')
   const isVcdm2 = credType.includes('2.0') || credType.includes('VCDM2.0')
   const isFarmer =
     credType.includes('Farmer') ||
@@ -205,17 +210,33 @@ export async function handlePlaygroundIssuanceToMimoto(
     })
     compactCred = sdjwt.compact
   } else if (isSdJwt) {
+    const vct = isWaltId
+      ? 'https://walt.id/credentials/identity'
+      : 'https://inji-playground.mosip.dev/credentials/identity'
+    const issuerUrl = isWaltId
+      ? `${getPublicBaseUrl()}/api/external/waltid/issuer`
+      : `${getPublicBaseUrl()}/api/playground-issuer`
+    const claims = isWaltId
+      ? {
+          fullName: 'Elena Rostova',
+          dateOfBirth: '1993-11-20',
+          gender: 'Female',
+          email: 'elena.rostova@walt.id',
+          region: 'Vienna',
+        }
+      : {
+          fullName: 'Asha Raghunathan',
+          dateOfBirth: '1991-07-14',
+          gender: 'Female',
+          email: 'asha.r@example.org',
+          region: 'Karnataka',
+        }
+
     const sdjwt = await issueSdJwtCredential({
       issuerKey: playgroundIssuer.key,
-      issuerUrl: `${getPublicBaseUrl()}/api/playground-issuer`,
-      vct: 'https://inji-playground.mosip.dev/credentials/identity',
-      claims: {
-        fullName: 'Asha Raghunathan',
-        dateOfBirth: '1991-07-14',
-        gender: 'Female',
-        email: 'asha.r@example.org',
-        region: 'Karnataka',
-      },
+      issuerUrl,
+      vct,
+      claims,
       holderKey: playgroundWallet?.key,
       holderDid: playgroundWallet?.key?.did,
     })
@@ -290,7 +311,7 @@ export async function handlePlaygroundIssuanceToMimoto(
         ? 'mso_mdoc'
         : isSdJwt
         ? 'vc+sd-jwt'
-        : 'jwt_vc_json'
+        : 'ldp_vc'
 
     const displayName =
       isSphereonEudi
@@ -305,6 +326,8 @@ export async function handlePlaygroundIssuanceToMimoto(
         ? 'Farmer Verifiable Credential'
         : isMdoc
         ? 'Mobile Driving License'
+        : isWaltId && isSdJwt
+        ? 'walt.id Identity (SD-JWT VC)'
         : 'Playground Identity Credential'
     const logo = isSphereon
       ? 'https://sphereon.com/favicon.ico'
@@ -320,6 +343,7 @@ export async function handlePlaygroundIssuanceToMimoto(
       credentialTypeDisplayName: displayName,
       credentialTypeLogo: logo,
       format,
+      ...(isSdJwt ? { vct: isWaltId ? 'https://walt.id/credentials/identity' : 'https://inji-playground.mosip.dev/credentials/identity' } : {}),
     })
 
     const existing = await client.query(
