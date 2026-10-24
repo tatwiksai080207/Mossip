@@ -81,13 +81,16 @@ export function createMimotoRouter(deps: MimotoRouterDeps): Router {
         // Fallback safety synchronization: ensure dynamic tunnel URL is accepted if ngrok domain rotates
         if (activeTunnelUrl && !activeTunnelUrl.includes('localhost') && !activeTunnelUrl.includes('127.0.0.1')) {
           for (const v of verifiers) {
-            if (v.client_id === 'localhost-verifier' || v.client_id === 'did:web:verify-service:v1:verify' || v.client_id === 'waltid-verifier') {
+            if (v.client_id === 'localhost-verifier' || v.client_id === 'did:web:verify-service:v1:verify' || v.client_id === 'waltid-verifier' || v.client_id === 'sphereon-verifier') {
               if (Array.isArray(v.response_uris)) {
                 const tunnelPost = `${activeTunnelUrl}/v1/verify/vp-submission/direct-post`
                 const tunnelV2Post = `${activeTunnelUrl}/v1/verify/v2/vp-submission/direct-post`
                 const waltidTunnelPost = `${activeTunnelUrl}/api/external/waltid/verifier/v1/verify/vp-submission/direct-post`
+                const sphereonTunnelPost = `${activeTunnelUrl}/api/external/sphereon/verifier/v1/verify/vp-submission/direct-post`
                 if (v.client_id === 'waltid-verifier') {
                   if (!v.response_uris.includes(waltidTunnelPost)) v.response_uris.unshift(waltidTunnelPost)
+                } else if (v.client_id === 'sphereon-verifier') {
+                  if (!v.response_uris.includes(sphereonTunnelPost)) v.response_uris.unshift(sphereonTunnelPost)
                 } else {
                   if (!v.response_uris.includes(tunnelPost)) v.response_uris.unshift(tunnelPost)
                   if (!v.response_uris.includes(tunnelV2Post)) v.response_uris.unshift(tunnelV2Post)
@@ -98,6 +101,21 @@ export function createMimotoRouter(deps: MimotoRouterDeps): Router {
               }
             }
           }
+        }
+        if (!verifiers.some((v: any) => v.client_id === 'sphereon-verifier')) {
+          const sphereonTunnelPost = `${activeTunnelUrl}/api/external/sphereon/verifier/v1/verify/vp-submission/direct-post`
+          verifiers.push({
+            client_id: 'sphereon-verifier',
+            redirect_uris: ['http://localhost:3001/api/external/sphereon/verifier', activeTunnelUrl],
+            redirect_uri: ['http://localhost:3001/api/external/sphereon/verifier', activeTunnelUrl],
+            response_uris: [
+              sphereonTunnelPost,
+              'http://localhost:3001/api/external/sphereon/verifier/v1/verify/vp-submission/direct-post',
+              'http://inji-playground:3001/api/external/sphereon/verifier/v1/verify/vp-submission/direct-post',
+            ],
+            allow_unsigned_request: true,
+            spec_version: 'v1',
+          })
         }
         console.log(`[mimoto-proxy] Serving native Mimoto trusted verifiers registry (${verifiers.length} verifiers)`)
       }
@@ -125,6 +143,7 @@ export function createMimotoRouter(deps: MimotoRouterDeps): Router {
         credentialConfigurationId: credentialConfigurationId || 'PlaygroundDrivingLicense_mDoc',
         issuerId: issuerId || 'Playground',
         playgroundIssuer,
+        playgroundWallet,
       })
       return res.status(200).json({ response: result })
     } catch (err) {
@@ -175,13 +194,26 @@ export function createMimotoRouter(deps: MimotoRouterDeps): Router {
       issuer.toLowerCase().includes('farmer') ||
       issuer.toLowerCase().includes('agri') ||
       configId.toLowerCase().includes('farmer')
+    const isSphereon =
+      issuer === 'Sphereon' ||
+      issuer.toLowerCase().includes('sphereon') ||
+      configId.toLowerCase().includes('sphereon') ||
+      configId.toLowerCase().includes('diploma') ||
+      configId.toLowerCase().includes('ehic') ||
+      configId.toLowerCase().includes('european')
+    const isWaltId =
+      issuer === 'WaltId' ||
+      issuer.toLowerCase().includes('waltid') ||
+      configId.toLowerCase().includes('waltid')
     const isPlayground =
       issuer === 'Playground' ||
       issuer.toLowerCase().includes('playground') ||
       configId.startsWith('Playground') ||
       configId.toLowerCase().includes('mdoc') ||
       configId.toLowerCase().includes('drivinglicense') ||
-      isFarmer
+      isFarmer ||
+      isSphereon ||
+      isWaltId
 
     // 1. Attempt genuine over-the-wire proxy to the real Mimoto container first
     try {
@@ -204,7 +236,7 @@ export function createMimotoRouter(deps: MimotoRouterDeps): Router {
     }
 
     // 2. Fallback bridge for headless / simulated environments
-    if (isPlayground || isFarmer) {
+    if (isPlayground || isFarmer || isSphereon || isWaltId) {
       try {
         console.log(`[wallet-bridge] Bridge fallback active for wallet ${walletId}, config: ${configId}, issuer: ${issuer}`)
         const result = await handlePlaygroundIssuanceToMimoto({
@@ -212,6 +244,7 @@ export function createMimotoRouter(deps: MimotoRouterDeps): Router {
           credentialConfigurationId: configId,
           issuerId: issuer,
           playgroundIssuer,
+          playgroundWallet,
         })
         return res.status(200).json({ response: result })
       } catch (err) {

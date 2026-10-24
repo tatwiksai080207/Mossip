@@ -314,19 +314,39 @@ window._env_ = {
     // 2. OpenID4VCI Credential Offer / Direct Issuance Handling
     var rawOffer = params.get('credential_offer');
     var directCredId = params.get('credential_id') || params.get('credential');
+    var pathIssuer = path.startsWith('/user/issuers/') ? path.replace('/user/issuers/', '').split('?')[0].split('/')[0] : '';
 
-    if (rawOffer || directCredId) {
-      var targetIssuerId = 'Playground';
+    if (rawOffer || directCredId || pathIssuer) {
+      var targetIssuerId = pathIssuer || 'Playground';
       var targetCred = directCredId || '';
+
+      if (directCredId) {
+        var lowerCred = directCredId.toLowerCase();
+        if (lowerCred.includes('sphereon') || lowerCred.includes('diploma') || lowerCred.includes('ehic') || lowerCred.includes('eudi')) {
+          targetIssuerId = 'Sphereon';
+        } else if (lowerCred.includes('waltid')) {
+          targetIssuerId = 'WaltId';
+        } else if (lowerCred.includes('farmer')) {
+          targetIssuerId = 'Farmer';
+        } else if (lowerCred.includes('mdoc') || lowerCred.includes('driving')) {
+          targetIssuerId = pathIssuer || 'MockMdl';
+        }
+      }
 
       if (rawOffer) {
         try {
           var offerObj = JSON.parse(rawOffer);
-          var issuerStr = offerObj.credential_issuer || '';
-          if (issuerStr.includes('farmer') || issuerStr.includes('Farmer') || issuerStr.includes('local-certify')) {
+          var issuerStr = (offerObj.credential_issuer || '').toLowerCase();
+          if (issuerStr.includes('sphereon')) {
+            targetIssuerId = 'Sphereon';
+          } else if (issuerStr.includes('waltid')) {
+            targetIssuerId = 'WaltId';
+          } else if (issuerStr.includes('farmer') || issuerStr.includes('local-certify')) {
             targetIssuerId = 'Farmer';
-          } else if (issuerStr.includes('mock-mdl') || issuerStr.includes('MockMdl')) {
+          } else if (issuerStr.includes('mock-mdl')) {
             targetIssuerId = 'MockMdl';
+          } else if (pathIssuer) {
+            targetIssuerId = pathIssuer;
           } else {
             targetIssuerId = 'Playground';
           }

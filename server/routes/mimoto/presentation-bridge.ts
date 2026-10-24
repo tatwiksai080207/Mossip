@@ -178,7 +178,12 @@ export function createMimotoPresentationRouter(deps: PresentationBridgeDeps): Ro
   router.get('/v1/mimoto/wallets/:walletId/presentations/:presentationId/credentials', async (req: Request, res: Response) => {
     const walletId = String(req.params.walletId)
     const presentationId = String(req.params.presentationId)
-    console.log(`[presentation-bridge] Fetching presentation credentials for wallet=${walletId}, presId=${presentationId}`)
+    const session = mimotoPresentationSessions.get(presentationId) || lastPresentationSession
+    const authPayload = session?.authPayload
+    const pexDescriptor = authPayload?.presentation_definition?.input_descriptors?.[0]
+    const pexExpectedFormats = pexDescriptor?.format ? Object.keys(pexDescriptor.format) : []
+    const pexPattern = pexDescriptor?.constraints?.fields?.[0]?.filter?.pattern
+
     try {
       const client = await getMimotoDbClient()
       const dbRes = await client.query(
@@ -186,6 +191,79 @@ export function createMimotoPresentationRouter(deps: PresentationBridgeDeps): Ro
         [walletId]
       )
       await client.end().catch(() => {})
+
+      const PEX_PATTERN_ALIASES: Record<string, string[]> = {
+        'EuropeanHigherEducationDiploma': ['sphereon-diploma-vcdm20', 'EuropeanHigherEducationDiploma'],
+        'sphereon-diploma-vcdm20': ['EuropeanHigherEducationDiploma', 'sphereon-diploma-vcdm20'],
+        'EuropeanHealthInsuranceCard': ['sphereon-ehic-vcdm11', 'EuropeanHealthInsuranceCard'],
+        'sphereon-ehic-vcdm11': ['EuropeanHealthInsuranceCard', 'sphereon-ehic-vcdm11'],
+        'EuropeanPersonIdentificationData': [
+          'sphereon-eudi-pid',
+          'https://credential-issuer.sphereon.com/credentials/eudi-pid',
+          'EuropeanPersonIdentificationData',
+          'eudi-pid',
+        ],
+        'sphereon-eudi-pid': [
+          'EuropeanPersonIdentificationData',
+          'https://credential-issuer.sphereon.com/credentials/eudi-pid',
+          'sphereon-eudi-pid',
+          'eudi-pid',
+        ],
+        'https://credential-issuer.sphereon.com/credentials/eudi-pid': [
+          'sphereon-eudi-pid',
+          'EuropeanPersonIdentificationData',
+          'https://credential-issuer.sphereon.com/credentials/eudi-pid',
+          'eudi-pid',
+        ],
+        'FarmerCredential_SD_JWT': [
+          'https://inji.mosip.io/credentials/farmer-identity',
+          'farmer-sdjwt',
+          'FarmerCredential_SD_JWT',
+        ],
+        'https://inji.mosip.io/credentials/farmer-identity': [
+          'FarmerCredential_SD_JWT',
+          'farmer-sdjwt',
+          'https://inji.mosip.io/credentials/farmer-identity',
+        ],
+        'PlaygroundIdentityCredential_SDJWT': [
+          'https://inji-playground.mosip.dev/credentials/identity',
+          'PlaygroundIdentityCredential_SDJWT',
+          'PlaygroundIdentityCredential',
+        ],
+        'https://inji-playground.mosip.dev/credentials/identity': [
+          'PlaygroundIdentityCredential_SDJWT',
+          'PlaygroundIdentityCredential',
+          'https://inji-playground.mosip.dev/credentials/identity',
+        ],
+        'waltid-identity-sdjwt': [
+          'https://walt.id/credentials/identity',
+          'waltid-identity-sdjwt',
+          'PlaygroundIdentityCredential',
+        ],
+        'https://walt.id/credentials/identity': [
+          'waltid-identity-sdjwt',
+          'PlaygroundIdentityCredential',
+          'https://walt.id/credentials/identity',
+        ],
+        'PlaygroundIdentityCredential': [
+          'waltid-identity-ldp-vcdm11',
+          'waltid-identity-ldp-vcdm20',
+          'waltid-identity-sdjwt',
+          'PlaygroundIdentityCredential',
+        ],
+        'waltid-identity-ldp-vcdm11': ['PlaygroundIdentityCredential', 'waltid-identity-ldp-vcdm11'],
+        'waltid-identity-ldp-vcdm20': ['PlaygroundIdentityCredential', 'waltid-identity-ldp-vcdm20'],
+        'FarmerCredential': ['farmer-ldp-vcdm11', 'farmer-ldp-vcdm20', 'FarmerCredential'],
+        'farmer-ldp-vcdm11': ['FarmerCredential', 'farmer-ldp-vcdm11'],
+        'farmer-ldp-vcdm20': ['FarmerCredential', 'farmer-ldp-vcdm20'],
+        'DrivingLicenseCredential': [
+          'org.iso.18013.5.1.mDL',
+          'mock-mdl-drivinglicense',
+          'waltid-drivinglicense-mdoc',
+          'DrivingLicenseCredential',
+        ],
+        'org.iso.18013.5.1.mDL': ['DrivingLicenseCredential', 'org.iso.18013.5.1.mDL'],
+      }
 
       const availableCredentials: any[] = []
       for (const row of dbRes.rows) {
@@ -197,25 +275,67 @@ export function createMimotoPresentationRouter(deps: PresentationBridgeDeps): Ro
         }
         const credType = meta?.credentialType || meta?.credentialConfigurationId || ''
         const isFarmer = credType.includes('Farmer') || meta?.issuerId === 'Farmer'
+        const isSphereon = credType.includes('sphereon') || credType.includes('European') || meta?.issuerId === 'Sphereon'
         const isMdoc = credType.includes('mDoc') || credType.includes('DrivingLicense') || credType.toLowerCase().includes('mdoc')
-        const isSdJwt = credType.includes('SD_JWT') || credType.includes('sd-jwt') || meta?.format === 'vc+sd-jwt'
+        const isSdJwt = credType.includes('SD_JWT') || credType.includes('sd-jwt') || credType.includes('pid') || credType.includes('eudi') || meta?.format === 'vc+sd-jwt'
 
         const displayName =
           meta?.credentialTypeDisplayName ||
-          (isFarmer ? 'Farmer Verifiable Credential' : isMdoc ? 'Mobile Driving License' : 'Playground Identity Credential')
+          (isSphereon && isSdJwt
+            ? 'European Identity (EUDI PID)'
+            : isSphereon && (credType.includes('ehic') || credType.includes('EuropeanHealthInsuranceCard'))
+            ? 'European Health Insurance Card'
+            : isSphereon
+            ? 'European Higher Education Diploma'
+            : isFarmer
+            ? 'Farmer Verifiable Credential'
+            : isMdoc
+            ? 'Mobile Driving License'
+            : 'Playground Identity Credential')
         const logo =
           meta?.credentialTypeLogo ||
-          (isFarmer
+          (isSphereon
+            ? 'https://sphereon.com/favicon.ico'
+            : isFarmer
             ? 'https://mosip.github.io/inji-config/logos/agro-vertias-logo.png'
             : 'https://api.collab.mosip.net/inji/mosip-logo.png')
         const format = meta?.format || (isMdoc ? 'mso_mdoc' : isSdJwt ? 'vc+sd-jwt' : 'ldp_vc')
+
+        let decodedPayloadStr = ''
+        if (typeof row.credential === 'string' && isSdJwt) {
+          try {
+            const jwtPart = row.credential.split('~')[0]
+            const payloadJson = Buffer.from(jwtPart.split('.')[1], 'base64url').toString('utf8')
+            decodedPayloadStr = payloadJson
+          } catch (e) {}
+        }
+        const rowStr = JSON.stringify(row) + ' ' + decodedPayloadStr
+
+        // Filter against presentation_definition if provided
+        if (pexDescriptor) {
+          if (pexExpectedFormats.length > 0) {
+            const matchesFormat = pexExpectedFormats.some(f => f === format || (f === 'ldp_vp' && format === 'ldp_vc'))
+            if (!matchesFormat) {
+              console.log(`[presentation-bridge] Filter: credential ${row.id} (${format}) does not match requested format ${pexExpectedFormats.join('/')}`)
+              continue
+            }
+          }
+          if (pexPattern) {
+            const aliases = [pexPattern, ...(PEX_PATTERN_ALIASES[pexPattern] || [])]
+            const matchesPattern = aliases.some(a => rowStr.includes(a))
+            if (!matchesPattern) {
+              console.log(`[presentation-bridge] Filter: credential ${row.id} does not match requested pattern ${pexPattern}`)
+              continue
+            }
+          }
+        }
 
         availableCredentials.push({
           credentialId: row.id,
           credentialTypeDisplayName: displayName,
           credentialTypeLogo: logo,
           format: format,
-          issuer: meta?.issuer || (isFarmer ? 'Farmer' : 'Playground'),
+          issuer: meta?.issuer || (isFarmer ? 'Farmer' : isSphereon ? 'Sphereon' : 'Playground'),
         })
       }
 
@@ -310,7 +430,7 @@ export function createMimotoPresentationRouter(deps: PresentationBridgeDeps): Ro
         presFormat = 'vc+sd-jwt'
         vpToken = await createSdJwtPresentation({
           credential: String(row.credential),
-          holderKey: playgroundIssuer.key,
+          holderKey: playgroundWallet.key,
           nonce: String(nonce),
           audience: String(clientId),
         })

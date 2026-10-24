@@ -108,7 +108,10 @@ function App() {
     const requestId = (vpRequestStep.payload as any)?._response?.requestId as string | undefined
 
     if (requestId) {
-      if (selectedVerifier?.env === 'external') {
+      if (selectedVerifier?.id === 'verify-sphereon') {
+        requestUri = `${tunnelUrl}/api/external/sphereon/verifier/v1/verify/vp-request/${requestId}`
+        vpClientId = 'sphereon-verifier'
+      } else if (selectedVerifier?.env === 'external') {
         requestUri = `${tunnelUrl}/api/external/waltid/verifier/v1/verify/vp-request/${requestId}`
         vpClientId = 'waltid-verifier'
       } else if (selectedVerifier?.env === 'local') {

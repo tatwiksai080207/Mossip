@@ -55,7 +55,7 @@ export async function assertAllowedIssuerHost(host: string) {
   if (host === ENDPOINTS.issuer) return
   if (host === playgroundIssuerId || host === 'http://localhost:3001/api/playground-issuer') return
   if (host === 'http://localhost:3001/api/local-certify' || host === `${publicBaseUrl}/api/local-certify`) return
-  if (host.includes('/api/external/waltid/issuer')) return
+  if (host.includes('/api/external/waltid/issuer') || host.includes('/api/external/sphereon/issuer')) return
   const registry = await loadRegistry()
   if (!registry.some(i => i.credentialIssuerHost === host)) {
     throw new Error(`Issuer host not in Mimoto registry: ${host}`)

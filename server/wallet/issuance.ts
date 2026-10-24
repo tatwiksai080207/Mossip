@@ -23,7 +23,8 @@ export function resolveCandidateUrls(targetUrl: string): string[] {
       parsed.pathname.includes('/api/playground-issuer') ||
       parsed.pathname.includes('/api/local-certify') ||
       parsed.pathname.includes('/api/oidc') ||
-      parsed.pathname.includes('/api/external/waltid')
+      parsed.pathname.includes('/api/external/waltid') ||
+      parsed.pathname.includes('/api/external/sphereon')
     ) {
       list.push(`http://127.0.0.1:${PORT}${parsed.pathname}${parsed.search}`)
       list.push(`http://localhost:${PORT}${parsed.pathname}${parsed.search}`)
@@ -126,6 +127,7 @@ export interface AcceptOfferOptions {
   clientId?: string
   codeVerifier?: string
   redirectUri?: string
+  strictMode?: boolean
 }
 
 export async function executeAcceptOffer(
@@ -425,7 +427,7 @@ export async function executeAcceptOffer(
 
   let raw = credBody?.credential ?? (credBody?.credentials as any)?.[0]?.credential
 
-  if (!raw && (isCollabCertify || isLegacyCertify)) {
+  if (!raw && !opts.strictMode && (isCollabCertify || isLegacyCertify)) {
     console.log('[wallet] Issuer returned', credRes.status, credBody?.error || credBody)
     raw = await createFallbackResidentCredential({
       format,

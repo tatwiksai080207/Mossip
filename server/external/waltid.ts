@@ -17,7 +17,7 @@ import { Ed25519Signature2020 } from '@digitalbazaar/ed25519-signature-2020'
 import { documentLoader } from '../jsonld'
 import { verifySdJwtLocally } from '../formats/sd-jwt'
 import { verifyMdocLocally } from '../formats/mdoc'
-import { getActiveTamperMode, applyTamperingToVpToken } from '../index'
+import { getActiveTamperMode, applyTamperingToVpToken } from '../tamper'
 import { getActiveTunnelUrl } from '../tunnel'
 
 export const waltidVerifierRouter = Router()
@@ -49,6 +49,23 @@ interface WaltIdVpSession {
 
 const sessionsByTxnId = new Map<string, WaltIdVpSession>()
 const sessionsByReqId = new Map<string, WaltIdVpSession>()
+
+const PEX_PATTERN_ALIASES: Record<string, string[]> = {
+  'EuropeanHigherEducationDiploma': ['sphereon-diploma-vcdm20'],
+  'EuropeanHealthInsuranceCard': ['sphereon-ehic-vcdm11'],
+  'EuropeanPersonIdentificationData': ['sphereon-eudi-pid', 'https://credential-issuer.sphereon.com/credentials/eudi-pid'],
+  'sphereon-diploma-vcdm20': ['EuropeanHigherEducationDiploma'],
+  'sphereon-ehic-vcdm11': ['EuropeanHealthInsuranceCard'],
+  'sphereon-eudi-pid': ['EuropeanPersonIdentificationData', 'https://credential-issuer.sphereon.com/credentials/eudi-pid'],
+  'PlaygroundIdentityCredential': ['waltid-identity-ldp-vcdm11', 'waltid-identity-ldp-vcdm20', 'waltid-identity-sdjwt'],
+  'waltid-identity-ldp-vcdm11': ['PlaygroundIdentityCredential', 'VerifiableId'],
+  'waltid-identity-ldp-vcdm20': ['PlaygroundIdentityCredential', 'VerifiableId'],
+  'waltid-identity-sdjwt': ['PlaygroundIdentityCredential', 'https://walt.id/credentials/identity'],
+  'FarmerCredential': ['farmer-ldp-vcdm11', 'farmer-ldp-vcdm20'],
+  'MOSIPVerifiableCredential': ['mosip-vcdm11', 'mosip-vcdm20'],
+  'DrivingLicenseCredential': ['org.iso.18013.5.1.mDL', 'mock-mdl-drivinglicense', 'waltid-drivinglicense-mdoc'],
+  'org.iso.18013.5.1.mDL': ['DrivingLicenseCredential'],
+}
 
 /** Helper to clean up old sessions (>1 hour) */
 function pruneOldSessions() {
@@ -439,6 +456,63 @@ waltidVerifierRouter.post('/v1/verify/vp-submission/direct-post', async (req: Re
               }
             ],
           }
+        }
+      }
+    }
+
+    // Evaluate DIF Presentation Exchange input_descriptors constraint
+    if (session.presentationDefinition?.input_descriptors && session.result?.vpResultStatus === 'SUCCESS') {
+      const descriptors = session.presentationDefinition.input_descriptors as Array<any>
+      let pexSatisfied = true
+      let pexError: string | undefined
+
+      const actualFormat = isMdoc ? 'mso_mdoc' : (isSdJwt ? 'vc+sd-jwt' : 'ldp_vc')
+
+      for (const desc of descriptors) {
+        // 1. Format check
+        if (desc.format) {
+          const expectedFormats = Object.keys(desc.format)
+          const matchesFormat = expectedFormats.some(f => f === actualFormat || (f === 'ldp_vp' && actualFormat === 'ldp_vc'))
+          if (!matchesFormat) {
+            pexSatisfied = false
+            pexError = `Presentation fails DIF PEX descriptor constraint: received format '${actualFormat}', but expected '${expectedFormats.join(', ')}'`
+            break
+          }
+        }
+
+        // 2. Filter pattern check
+        const expectedPattern = desc.constraints?.fields?.[0]?.filter?.pattern
+        if (expectedPattern) {
+          const aliasCandidates = [
+            expectedPattern,
+            ...(PEX_PATTERN_ALIASES[expectedPattern] || []),
+          ]
+          const vcResults = session.result.vcResults || []
+          const satisfies = vcResults.some(r => {
+            const claimsStr = JSON.stringify(r.claims) + (r.vc || '')
+            return aliasCandidates.some(candidate => claimsStr.includes(candidate))
+          })
+          if (!satisfies) {
+            pexSatisfied = false
+            pexError = `Presentation fails DIF PEX descriptor constraint: missing required credential type '${expectedPattern}'`
+            break
+          }
+        }
+      }
+
+      if (!pexSatisfied) {
+        session.result.vpResultStatus = 'FAILED'
+        session.result.verificationStatus = 'INVALID'
+        session.result.error = pexError
+        session.result.checks = {
+          ...session.result.checks,
+          pexConstraintsValid: false,
+          pexError,
+        }
+      } else {
+        session.result.checks = {
+          ...session.result.checks,
+          pexConstraintsValid: true,
         }
       }
     }

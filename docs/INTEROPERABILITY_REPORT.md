@@ -106,6 +106,22 @@ Per Good-to-have Task #4, the playground features an interactive **Tamper Mode**
   - To prove genuine, end-to-end cryptographic verification of the mDoc credential over OpenID4VP, the playground integrates the **walt.id Verifier** (External Reference Relying Party). When presented to walt.id, the mDoc's MSO COSE_Sign1 signature, namespace element digests, and device authentication are verified successfully (`SUCCESS`).
 - **Problem Statement Significance:** Fulfills Problem Statement Goal 1.b (*"Surface real interoperability gaps (format mismatches, proof-type incompatibilities, DID method gaps, QR size limits, etc.) that the core teams can act on"*) and Good-to-have Task #2 (*"Add mDoc/mDL (ISO/IEC 18013-5) as a third credential format"*), providing an actionable specification analysis for upstream MOSIP engineers (`mosip/inji-verify`).
 
+### Finding 8: External Non-Inji Holder Interoperability with Sphereon Reference Wallet
+- **Cross-Ecosystem Validation:** Problem Statement Column 2 had exclusively Inji wallet implementations (`inji-web`, `inji-wallet-interactive`, `inji-web-collab-interactive`). To prove true bi-directional interoperability beyond Inji-centric holder software, the playground integrates the **Sphereon Reference Wallet** (`wallet-sphereon`), an independent holder engine derived from Sphereon's Mobile / IDK wallet architecture.
+- **Cryptographic Independence:** The Sphereon wallet maintains distinct `did:key` identities (P-256 for OID4VCI proof-of-possession and Ed25519 for Verifiable Presentations), completely decoupled from Mimoto / Inji Web key storage.
+- **Interoperability Resolution:**
+  1. `Inji Certify` $\rightarrow$ `Sphereon Wallet` $\rightarrow$ `Inji Verify`: Proves MOSIP Inji Certify successfully issues credentials to third-party non-Inji wallets, and MOSIP Inji Verify successfully verifies presentations created by third-party non-Inji wallets.
+  2. `Sphereon Issuer` $\rightarrow$ `Sphereon Wallet` $\rightarrow$ `Sphereon Verifier`: Establishes an independent international baseline.
+  3. `walt.id Issuer` $\rightarrow$ `Sphereon Wallet` $\rightarrow$ `Inji Verify`: Demonstrates multilateral cross-vendor credential exchange across three distinct vendors in a single unified flow.
+
+### Finding 9: European EUDI Wallet & Higher Education Diploma Interoperability (Sphereon Suite)
+- **Cross-Ecosystem Validation:** Per Problem Statement Section 2 (*"e.g. a Sphereon/Walt.id/DIF-style OpenID4VCI or OpenID4VP mock"*), the playground incorporates the **Sphereon Issuer** and **Sphereon Verifier**.
+- **Supported Standards:**
+  - **European EUDI Person Identification Data (PID):** IETF SD-JWT VC (`vc+sd-jwt`) issued with ES256 and selective disclosure of administrative identity attributes.
+  - **European Higher Education Diploma:** W3C VC 2.0 JSON-LD credential with authentic `Ed25519Signature2020` cryptographic proof.
+  - **European Health Insurance Card (EHIC):** W3C VC 1.1 JSON-LD credential.
+- **DIF Presentation Exchange v2 Enforcement:** The Sphereon Verifier enforces strict DIF Presentation Exchange v2 input descriptors and verifies both W3C VC 2.0 digital signatures (`Ed25519Signature2020`), SD-JWT disclosures with decentralized `did:key` resolution, and ISO 18013-5 mDocs, testing the exact boundaries of European Digital Identity Architecture and Reference Framework (ARF) standards against MOSIP components.
+
 ---
 
 ## 4. Exportable Reports & Matrix Evaluation

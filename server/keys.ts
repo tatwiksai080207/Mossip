@@ -153,10 +153,25 @@ export async function generateEd25519Key(seedBytes?: Uint8Array): Promise<Playgr
 }
 
 /** P-256 key for SD-JWT VC and mDoc, both of which specify ES256. */
-export async function generateP256Key(): Promise<PlaygroundKey> {
-  const { publicKey, privateKey } = await jose.generateKeyPair('ES256', { extractable: true })
-  const publicJwk = await jose.exportJWK(publicKey)
-  const privateJwk = await jose.exportJWK(privateKey)
+export async function generateP256Key(staticKey?: jose.JWK): Promise<PlaygroundKey> {
+  let publicKey: jose.CryptoKey
+  let privateKey: jose.CryptoKey
+  let publicJwk: jose.JWK
+  let privateJwk: jose.JWK
+
+  if (staticKey) {
+    privateKey = (await jose.importJWK(staticKey, 'ES256')) as jose.CryptoKey
+    privateJwk = staticKey
+    const { d, ...pub } = staticKey
+    publicJwk = pub
+    publicKey = (await jose.importJWK(publicJwk, 'ES256')) as jose.CryptoKey
+  } else {
+    const pair = await jose.generateKeyPair('ES256', { extractable: true })
+    publicKey = pair.publicKey
+    privateKey = pair.privateKey
+    publicJwk = await jose.exportJWK(publicKey)
+    privateJwk = await jose.exportJWK(privateKey)
+  }
 
   // Compressed SEC1 point: 0x02/0x03 by y-parity, then x.
   const x = Buffer.from(publicJwk.x as string, 'base64url')

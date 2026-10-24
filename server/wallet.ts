@@ -17,6 +17,7 @@
  */
 
 import { Router, type Request, type Response } from 'express'
+import * as jose from 'jose'
 import { generateP256Key, generateEd25519Key, type PlaygroundKey } from './keys'
 import {
   type StepStatus,
@@ -40,6 +41,14 @@ export type {
 }
 export { parseOffer }
 
+const WALLET_P256_JWK: jose.JWK = {
+  kty: 'EC',
+  crv: 'P-256',
+  x: 'BzV6h9VA0LUy40IHpPJ8u4--3USWhyB6MmZ3kIf-9mE',
+  y: '3vty_EJDI45Amq9FaBlGdZw1vEte84rgz0FHqEjwmuQ',
+  d: 'a9nf9dAtJpylInHxWGuQx2mXViu8cZudDz5ng1dhMb0',
+}
+
 export async function createWallet(): Promise<Wallet> {
   // Two keys for two different cryptographic roles:
   //   - issueKey (P-256 / ES256): signs the OpenID4VCI proof-of-possession JWT.
@@ -47,8 +56,8 @@ export async function createWallet(): Promise<Wallet> {
   //   - presentKey (Ed25519 / EdDSA): signs Verifiable Presentations using
   //     Ed25519Signature2020. The LD-Proof suite requires an Ed25519 key and
   //     won't accept P-256.
-  const key: PlaygroundKey = await generateP256Key()
-  const presentationKey: PlaygroundKey = await generateEd25519Key()
+  const key: PlaygroundKey = await generateP256Key(WALLET_P256_JWK)
+  const presentationKey: PlaygroundKey = await generateEd25519Key(Buffer.from('inji-playground-wallet-seed-1234'))
   const held = new Map<string, HeldCredential>()
 
   const acceptOffer = (

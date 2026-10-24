@@ -1,0 +1,22 @@
+{
+  "sphereon-holder-1": {
+    "given_name": "Amélie",
+    "family_name": "Dubois",
+    "birth_date": "1995-06-14",
+    "gender": "Female",
+    "nationality": "FRA",
+    "issuing_country": "FR",
+    "personal_administrative_number": "FR-PID-950614-8842",
+    "email": "amelie.dubois@identity.eu",
+    "region": "Île-de-France",
+    "studentId": "EU-UNIV-2024-9912",
+    "academicDegree": "Master of Science in Information Security",
+    "university": "Sorbonne University / Sphereon Academic Consortium",
+    "fieldOfStudy": "Cryptographic Identity Engineering",
+    "graduationDate": "2025-07-15",
+    "grade": "Distinction (Summa Cum Laude)",
+    "insuredPersonNumber": "FR-8899220011",
+    "institutionId": "FR-CPAM-PARIS-75",
+    "cardExpiryDate": "2028-12-31"
+  }
+}

@@ -24,12 +24,14 @@ export async function verifyPresentation(
     data = postRes.data
   }
 
+  const verifierTitle = verifier.name || 'Verifier'
+
   if (!res.ok) {
     throw new StepError(`No verification result for ${session.transactionId} (HTTP ${res.status})`, {
       _transaction_id: session.transactionId,
       _http_status: res.status,
       _response: data,
-      _reason: 'Inji Verify only produces a result once a vp_token has been submitted to direct_post.',
+      _reason: `${verifierTitle} only produces a result once a vp_token has been submitted to direct_post.`,
     })
   }
 
@@ -47,17 +49,23 @@ export async function verifyPresentation(
 
   if (isRejected) {
     const isMdoc = session?.dcqlQuery?.credentials?.[0]?.format === 'mso_mdoc' || JSON.stringify(data).includes('mso_mdoc')
-    const findingMsg = isMdoc
-      ? 'Upstream Specification Gap (Finding #7): Inji Verify (verify-service 0.17.0) backend has no native ISO/IEC 18013-5 mDoc parser in VerifiablePresentationSubmissionServiceImpl.java (throws InvalidVpTokenException). Native mDoc verification is scheduled for Inji Verify v0.18.0+ (per docs.inji.io). To execute genuine end-to-end OpenID4VP verification of this mDoc credential, select "walt.id Verifier".'
-      : 'Inji Verify currently requires an X.509 certificate chain (x5c) for SD-JWT VC rather than decentralized did:key/did:jwk.'
+    const isInji = verifier.env === 'local' || verifier.env === 'collab' || verifier.id.includes('inji')
+    const isSdJwt = session?.dcqlQuery?.credentials?.[0]?.format === 'vc+sd-jwt' || JSON.stringify(data).includes('vc+sd-jwt')
 
-    throw new StepError(`Inji Verify rejected the presentation (status: ${vpStatus || 'FAILED'})`, {
+    let findingMsg: string | undefined
+    if (isMdoc && isInji) {
+      findingMsg = 'Upstream Specification Gap (Finding #7): Inji Verify (verify-service 0.17.0) backend has no native ISO/IEC 18013-5 mDoc parser in VerifiablePresentationSubmissionServiceImpl.java (throws InvalidVpTokenException). Native mDoc verification is scheduled for Inji Verify v0.18.0+ (per docs.inji.io). To execute genuine end-to-end OpenID4VP verification of this mDoc credential, select "walt.id Verifier".'
+    } else if (isSdJwt && isInji) {
+      findingMsg = 'Inji Verify currently requires an X.509 certificate chain (x5c) for SD-JWT VC rather than decentralized did:key/did:jwk.'
+    }
+
+    throw new StepError(`${verifierTitle} rejected the presentation (status: ${vpStatus || 'FAILED'})`, {
       _vp_result_status: vpStatus,
       _verification_results: vcResults || credResults,
       _response: data,
-      _interop_finding: findingMsg,
-      _upstream_status: isMdoc ? 'Planned v0.18.0+ (ISO/IEC 18013-5)' : undefined,
-      _cross_ecosystem_alternative: isMdoc ? 'walt.id Verifier' : undefined,
+      ...(findingMsg ? { _interop_finding: findingMsg } : {}),
+      _upstream_status: (isMdoc && isInji) ? 'Planned v0.18.0+ (ISO/IEC 18013-5)' : undefined,
+      _cross_ecosystem_alternative: (isMdoc && isInji) ? 'walt.id Verifier' : undefined,
     })
   }
 

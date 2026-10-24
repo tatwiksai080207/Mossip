@@ -33,15 +33,17 @@ export async function createCredentialOffer(
     })
   }
 
-  const configId = (issuer.id === 'certify-playground' || issuer.id === 'issuer-waltid' || issuer.id === 'certify-local' || issuer.env === 'external')
+  const configId = (issuer.id === 'certify-playground' || issuer.id === 'issuer-waltid' || issuer.id === 'issuer-sphereon' || issuer.id === 'certify-local' || issuer.env === 'external')
     ? (credType.id ?? credType.credentialTypeName)
     : (credType.credentialTypeName ?? credType.id)
 
-  if (issuer.id === 'certify-playground' || issuer.id === 'issuer-waltid' || issuer.id === 'certify-local' || issuer.env === 'external') {
+  if (issuer.id === 'certify-playground' || issuer.id === 'issuer-waltid' || issuer.id === 'issuer-sphereon' || issuer.id === 'certify-local' || issuer.env === 'external') {
     // Fetch a real offer from the issuer that includes a valid pre-authorized_code
-    const offerEndpoint = issuer.id === 'issuer-waltid' || issuer.env === 'external'
-      ? '/api/external/waltid/issuer/offer'
-      : (issuer.id === 'certify-local' ? '/api/local-certify/offer' : '/api/playground-issuer/offer')
+    const offerEndpoint = issuer.id === 'issuer-sphereon'
+      ? '/api/external/sphereon/issuer/offer'
+      : (issuer.id === 'issuer-waltid' || issuer.env === 'external'
+        ? '/api/external/waltid/issuer/offer'
+        : (issuer.id === 'certify-local' ? '/api/local-certify/offer' : '/api/playground-issuer/offer'))
     let localGrantType: string | undefined = undefined
     try {
       // Dynamically read active grant preference for Local Inji Certify
@@ -183,7 +185,15 @@ export async function runIssueFlow(issuer: IssuerConfig, credType: CredentialTyp
     currentCodeVerifier = null
   }
 
-  const { data, res } = await postJson('/api/wallet/accept-offer', {
+  let walletEndpoint = '/api/wallet/accept-offer'
+  try {
+    const { useStore } = await import('../store/index')
+    if (useStore.getState().selectedWallet?.id === 'wallet-sphereon') {
+      walletEndpoint = '/api/external/sphereon/wallet/accept-offer'
+    }
+  } catch {}
+
+  const { data, res } = await postJson(walletEndpoint, {
     offer,
     authCode,
     clientId,

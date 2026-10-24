@@ -278,9 +278,6 @@ function credentialConfigurationsSupported(): Record<string, unknown> {
       'x-vc-data-model': cfg.dataModel,
     }
   }
-  if (WALTID_CREDENTIAL_CONFIGS.length > 0) {
-    out[''] = { ...(out[WALTID_CREDENTIAL_CONFIGS[0].id] as object), id: WALTID_CREDENTIAL_CONFIGS[0].id }
-  }
   return out
 }
 
@@ -330,16 +327,31 @@ export async function createWaltIdIssuer(opts: { baseUrl: string; mountPath: str
     const id = `${baseUrl}${mountPath}`
     return {
       issuer: id,
+      authorization_endpoint: `${id}/authorize`,
       token_endpoint: `${id}/token`,
       jwks_uri: `${id}/.well-known/jwks.json`,
-      grant_types_supported: [PRE_AUTH_GRANT],
+      grant_types_supported: [PRE_AUTH_GRANT, 'authorization_code'],
       'pre-authorized_grant_anonymous_access_supported': true,
-      response_types_supported: [],
+      response_types_supported: ['token', 'code'],
       token_endpoint_auth_methods_supported: ['none'],
     }
   }
 
   // ── Discovery endpoints ───────────────────────────────────────────────────
+  router.get('/authorize', (req, res) => {
+    const redirectUri = req.query.redirect_uri as string
+    const state = req.query.state as string
+    if (redirectUri) {
+      try {
+        const url = new URL(redirectUri)
+        url.searchParams.set('code', 'waltid-auth-code')
+        if (state) url.searchParams.set('state', state)
+        return res.redirect(url.toString())
+      } catch (e) {}
+    }
+    res.json({ status: 'ok', message: 'walt.id Authorization Endpoint' })
+  })
+
   router.get('/.well-known/openid-credential-issuer', (req, res) => res.json(issuerMetadata(req)))
   router.get('/.well-known/oauth-authorization-server', (req, res) => res.json(authorizationServerMetadata(req)))
   router.get('/.well-known/jwks.json', (_req, res) => {

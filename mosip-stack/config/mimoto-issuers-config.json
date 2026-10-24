@@ -107,6 +107,33 @@
       "credential_issuer_host": "http://host.docker.internal:3001/api/external/waltid/issuer",
       "enabled": "true",
       "wellknown_endpoint": "http://host.docker.internal:3001/api/external/waltid/issuer/.well-known/openid-credential-issuer"
+    },
+    {
+      "credential_issuer": "http://host.docker.internal:3001/api/external/sphereon/issuer",
+      "issuer_id": "Sphereon",
+      "protocol": "OpenId4VCI",
+      "display": [
+        {
+          "name": "Sphereon External Issuer",
+          "logo": {
+            "url": "https://sphereon.com/wp-content/uploads/2021/04/Sphereon-Logo-blue.svg",
+            "alt_text": "sphereon-logo"
+          },
+          "title": "Sphereon External Issuer",
+          "description": "Download OpenID4VCI European Credentials from Sphereon",
+          "language": "en"
+        }
+      ],
+      "client_id": "wallet-demo",
+      "redirect_uri": "io.mosip.residentapp.inji://oauthredirect",
+      "token_endpoint": "http://localhost:8099/v1/mimoto/get-token/Sphereon",
+      "authorization_audience": "http://host.docker.internal:3001/api/external/sphereon/issuer/token",
+      "proxy_token_endpoint": "http://host.docker.internal:3001/api/external/sphereon/issuer/token",
+      "client_alias": "oidc",
+      "qr_code_type": "EmbeddedVC",
+      "credential_issuer_host": "http://host.docker.internal:3001/api/external/sphereon/issuer",
+      "enabled": "true",
+      "wellknown_endpoint": "http://host.docker.internal:3001/api/external/sphereon/issuer/.well-known/openid-credential-issuer"
     }
   ]
 }

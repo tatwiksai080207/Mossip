@@ -38,16 +38,41 @@ export interface PlaygroundIssuanceToMimotoParams {
   credentialConfigurationId?: string
   issuerId?: string
   playgroundIssuer: any
+  playgroundWallet?: any
 }
 
 export async function handlePlaygroundIssuanceToMimoto(
   params: PlaygroundIssuanceToMimotoParams
 ): Promise<{ credentialId: string }> {
-  const { walletId, credentialConfigurationId, issuerId = 'Playground', playgroundIssuer } = params
+  const { walletId, credentialConfigurationId, issuerId = 'Playground', playgroundIssuer, playgroundWallet } = params
 
   const credType = credentialConfigurationId || 'PlaygroundIdentityCredential'
   const isMdoc = credType.includes('mDoc') || credType.includes('DrivingLicense') || credType.toLowerCase().includes('mdoc')
-  const isSdJwt = credType.includes('SDJWT') || credType.includes('sd-jwt') || credType.includes('SD_JWT')
+
+  const isSphereon =
+    credType.includes('sphereon') ||
+    credType.includes('European') ||
+    issuerId === 'Sphereon' ||
+    issuerId.toLowerCase().includes('sphereon')
+
+  const isSphereonEudi = isSphereon && (
+    credType.includes('eudi') ||
+    credType.includes('pid') ||
+    credType.includes('EuropeanPersonIdentificationData') ||
+    credType === 'sphereon-eudi-pid'
+  )
+  const isSphereonEhic = isSphereon && (
+    credType.includes('ehic') ||
+    credType.includes('EuropeanHealthInsuranceCard') ||
+    credType === 'sphereon-ehic-vcdm11'
+  )
+  const isSphereonDiploma = isSphereon && !isSphereonEudi && !isSphereonEhic
+
+  const isSdJwt =
+    isSphereonEudi ||
+    credType.includes('SDJWT') ||
+    credType.includes('sd-jwt') ||
+    credType.includes('SD_JWT')
   const isVcdm2 = credType.includes('2.0') || credType.includes('VCDM2.0')
   const isFarmer =
     credType.includes('Farmer') ||
@@ -88,6 +113,73 @@ export async function handlePlaygroundIssuanceToMimoto(
       claims,
     })
     compactCred = mdoc.compact
+  } else if (isSphereon) {
+    if (isSdJwt || credType.includes('pid') || credType.includes('eudi') || credType.includes('EuropeanPersonIdentificationData')) {
+      const sdjwt = await issueSdJwtCredential({
+        issuerKey: playgroundIssuer.key,
+        issuerUrl: `${getPublicBaseUrl()}/api/external/sphereon/issuer`,
+        vct: 'https://credential-issuer.sphereon.com/credentials/eudi-pid',
+        claims: {
+          family_name: 'Dubois',
+          given_name: 'Amélie',
+          birth_date: '1995-06-14',
+          gender: 'Female',
+          nationality: 'FRA',
+          issuing_country: 'FR',
+          personal_administrative_number: 'FR-PID-950614-8842',
+          email: 'amelie.dubois@identity.eu',
+          region: 'Île-de-France',
+        },
+        holderKey: playgroundWallet?.key,
+        holderDid: playgroundWallet?.key?.did,
+      })
+      compactCred = sdjwt.compact
+    } else if (credType.includes('ehic') || credType.includes('EuropeanHealthInsuranceCard')) {
+      const vc = await issueLdpCredential({
+        key: playgroundIssuer.key,
+        dataModel: '1.1',
+        credentialType: 'EuropeanHealthInsuranceCard',
+        subject: {
+          given_name: 'Amélie',
+          family_name: 'Dubois',
+          birth_date: '1995-06-14',
+          gender: 'Female',
+          nationality: 'FRA',
+          issuing_country: 'FR',
+          personal_administrative_number: 'FR-PID-950614-8842',
+          insuredPersonNumber: 'FR-8899220011',
+          institutionId: 'FR-CPAM-PARIS-75',
+          cardExpiryDate: '2028-12-31',
+        },
+        holderDid: playgroundIssuer.key.did,
+      })
+      compactCred = JSON.stringify(vc)
+    } else {
+      const vc = await issueLdpCredential({
+        key: playgroundIssuer.key,
+        dataModel: '2.0',
+        credentialType: 'EuropeanHigherEducationDiploma',
+        subject: {
+          given_name: 'Amélie',
+          family_name: 'Dubois',
+          birth_date: '1995-06-14',
+          gender: 'Female',
+          nationality: 'FRA',
+          issuing_country: 'FR',
+          personal_administrative_number: 'FR-PID-950614-8842',
+          email: 'amelie.dubois@identity.eu',
+          region: 'Île-de-France',
+          studentId: 'EU-UNIV-2024-9912',
+          academicDegree: 'Master of Science in Information Security',
+          university: 'Sorbonne University / Sphereon Academic Consortium',
+          fieldOfStudy: 'Cryptographic Identity Engineering',
+          graduationDate: '2025-07-15',
+          grade: 'Distinction (Summa Cum Laude)',
+        },
+        holderDid: playgroundIssuer.key.did,
+      })
+      compactCred = JSON.stringify(vc)
+    }
   } else if (isFarmer && isSdJwt) {
     const sdjwt = await issueSdJwtCredential({
       issuerKey: playgroundIssuer.key,
@@ -108,6 +200,8 @@ export async function handlePlaygroundIssuanceToMimoto(
         primaryCropType: 'Maize',
         secondaryCropType: 'Rice',
       },
+      holderKey: playgroundWallet?.key,
+      holderDid: playgroundWallet?.key?.did,
     })
     compactCred = sdjwt.compact
   } else if (isSdJwt) {
@@ -122,6 +216,8 @@ export async function handlePlaygroundIssuanceToMimoto(
         email: 'asha.r@example.org',
         region: 'Karnataka',
       },
+      holderKey: playgroundWallet?.key,
+      holderDid: playgroundWallet?.key?.did,
     })
     compactCred = sdjwt.compact
   } else if (isFarmer) {
@@ -168,11 +264,25 @@ export async function handlePlaygroundIssuanceToMimoto(
 
   const client = await getMimotoDbClient()
   try {
-    const actualIssuer = isFarmer ? 'Farmer' : issuerId || 'Playground'
+    const actualIssuer = isFarmer ? 'Farmer' : isSphereon ? 'Sphereon' : issuerId || 'Playground'
     const actualCredType =
-      isFarmer && isSdJwt ? 'FarmerCredential_SD_JWT' : isFarmer && !isMdoc ? 'FarmerCredential' : credType
+      isSphereonEudi
+        ? 'sphereon-eudi-pid'
+        : isSphereonEhic
+        ? 'sphereon-ehic-vcdm11'
+        : isSphereonDiploma
+        ? 'sphereon-diploma-vcdm20'
+        : isFarmer && isSdJwt
+        ? 'FarmerCredential_SD_JWT'
+        : isFarmer && !isMdoc
+        ? 'FarmerCredential'
+        : credType
     const format =
-      isFarmer && isSdJwt
+      isSphereonEudi
+        ? 'vc+sd-jwt'
+        : isSphereon
+        ? 'ldp_vc'
+        : isFarmer && isSdJwt
         ? 'vc+sd-jwt'
         : isFarmer && !isMdoc
         ? 'ldp_vc'
@@ -181,6 +291,36 @@ export async function handlePlaygroundIssuanceToMimoto(
         : isSdJwt
         ? 'vc+sd-jwt'
         : 'jwt_vc_json'
+
+    const displayName =
+      isSphereonEudi
+        ? 'European Identity (EUDI PID)'
+        : isSphereonEhic
+        ? 'European Health Insurance Card'
+        : isSphereonDiploma
+        ? 'European Higher Education Diploma'
+        : isFarmer && isSdJwt
+        ? 'Farmer SD-JWT Credential'
+        : isFarmer && !isMdoc
+        ? 'Farmer Verifiable Credential'
+        : isMdoc
+        ? 'Mobile Driving License'
+        : 'Playground Identity Credential'
+    const logo = isSphereon
+      ? 'https://sphereon.com/favicon.ico'
+      : isFarmer
+      ? 'https://mosip.github.io/inji-config/logos/agro-vertias-logo.png'
+      : 'https://api.collab.mosip.net/inji/mosip-logo.png'
+
+    const metadata = JSON.stringify({
+      issuerId: actualIssuer,
+      issuer: actualIssuer,
+      credentialType: actualCredType,
+      credentialConfigurationId: actualCredType,
+      credentialTypeDisplayName: displayName,
+      credentialTypeLogo: logo,
+      format,
+    })
 
     const existing = await client.query(
       `SELECT id FROM public.verifiable_credentials WHERE wallet_id = $1 AND (credential_metadata->>'credentialType' = $2 OR credential_metadata->>'credentialConfigurationId' = $2)`,
@@ -191,33 +331,12 @@ export async function handlePlaygroundIssuanceToMimoto(
     if (existing.rows.length > 0) {
       credId = existing.rows[0].id
       await client.query(
-        `UPDATE public.verifiable_credentials SET credential = $1, updated_at = now() WHERE id = $2`,
-        [compactCred, credId]
+        `UPDATE public.verifiable_credentials SET credential = $1, credential_metadata = $3, updated_at = now() WHERE id = $2`,
+        [compactCred, credId, metadata]
       )
       console.log(`[wallet-bridge] Updated existing ${actualCredType} ${credId} in wallet ${walletId}`)
     } else {
       credId = crypto.randomUUID()
-      const displayName =
-        isFarmer && isSdJwt
-          ? 'Farmer SD-JWT Credential'
-          : isFarmer && !isMdoc
-          ? 'Farmer Verifiable Credential'
-          : isMdoc
-          ? 'Mobile Driving License'
-          : 'Playground Identity Credential'
-      const logo = isFarmer
-        ? 'https://mosip.github.io/inji-config/logos/agro-vertias-logo.png'
-        : 'https://api.collab.mosip.net/inji/mosip-logo.png'
-
-      const metadata = JSON.stringify({
-        issuerId: actualIssuer,
-        issuer: actualIssuer,
-        credentialType: actualCredType,
-        credentialConfigurationId: actualCredType,
-        credentialTypeDisplayName: displayName,
-        credentialTypeLogo: logo,
-        format,
-      })
       await client.query(
         `INSERT INTO public.verifiable_credentials (id, wallet_id, credential, credential_metadata, created_at, updated_at) VALUES ($1, $2, $3, $4, now(), now())`,
         [credId, walletId, compactCred, metadata]

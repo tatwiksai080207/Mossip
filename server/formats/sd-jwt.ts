@@ -10,6 +10,7 @@
 import crypto from 'crypto'
 import * as jose from 'jose'
 import type { PlaygroundKey } from '../keys'
+import { resolveDid } from '../keys'
 
 export interface IssueSdJwtOptions {
   issuerKey: PlaygroundKey
@@ -149,8 +150,15 @@ export async function createSdJwtPresentation(opts: {
 
   const sdPayloadWithoutKb = `${issuerJwt}~${selectedDisclosures.join('~')}~`
 
-  // If no nonce/audience requested, presentation is without KB-JWT
-  if (!opts.nonce && !opts.audience) {
+  // Decode issuer JWT to check whether credential has holder key binding (cnf)
+  let hasCnf = false
+  try {
+    const payload = JSON.parse(Buffer.from(issuerJwt.split('.')[1], 'base64url').toString('utf8'))
+    hasCnf = Boolean(payload.cnf?.jwk || payload.cnf?.kid || payload.cnf?.did)
+  } catch {}
+
+  // If no nonce/audience requested, or credential does not contain a cnf claim, presentation is without KB-JWT
+  if ((!opts.nonce && !opts.audience) || !hasCnf) {
     return sdPayloadWithoutKb
   }
 
@@ -164,7 +172,7 @@ export async function createSdJwtPresentation(opts: {
   if (opts.nonce) kbPayload.nonce = opts.nonce
   if (opts.audience) kbPayload.aud = opts.audience
 
-  const kbAlg = opts.holderKey.alg === 'EdDSA' ? 'EdDSA' : 'ES256'
+  const kbAlg = opts.holderKey.alg === 'EdDSA' || (opts.holderKey.publicJwk as any)?.crv === 'Ed25519' ? 'EdDSA' : 'ES256'
   const kbJwt = await new jose.SignJWT(kbPayload)
     .setProtectedHeader({
       alg: kbAlg,
@@ -244,11 +252,26 @@ export async function verifySdJwtLocally(
     let keyBindingVerified = false
     if (hasKbJwt) {
       const kbJwt = lastPart
-      const cnf = decodedIssuer.cnf as { jwk?: jose.JWK } | undefined
-      if (!cnf?.jwk) {
-        return { verified: false, error: 'KB-JWT present but no cnf.jwk in credential', claims: {} }
+      const cnf = decodedIssuer.cnf as { jwk?: jose.JWK; kid?: string; did?: string } | undefined
+      if (!cnf?.jwk && !cnf?.kid && !cnf?.did) {
+        return { verified: false, error: 'KB-JWT present but no cnf in credential', claims: {} }
       }
-      const holderKey = await jose.importJWK(cnf.jwk, 'ES256')
+
+      let holderKey: any
+      if (cnf.jwk) {
+        const alg = (cnf.jwk.alg as string) || (cnf.jwk.crv === 'Ed25519' ? 'EdDSA' : 'ES256')
+        holderKey = await jose.importJWK(cnf.jwk, alg)
+      } else {
+        const targetDid = cnf.kid || cnf.did || ''
+        if (targetDid.startsWith('did:key:')) {
+          const resolved = resolveDid(targetDid)
+          const alg = resolved.publicJwk.alg || (resolved.publicJwk.crv === 'Ed25519' ? 'EdDSA' : 'ES256')
+          holderKey = await jose.importJWK(resolved.publicJwk, alg)
+        } else {
+          return { verified: false, error: `Unsupported cnf identifier in credential: ${targetDid}`, claims: {} }
+        }
+      }
+
       const { payload: kbPayload } = await jose.jwtVerify(kbJwt, holderKey)
 
       // Verify sd_hash

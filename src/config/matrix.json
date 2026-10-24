@@ -185,6 +185,42 @@
           "doctype": "org.iso.18013.5.1.mDL"
         }
       ]
+    },
+    {
+      "id": "issuer-sphereon",
+      "name": "Sphereon Issuer",
+      "description": "European reference issuer (OpenID4VCI) — EUDI PID & W3C VC 2.0",
+      "host": "http://localhost:3001/api/external/sphereon/issuer",
+      "env": "external",
+      "credentialTypes": [
+        {
+          "id": "sphereon-eudi-pid",
+          "name": "European Identity (EUDI PID)",
+          "format": "vc+sd-jwt",
+          "proofTypes": ["ES256"],
+          "credentialTypeName": "EuropeanPersonIdentificationData",
+          "vcTypes": ["EuropeanPersonIdentificationData"],
+          "vct": "https://credential-issuer.sphereon.com/credentials/eudi-pid"
+        },
+        {
+          "id": "sphereon-diploma-vcdm20",
+          "name": "European Higher Education Diploma (W3C VC 2.0)",
+          "format": "ldp_vc",
+          "proofTypes": ["Ed25519Signature2020"],
+          "credentialTypeName": "EuropeanHigherEducationDiploma",
+          "vcTypes": ["VerifiableCredential", "EuropeanHigherEducationDiploma"],
+          "dataModel": "2.0"
+        },
+        {
+          "id": "sphereon-ehic-vcdm11",
+          "name": "European Health Insurance Card (W3C VC 1.1)",
+          "format": "ldp_vc",
+          "proofTypes": ["Ed25519Signature2020"],
+          "credentialTypeName": "EuropeanHealthInsuranceCard",
+          "vcTypes": ["VerifiableCredential", "EuropeanHealthInsuranceCard"],
+          "dataModel": "1.1"
+        }
+      ]
     }
   ],
   "wallets": [
@@ -205,6 +241,12 @@
       "name": "Inji Web (Collab)",
       "description": "MOSIP Inji Web on localhost:3004",
       "env": "collab"
+    },
+    {
+      "id": "wallet-sphereon",
+      "name": "Sphereon Wallet (External)",
+      "description": "Independent non-Inji holder wallet — DIF PEX & OpenID4VP",
+      "env": "external"
     }
   ],
   "verifiers": [
@@ -228,6 +270,13 @@
       "description": "External reference verifier",
       "env": "external",
       "host": "/api/external/waltid/verifier"
+    },
+    {
+      "id": "verify-sphereon",
+      "name": "Sphereon Verifier",
+      "description": "DIF Presentation Exchange v2 reference verifier",
+      "env": "external",
+      "host": "/api/external/sphereon/verifier"
     }
   ]
 }

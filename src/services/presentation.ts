@@ -14,7 +14,7 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
     // Local Inji Verify 0.17.0 and walt.id use Presentation Exchange
     const configId = credType.credentialTypeName || credType.id
     request = {
-      clientId: verifier.env === 'external' ? 'waltid-verifier' : 'localhost-verifier',
+      clientId: verifier.id === 'verify-sphereon' ? 'sphereon-verifier' : (verifier.env === 'external' ? 'waltid-verifier' : 'localhost-verifier'),
       transactionId,
       nonce,
       presentationDefinition: {
@@ -50,7 +50,7 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
                       ? (credType.doctype || credType.id)
                       : credType.format === 'vc+sd-jwt'
                       ? (credType.vct || credType.id)
-                      : (credType.credentialTypeName || credType.id)
+                      : (credType.vcTypes?.find(t => t !== 'VerifiableCredential') || credType.credentialTypeName || credType.id)
                   }
                 }
               ]
@@ -75,9 +75,10 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
 
   if (!res.ok) {
     const isCollabMdocGap = credType.format === 'mso_mdoc' && (verifier.env === 'collab' || host.includes('injiverify.collab.mosip.net'))
+    const verifierTitle = verifier.name || 'Verifier'
     const errorMsg = isCollabMdocGap
       ? 'VP request rejected: Collab Inji Verify DCQL v2 API lacks ISO 18013-5 mDoc query support (HTTP 400: Unknown field: doctype_values)'
-      : `VP request rejected by Inji Verify (HTTP ${res.status})`
+      : `VP request rejected by ${verifierTitle} (HTTP ${res.status})`
 
     throw new StepError(errorMsg, {
       _request: request,
@@ -124,11 +125,20 @@ export async function submitVPResponse(
 
   // 1. Ask the wallet to sign a Verifiable Presentation using the verifier's nonce.
   const targetClientId = session.clientId || (
+    verifier.id === 'verify-sphereon' ? 'sphereon-verifier' :
     verifier.env === 'external' ? 'waltid-verifier' :
     verifier.env === 'local' ? 'localhost-verifier' :
     'https://injiverify.collab.mosip.net'
   )
-  const { res: presentRes, data: presentData } = await postJson('/api/wallet/present', {
+  let presentEndpoint = '/api/wallet/present'
+  try {
+    const { useStore } = await import('../store/index')
+    if (useStore.getState().selectedWallet?.id === 'wallet-sphereon') {
+      presentEndpoint = '/api/external/sphereon/wallet/present'
+    }
+  } catch {}
+
+  const { res: presentRes, data: presentData } = await postJson(presentEndpoint, {
     nonce: session.nonce,
     clientId: targetClientId,
   })

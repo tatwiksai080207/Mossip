@@ -326,7 +326,9 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
                 (() => {
                   const mimotoIssuerId = selectedIssuer?.id === 'certify-local'
                     ? 'Farmer'
-                    : (selectedIssuer?.id === 'issuer-waltid' ? 'WaltId' : 'Playground')
+                    : (selectedIssuer?.id === 'issuer-waltid'
+                      ? 'WaltId'
+                      : (selectedIssuer?.id === 'issuer-sphereon' ? 'Sphereon' : 'Playground'))
                   const targetCredId = selectedCredType?.id || selectedCredType?.credentialTypeName || 'PlaygroundIdentityCredential'
                   const rawOffer = new URL((offerUri || '').replace('openid-credential-offer://', 'http://dummy')).searchParams.get('credential_offer') || ''
                   const directWalletIssuanceUrl = `http://localhost:3004/user/issuers/${mimotoIssuerId}?credential_id=${encodeURIComponent(targetCredId)}&auto_download=true&credential_offer=${encodeURIComponent(rawOffer)}`

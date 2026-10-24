@@ -289,13 +289,8 @@ function credentialConfigurationsSupported(): Record<string, unknown> {
           alt_text: 'logo'
         }
       }],
-      // Not part of the spec — recorded so the UI can label the data model
-      // without re-deriving it from the @context.
       'x-vc-data-model': cfg.dataModel,
     }
-  }
-  if (CREDENTIAL_CONFIGS.length > 0) {
-    out[''] = { ...(out[CREDENTIAL_CONFIGS[0].id] as object), id: CREDENTIAL_CONFIGS[0].id }
   }
   return out
 }

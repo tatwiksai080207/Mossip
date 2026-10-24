@@ -7,6 +7,9 @@ import { createWallet } from './wallet'
 import { oidcRouter, discoveryHandler } from './oidc'
 import { waltidVerifierRouter } from './external/waltid'
 import { createWaltIdIssuer } from './external/waltid-issuer'
+import { sphereonVerifierRouter } from './external/sphereon-verifier'
+import { createSphereonIssuer } from './external/sphereon-issuer'
+import { createSphereonWallet } from './external/sphereon-wallet'
 import { getPublicBaseUrl, getActiveTunnelUrl, setTunnelUrl } from './tunnel'
 import { ENDPOINTS, PROXIES, VERIFY } from './endpoints'
 import { tamperRouter, getActiveTamperMode, applyTamperingToVpToken } from './tamper'
@@ -32,6 +35,7 @@ const PORT = env.port
 const PUBLIC_BASE_URL = getPublicBaseUrl()
 const ISSUER_MOUNT = '/api/playground-issuer'
 const WALTID_ISSUER_MOUNT = '/api/external/waltid/issuer'
+const SPHEREON_ISSUER_MOUNT = '/api/external/sphereon/issuer'
 
 app.use((req, res, next) => {
   res.setHeader('ngrok-skip-browser-warning', 'true')
@@ -72,7 +76,7 @@ app.get(
   discoveryHandler
 )
 
-// 6. External Reference Integrations (walt.id verifier and issuer)
+// 6. External Reference Integrations (walt.id & Sphereon)
 app.use('/api/external/waltid/verifier', waltidVerifierRouter)
 const waltIdIssuer = await createWaltIdIssuer({ baseUrl: PUBLIC_BASE_URL, mountPath: WALTID_ISSUER_MOUNT })
 app.use(WALTID_ISSUER_MOUNT, waltIdIssuer.router)
@@ -82,6 +86,20 @@ app.get(`/.well-known/openid-credential-issuer${WALTID_ISSUER_MOUNT}`, (req, res
 app.get(`/.well-known/oauth-authorization-server${WALTID_ISSUER_MOUNT}`, (req, res) => {
   res.json(waltIdIssuer.authorizationServerMetadata(req))
 })
+
+// 6b. Sphereon Suite (Verifier, Issuer, Wallet)
+app.use('/api/external/sphereon/verifier', sphereonVerifierRouter)
+const sphereonIssuer = await createSphereonIssuer({ baseUrl: PUBLIC_BASE_URL, mountPath: SPHEREON_ISSUER_MOUNT })
+app.use(SPHEREON_ISSUER_MOUNT, sphereonIssuer.router)
+app.get(`/.well-known/openid-credential-issuer${SPHEREON_ISSUER_MOUNT}`, (req, res) => {
+  res.json(sphereonIssuer.issuerMetadata(req))
+})
+app.get(`/.well-known/oauth-authorization-server${SPHEREON_ISSUER_MOUNT}`, (req, res) => {
+  res.json(sphereonIssuer.authorizationServerMetadata(req))
+})
+
+const sphereonWallet = await createSphereonWallet()
+app.use('/api/external/sphereon/wallet', sphereonWallet.router)
 
 // 7. Route Modules
 app.use('/api/tamper', tamperRouter)
