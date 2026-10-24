@@ -13,7 +13,7 @@ export default function RoleSelector() {
     if (!env) return null
     const colors = {
       local: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-      mock: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+      mock: 'bg-app-card text-app-text-muted border-app-border',
       collab: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
       external: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
     }
@@ -28,32 +28,32 @@ export default function RoleSelector() {
   const getCardClass = (isSelected: boolean) => {
     if (isTestActive) {
       return isSelected
-        ? 'border-blue-500/80 bg-blue-500/10 text-white cursor-not-allowed opacity-90'
-        : 'border-slate-800/60 bg-slate-900/20 text-slate-500 cursor-not-allowed opacity-40'
+        ? 'border-app-border-focus bg-app-card-selected text-app-text cursor-not-allowed opacity-90'
+        : 'border-app-border/60 bg-app-card/20 text-app-text-muted cursor-not-allowed opacity-40'
     }
     return isSelected
-      ? 'border-blue-500 bg-blue-500/10 text-white cursor-pointer'
-      : 'border-slate-700 hover:border-slate-600 text-slate-300 cursor-pointer'
+      ? 'border-app-border-focus bg-app-card-selected text-app-text cursor-pointer'
+      : 'border-app-border hover:border-app-border-subtle bg-app-card/40 hover:bg-app-card-hover text-app-text-secondary hover:text-app-text cursor-pointer'
   }
 
   const getCredFormatClass = (isSelected: boolean) => {
     if (isTestActive) {
       return isSelected
-        ? 'border-blue-500/80 bg-blue-500/10 text-white cursor-not-allowed opacity-90'
-        : 'border-slate-800/60 text-slate-600 cursor-not-allowed opacity-40'
+        ? 'border-app-border-focus bg-app-card-selected text-app-text cursor-not-allowed opacity-90'
+        : 'border-app-border/60 text-app-text-muted cursor-not-allowed opacity-40'
     }
     return isSelected
-      ? 'border-blue-500 bg-blue-500/10 text-white cursor-pointer'
-      : 'border-slate-700 hover:border-slate-600 text-slate-400 cursor-pointer'
+      ? 'border-app-border-focus bg-app-card-selected text-app-text cursor-pointer'
+      : 'border-app-border hover:border-app-border-subtle bg-app-card/30 hover:bg-app-card-hover text-app-text-secondary hover:text-app-text cursor-pointer'
   }
 
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Issuer */}
-        <div className={`border rounded-lg p-4 transition-colors ${isTestActive ? 'border-slate-800/80 bg-slate-950/40' : 'border-slate-800'}`}>
+        <div className={`border rounded-lg p-4 transition-colors ${isTestActive ? 'border-app-border/80 bg-app-base/40' : 'border-app-border bg-app-card/30'}`}>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-slate-300">Issuer</h3>
+            <h3 className="text-sm font-medium text-app-text">Issuer</h3>
           </div>
           <div className="space-y-2">
             {issuers.map((issuer) => (
@@ -67,13 +67,13 @@ export default function RoleSelector() {
                   {issuer.name}
                   <EnvBadge env={issuer.env} />
                 </div>
-                <div className="text-xs text-slate-500 mt-0.5">{issuer.description}</div>
+                <div className="text-xs text-app-text-muted mt-0.5">{issuer.description}</div>
               </button>
             ))}
           </div>
           {selectedIssuer && selectedIssuer.credentialTypes.length > 1 && (
-            <div className="mt-3 pt-3 border-t border-slate-800">
-              <p className="text-xs text-slate-500 mb-2">Credential Format</p>
+            <div className="mt-3 pt-3 border-t border-app-border">
+              <p className="text-xs text-app-text-muted mb-2">Credential Format</p>
               <div className="space-y-1.5">
                 {selectedIssuer.credentialTypes.map((ct) => (
                   <button
@@ -88,13 +88,13 @@ export default function RoleSelector() {
                         ct.format === 'vc+sd-jwt'
                           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
                           : ct.format === 'mso_mdoc'
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
                           : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                       }`}>
                         {ct.format}
                       </span>
                     </div>
-                    <div className="text-[11px] text-slate-500 mt-0.5 font-mono">
+                    <div className="text-[11px] text-app-text-muted mt-0.5 font-mono">
                       {ct.proofTypes.join(', ')}
                     </div>
                   </button>
@@ -103,15 +103,15 @@ export default function RoleSelector() {
             </div>
           )}
           {selectedIssuer?.id === 'certify-local' && (
-            <div className="mt-3 pt-3 border-t border-slate-800">
+            <div className="mt-3 pt-3 border-t border-app-border">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
-                  <svg className="w-3.5 h-3.5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <p className="text-xs text-app-text-secondary font-medium flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5 text-app-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                   </svg>
                   OpenID4VCI Grant Flow
                 </p>
-                <span className="text-[10px] text-slate-500 font-mono">Draft 13</span>
+                <span className="text-[10px] text-app-text-muted font-mono">Draft 13</span>
               </div>
               <div className="grid grid-cols-2 gap-1.5">
                 <button
@@ -120,14 +120,14 @@ export default function RoleSelector() {
                   onClick={() => setLocalGrantType('pre-authorized_code')}
                   className={`px-2.5 py-1.5 rounded text-xs border text-left transition-all ${
                     localGrantType === 'pre-authorized_code'
-                      ? 'border-blue-500/80 bg-blue-500/15 text-blue-200 shadow-sm'
-                      : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:border-slate-700'
+                      ? 'border-app-border-focus bg-app-card-selected text-app-text shadow-sm'
+                      : 'border-app-border bg-app-card/40 text-app-text-muted hover:border-app-border-subtle hover:text-app-text'
                   }`}
                 >
                   <div className="font-semibold text-[11px] flex items-center gap-1">
                     Pre-Auth Code
                   </div>
-                  <div className="text-[10px] text-slate-400 opacity-80 mt-0.5">Automated / Kiosk (§4.1)</div>
+                  <div className="text-[10px] text-app-text-muted opacity-80 mt-0.5">Automated / Kiosk (§4.1)</div>
                 </button>
                 <button
                   type="button"
@@ -136,13 +136,13 @@ export default function RoleSelector() {
                   className={`px-2.5 py-1.5 rounded text-xs border text-left transition-all ${
                     localGrantType === 'authorization_code'
                       ? 'border-emerald-500/80 bg-emerald-500/15 text-emerald-200 shadow-sm'
-                      : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:border-slate-700'
+                      : 'border-app-border bg-app-card/40 text-app-text-muted hover:border-app-border-subtle hover:text-app-text'
                   }`}
                 >
                   <div className="font-semibold text-[11px] flex items-center gap-1">
                     Auth Code + PKCE
                   </div>
-                  <div className="text-[10px] text-slate-400 opacity-80 mt-0.5">Interactive Challenge (§4.2)</div>
+                  <div className="text-[10px] text-app-text-muted opacity-80 mt-0.5">Interactive Challenge (§4.2)</div>
                 </button>
               </div>
             </div>
@@ -150,9 +150,9 @@ export default function RoleSelector() {
         </div>
 
         {/* Wallet */}
-        <div className={`border rounded-lg p-4 transition-colors ${isTestActive ? 'border-slate-800/80 bg-slate-950/40' : 'border-slate-800'}`}>
+        <div className={`border rounded-lg p-4 transition-colors ${isTestActive ? 'border-app-border/80 bg-app-base/40' : 'border-app-border bg-app-card/30'}`}>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-slate-300">Wallet</h3>
+            <h3 className="text-sm font-medium text-app-text">Wallet</h3>
           </div>
           <div className="space-y-2">
             {wallets.map((wallet) => (
@@ -166,16 +166,16 @@ export default function RoleSelector() {
                   {wallet.name}
                   <EnvBadge env={wallet.env} />
                 </div>
-                <div className="text-xs text-slate-500 mt-0.5">{wallet.description}</div>
+                <div className="text-xs text-app-text-muted mt-0.5">{wallet.description}</div>
               </button>
             ))}
           </div>
         </div>
 
         {/* Verifier */}
-        <div className={`border rounded-lg p-4 transition-colors ${isTestActive ? 'border-slate-800/80 bg-slate-950/40' : 'border-slate-800'}`}>
+        <div className={`border rounded-lg p-4 transition-colors ${isTestActive ? 'border-app-border/80 bg-app-base/40' : 'border-app-border bg-app-card/30'}`}>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-slate-300">Verifier</h3>
+            <h3 className="text-sm font-medium text-app-text">Verifier</h3>
           </div>
           <div className="space-y-2">
             {verifiers.map((verifier) => (
@@ -189,19 +189,19 @@ export default function RoleSelector() {
                   {verifier.name}
                   <EnvBadge env={verifier.env} />
                 </div>
-                <div className="text-xs text-slate-500 mt-0.5">{verifier.description}</div>
+                <div className="text-xs text-app-text-muted mt-0.5">{verifier.description}</div>
                 {selectedCredType?.format === 'mso_mdoc' && (
                   verifier.id === 'verify-local' ? (
-                    <div className="text-[11px] text-amber-400/90 mt-1.5 flex items-center gap-1.5 font-sans bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded">
-                      <svg className="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    <div className="text-[11px] text-app-accent mt-1.5 flex items-center gap-1.5 font-sans bg-app-accent-subtle/50 border border-app-border-focus px-2 py-1 rounded">
+                      <svg className="w-3.5 h-3.5 text-app-accent shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <span>Inji Verify 0.17 lacks mDoc parser (Planned v0.18.0+)</span>
                     </div>
                   ) : verifier.id === 'inji-verify-collab-live' ? (
-                    <div className="text-[11px] text-amber-400/90 mt-1.5 flex items-center gap-1.5 font-sans bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded">
-                      <svg className="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    <div className="text-[11px] text-app-accent mt-1.5 flex items-center gap-1.5 font-sans bg-app-accent-subtle/50 border border-app-border-focus px-2 py-1 rounded">
+                      <svg className="w-3.5 h-3.5 text-app-accent shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <span>Collab DCQL does not support mDoc doctype queries</span>
                     </div>

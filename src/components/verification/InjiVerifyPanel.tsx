@@ -33,17 +33,17 @@ export default function InjiVerifyPanel({ onResult }: Props) {
 
 
   return (
-    <div className="border border-slate-800 rounded-lg p-4">
+    <div className="border border-app-border rounded-xl p-4 bg-app-card/40 backdrop-blur-sm">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-slate-300">VP Verification (Inji Verify SDK)</h3>
-        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400">
+        <h3 className="text-sm font-medium text-app-text">VP Verification (Inji Verify SDK)</h3>
+        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-app-accent-subtle text-app-accent border border-app-border-focus">
           OpenID4VP
         </span>
       </div>
 
       {status === 'idle' && (
         <div>
-          <p className="text-xs text-slate-500 mb-3">
+          <p className="text-xs text-app-text-muted mb-3">
             Scan the QR code with Inji Wallet to share your credential via OpenID4VP.
           </p>
           <OpenID4VPVerification
@@ -62,8 +62,8 @@ export default function InjiVerifyPanel({ onResult }: Props) {
             onQrCodeExpired={handleQrExpired}
             qrCodeStyles={{
               size: 200,
-              bgColor: '#0f172a',
-              fgColor: '#e2e8f0',
+              bgColor: 'transparent',
+              fgColor: 'currentColor',
               margin: 2,
               borderRadius: 8,
             }}
@@ -77,25 +77,25 @@ export default function InjiVerifyPanel({ onResult }: Props) {
             <svg className="w-4 h-4 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
-            <span className="text-sm text-slate-300">Verification Complete</span>
+            <span className="text-sm text-app-text">Verification Complete</span>
           </div>
           {results.map((r, i) => (
-            <div key={i} className="mt-2 p-2 bg-slate-900 rounded text-xs">
+            <div key={i} className="mt-2 p-2.5 bg-app-base border border-app-border rounded-lg text-xs">
               <div className={`font-medium ${
-                r.vcStatus === 'valid' ? 'text-green-400' :
-                r.vcStatus === 'expired' ? 'text-yellow-400' :
-                'text-red-400'
+                r.vcStatus === 'valid' ? 'text-emerald-400' :
+                r.vcStatus === 'expired' ? 'text-app-warning' :
+                'text-rose-400'
               }`}>
                 Status: {r.vcStatus.toUpperCase()}
               </div>
-              <pre className="mt-1 text-slate-400 overflow-auto max-h-40">
+              <pre className="mt-1 text-app-text-secondary overflow-auto max-h-40 font-mono text-[11px]">
                 {JSON.stringify(r.vc, null, 2)}
               </pre>
             </div>
           ))}
           <button
             onClick={() => { setStatus('idle'); setResults(null) }}
-            className="mt-2 text-xs text-blue-400 hover:text-blue-300"
+            className="mt-2 text-xs text-app-accent hover:underline cursor-pointer"
           >
             Scan again
           </button>
@@ -105,15 +105,15 @@ export default function InjiVerifyPanel({ onResult }: Props) {
       {status === 'error' && (
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-4 h-4 text-rose-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
-            <span className="text-sm text-red-300">Verification Failed</span>
+            <span className="text-sm text-rose-300">Verification Failed</span>
           </div>
-          <p className="text-xs text-slate-400">{error}</p>
+          <p className="text-xs text-app-text-muted">{error}</p>
           <button
             onClick={() => { setStatus('idle'); setError(null) }}
-            className="mt-2 text-xs text-blue-400 hover:text-blue-300"
+            className="mt-2 text-xs text-app-accent hover:underline cursor-pointer"
           >
             Try again
           </button>

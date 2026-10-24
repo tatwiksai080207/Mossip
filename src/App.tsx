@@ -134,7 +134,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 flex overflow-hidden">
+    <div className="min-h-screen bg-app-base text-app-text flex overflow-hidden transition-colors duration-200">
       {/* Collapsible Left Navigation Sidebar */}
       <Sidebar
         activeTab={activeTab}
@@ -155,7 +155,7 @@ function App() {
           {activeTab === 'runner' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Test Configuration</h3>
+                <h3 className="text-sm font-semibold text-app-text-muted uppercase tracking-wider">Test Configuration</h3>
               </div>
 
               <RoleSelector />
@@ -167,19 +167,19 @@ function App() {
               />
 
               {/* Execution Summary & Control Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-4 border border-slate-800/90 rounded-xl px-5 py-3.5 bg-slate-900/60 shadow-sm backdrop-blur-sm">
-                <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-slate-300">
-                  <span className="font-medium text-white">{selectedIssuer?.name || '—'}</span>
-                  <span className="text-slate-600">→</span>
-                  <span className="font-medium text-white">{selectedWallet?.name || '—'}</span>
-                  <span className="text-slate-600">→</span>
-                  <span className="font-medium text-white">{selectedVerifier?.name || '—'}</span>
+              <div className="flex flex-wrap items-center justify-between gap-4 border border-app-border rounded-xl px-5 py-3.5 bg-app-card shadow-sm backdrop-blur-sm">
+                <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-app-text-secondary">
+                  <span className="font-medium text-app-text">{selectedIssuer?.name || '—'}</span>
+                  <span className="text-app-text-muted">→</span>
+                  <span className="font-medium text-app-text">{selectedWallet?.name || '—'}</span>
+                  <span className="text-app-text-muted">→</span>
+                  <span className="font-medium text-app-text">{selectedVerifier?.name || '—'}</span>
                   {selectedCredType && (
                     <span className={`ml-2 px-2.5 py-0.5 rounded-full text-xs font-mono uppercase font-semibold border ${
                       selectedCredType.format === 'vc+sd-jwt'
                         ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
                         : selectedCredType.format === 'mso_mdoc'
-                        ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                        ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
                         : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
                     }`}>
                       {selectedCredType.format}
@@ -189,12 +189,12 @@ function App() {
 
                 <div className="flex items-center gap-3">
                   {/* Tamper & Negative Testing Mode Selector */}
-                  <div className={`flex items-center gap-2 bg-slate-950 border rounded-xl px-3 py-1.5 transition-colors ${
-                    isTestActive ? 'border-slate-800/60 opacity-60' : 'border-slate-800'
+                  <div className={`flex items-center gap-2 bg-app-base border rounded-xl px-3 py-1.5 transition-colors ${
+                    isTestActive ? 'border-app-border/60 opacity-60' : 'border-app-border'
                   }`}>
-                    <span className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
+                    <span className="text-xs text-app-text-muted font-medium flex items-center gap-1.5">
                       {isTestActive && (
-                        <svg className="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-3.5 h-3.5 text-app-accent shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                         </svg>
                       )}
@@ -204,11 +204,11 @@ function App() {
                       value={tamperMode}
                       onChange={(e) => setTamperMode(e.target.value as any)}
                       disabled={isTestActive}
-                      className={`bg-transparent text-xs text-slate-200 focus:outline-none ${isTestActive ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer'}`}
+                      className={`bg-transparent text-xs text-app-text focus:outline-none ${isTestActive ? 'cursor-not-allowed text-app-text-muted' : 'cursor-pointer'}`}
                     >
-                      <option value="none" className="bg-slate-900 text-slate-200">Normal (Valid VP)</option>
-                      <option value="signature" className="bg-slate-900 text-amber-300">Corrupt Signature (Negative)</option>
-                      <option value="expired" className="bg-slate-900 text-amber-300">Malformed / Expired (Negative)</option>
+                      <option value="none" className="bg-app-card text-app-text">Normal (Valid VP)</option>
+                      <option value="signature" className="bg-app-card text-app-text">Corrupt Signature (Negative)</option>
+                      <option value="expired" className="bg-app-card text-app-text">Malformed / Expired (Negative)</option>
                     </select>
                   </div>
 
@@ -216,7 +216,7 @@ function App() {
                     <button
                       type="button"
                       onClick={abortTest}
-                      className="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-red-600 hover:bg-red-500 text-white flex items-center gap-2 transition-all shadow-md shadow-red-900/30 cursor-pointer animate-pulse-subtle"
+                      className="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-rose-600 hover:bg-rose-500 text-white flex items-center gap-2 transition-all shadow-md shadow-rose-900/30 cursor-pointer animate-pulse-subtle"
                       title="Abort current test run and unlock configuration"
                     >
                       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
@@ -230,7 +230,7 @@ function App() {
                         <button
                           type="button"
                           onClick={resetTest}
-                          className="px-3.5 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+                          className="px-3.5 py-2 rounded-xl text-xs font-medium bg-app-card hover:bg-app-card-hover text-app-text-secondary hover:text-app-text border border-app-border transition-colors cursor-pointer"
                           title="Clear diagram and reset test"
                         >
                           Reset
@@ -241,8 +241,8 @@ function App() {
                         onClick={handleRunTest}
                         className={`px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all shadow-md ${
                           canRun
-                            ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-600/25 cursor-pointer'
-                            : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                            ? 'bg-app-accent text-white hover:bg-app-accent-hover shadow-app-accent/25 cursor-pointer'
+                            : 'bg-app-card text-app-text-muted border border-app-border cursor-not-allowed'
                         }`}
                       >
                         Run Test
@@ -282,15 +282,15 @@ function App() {
                   </div>
                 )
               ) : (
-                <div className="border border-slate-800/80 rounded-2xl bg-slate-900/30 p-8 text-center flex flex-col items-center justify-center">
-                  <div className="w-10 h-10 rounded-xl bg-slate-800/60 border border-slate-700/60 text-slate-400 flex items-center justify-center mb-3">
+                <div className="border border-app-border rounded-2xl bg-app-card/40 p-8 text-center flex flex-col items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-app-base border border-app-border text-app-text-muted flex items-center justify-center mb-3">
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                       <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <h3 className="text-sm font-medium text-slate-300">Ready to Run</h3>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <h3 className="text-sm font-medium text-app-text">Ready to Run</h3>
+                  <p className="text-xs text-app-text-muted mt-1">
                     Select roles above and click <strong>Run Test</strong> to start
                   </p>
                 </div>

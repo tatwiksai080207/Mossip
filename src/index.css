@@ -1,10 +1,40 @@
 @import "tailwindcss";
 
+@theme {
+  --color-app-base: var(--app-bg-base);
+  --color-app-sidebar: var(--app-bg-sidebar);
+  --color-app-header: var(--app-bg-header);
+  --color-app-card: var(--app-bg-card);
+  --color-app-card-hover: var(--app-bg-card-hover);
+  --color-app-card-selected: var(--app-bg-card-selected);
+
+  --color-app-border: var(--app-border-base);
+  --color-app-border-subtle: var(--app-border-subtle);
+  --color-app-border-focus: var(--app-border-focus);
+
+  --color-app-text: var(--app-text-primary);
+  --color-app-text-secondary: var(--app-text-secondary);
+  --color-app-text-muted: var(--app-text-muted);
+
+  --color-app-accent: var(--app-accent);
+  --color-app-accent-hover: var(--app-accent-hover);
+  --color-app-accent-subtle: var(--app-accent-subtle);
+
+  --color-app-tamper: var(--app-tamper);
+  --color-app-tamper-bg: var(--app-tamper-bg);
+  --color-app-tamper-border: var(--app-tamper-border);
+
+  --color-app-warning: var(--app-status-warning);
+  --color-app-warning-bg: var(--app-status-warning-bg);
+  --color-app-warning-border: var(--app-status-warning-border);
+}
+
 body {
   margin: 0;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: #0f172a;
-  color: #e2e8f0;
+  background-color: var(--app-bg-base, #020617);
+  color: var(--app-text-primary, #f8fafc);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 #root {
@@ -57,3 +87,29 @@ pre {
 .animate-scale-up {
   animation: scaleUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Form Select & Option Uniform Theme Styling */
+select {
+  color: var(--app-text-primary, #f8fafc);
+  background-color: transparent;
+}
+
+select option {
+  background-color: var(--app-bg-sidebar, #0f172a) !important;
+  color: var(--app-text-primary, #f8fafc) !important;
+  font-family: inherit;
+}
+
+/* Mermaid Sequence Diagram Phase Rectangles & Notes */
+.mermaid svg rect.rect,
+.mermaid svg .rect,
+#mermaid-container svg rect.rect,
+#mermaid-container svg .rect {
+  rx: 12px !important;
+  ry: 12px !important;
+  fill: var(--app-bg-card, #0f172a) !important;
+  stroke: var(--app-border-base, #1e293b) !important;
+  stroke-width: 1.5px !important;
+  fill-opacity: 0.75 !important;
+}
+

@@ -11,7 +11,7 @@ const FORMAT_LABELS: Record<string, string> = {
 const ENV_BADGES: Record<string, { label: string; class: string }> = {
   local: { label: 'LOCAL', class: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
   collab: { label: 'COLLAB', class: 'bg-purple-500/15 text-purple-300 border-purple-500/30' },
-  mock: { label: 'MOCK', class: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+  mock: { label: 'MOCK', class: 'bg-app-card text-app-text-muted border-app-border' },
   external: { label: 'EXTERNAL', class: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' },
 }
 
@@ -26,14 +26,14 @@ export default function InteropMatrix() {
 
   if (!runs || runs.length === 0) {
     return (
-      <div className="w-full flex-1 border border-slate-800/80 rounded-2xl bg-slate-900/40 p-12 text-center flex flex-col items-center justify-center min-h-[500px]">
-        <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mb-4">
+      <div className="w-full flex-1 border border-app-border rounded-2xl bg-app-card/40 p-12 text-center flex flex-col items-center justify-center min-h-[500px]">
+        <div className="w-12 h-12 rounded-2xl bg-app-accent-subtle border border-app-accent/20 text-app-accent flex items-center justify-center mb-4">
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
           </svg>
         </div>
-        <h3 className="text-base font-semibold text-white">No Interoperability Matrix Data Yet</h3>
-        <p className="text-xs text-slate-400 mt-1 max-w-md">
+        <h3 className="text-base font-semibold text-app-text">No Interoperability Matrix Data Yet</h3>
+        <p className="text-xs text-app-text-muted mt-1 max-w-md">
           Execute test runs in the Test Runner across different issuers, wallets, and verifiers to automatically populate the cross-ecosystem compatibility matrix.
         </p>
       </div>
@@ -139,14 +139,14 @@ export default function InteropMatrix() {
   }, [activeCellKey, cellMap])
 
   return (
-    <div className="w-full flex-1 flex flex-col min-h-[640px] border border-slate-800/80 rounded-2xl bg-slate-900/40 backdrop-blur-md overflow-hidden shadow-sm">
+    <div className="w-full flex-1 flex flex-col min-h-[640px] border border-app-border rounded-2xl bg-app-card/40 backdrop-blur-md overflow-hidden shadow-sm">
       {/* 1. Header Bar */}
-      <div className="p-4 sm:p-5 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
+      <div className="p-4 sm:p-5 border-b border-app-border flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
         <div>
-          <h3 className="text-base font-semibold text-white tracking-tight">
+          <h3 className="text-base font-semibold text-app-text tracking-tight">
             Cross-Ecosystem Interoperability Matrix
           </h3>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-app-text-muted mt-0.5">
             Bi-directional verification compatibility across MOSIP Inji, walt.id, and containerized stacks
           </p>
         </div>
@@ -154,9 +154,9 @@ export default function InteropMatrix() {
         <div className="flex items-center gap-3">
           <button
             onClick={exportReportJSON}
-            className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-medium flex items-center gap-2 transition-all shadow-sm cursor-pointer"
+            className="px-3.5 py-1.5 rounded-xl bg-app-card hover:bg-app-card-hover text-app-text-secondary hover:text-app-text border border-app-border text-xs font-medium flex items-center gap-2 transition-all shadow-sm cursor-pointer"
           >
-            <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 h-4 text-app-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             <span>Export Matrix JSON</span>
@@ -165,25 +165,25 @@ export default function InteropMatrix() {
       </div>
 
       {/* 2. Top Metric KPI Strip (Full-Width) */}
-      <div className="p-4 sm:p-5 border-b border-slate-800/80 bg-slate-950/40">
+      <div className="p-4 sm:p-5 border-b border-app-border bg-app-base/40">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {/* Card 1: Total Configs */}
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 hover:border-slate-700/80 transition-colors">
-            <div className="flex items-center justify-between text-slate-400 text-xs">
+          <div className="p-4 rounded-xl bg-app-card border border-app-border hover:border-app-border-subtle transition-colors">
+            <div className="flex items-center justify-between text-app-text-muted text-xs">
               <span className="font-medium uppercase tracking-wider text-[11px]">Tested Configs</span>
-              <div className="w-6 h-6 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center">
+              <div className="w-6 h-6 rounded-lg bg-app-accent-subtle text-app-accent flex items-center justify-center">
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                 </svg>
               </div>
             </div>
-            <div className="text-2xl font-bold text-white mt-1 tracking-tight">{allEntries.length}</div>
-            <p className="text-[11px] text-slate-400 mt-1">Unique lifecycle permutations</p>
+            <div className="text-2xl font-bold text-app-text mt-1 tracking-tight">{allEntries.length}</div>
+            <p className="text-[11px] text-app-text-muted mt-1">Unique lifecycle permutations</p>
           </div>
 
           {/* Card 2: Interop Compatibility Rate */}
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 hover:border-slate-700/80 transition-colors">
-            <div className="flex items-center justify-between text-slate-400 text-xs">
+          <div className="p-4 rounded-xl bg-app-card border border-app-border hover:border-app-border-subtle transition-colors">
+            <div className="flex items-center justify-between text-app-text-muted text-xs">
               <span className="font-medium uppercase tracking-wider text-[11px]">Matrix Interop Rate</span>
               <div className="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -193,16 +193,16 @@ export default function InteropMatrix() {
             </div>
             <div className="flex items-baseline gap-2 mt-1">
               <span className={`text-2xl font-bold tracking-tight ${
-                overallRate >= 80 ? 'text-emerald-400' : overallRate >= 60 ? 'text-amber-400' : 'text-red-400'
+                overallRate >= 80 ? 'text-emerald-400' : overallRate >= 60 ? 'text-app-accent' : 'text-rose-400'
               }`}>
                 {overallRate}%
               </span>
-              <span className="text-xs text-slate-400">across runs</span>
+              <span className="text-xs text-app-text-muted">across runs</span>
             </div>
-            <div className="mt-2 h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+            <div className="mt-2 h-1.5 w-full bg-app-base rounded-full overflow-hidden">
               <div
                 className={`h-full transition-all duration-500 ${
-                  overallRate >= 80 ? 'bg-emerald-500' : overallRate >= 60 ? 'bg-amber-500' : 'bg-red-500'
+                  overallRate >= 80 ? 'bg-emerald-500' : overallRate >= 60 ? 'bg-app-accent' : 'bg-rose-500'
                 }`}
                 style={{ width: `${overallRate}%` }}
               />
@@ -210,8 +210,8 @@ export default function InteropMatrix() {
           </div>
 
           {/* Card 3: Ecosystem Coverage */}
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 hover:border-slate-700/80 transition-colors">
-            <div className="flex items-center justify-between text-slate-400 text-xs">
+          <div className="p-4 rounded-xl bg-app-card border border-app-border hover:border-app-border-subtle transition-colors">
+            <div className="flex items-center justify-between text-app-text-muted text-xs">
               <span className="font-medium uppercase tracking-wider text-[11px]">Ecosystem Coverage</span>
               <div className="w-6 h-6 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center">
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -219,13 +219,13 @@ export default function InteropMatrix() {
                 </svg>
               </div>
             </div>
-            <div className="text-2xl font-bold text-white mt-1 tracking-tight font-mono">4 × 3 Pairs</div>
-            <p className="text-[11px] text-slate-400 mt-1">MOSIP Local · Collab · walt.id</p>
+            <div className="text-2xl font-bold text-app-text mt-1 tracking-tight font-mono">4 × 3 Pairs</div>
+            <p className="text-[11px] text-app-text-muted mt-1">MOSIP Local · Collab · walt.id</p>
           </div>
 
           {/* Card 4: Wire Execution Steps */}
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 hover:border-slate-700/80 transition-colors">
-            <div className="flex items-center justify-between text-slate-400 text-xs">
+          <div className="p-4 rounded-xl bg-app-card border border-app-border hover:border-app-border-subtle transition-colors">
+            <div className="flex items-center justify-between text-app-text-muted text-xs">
               <span className="font-medium uppercase tracking-wider text-[11px]">Live Wire Protocol Steps</span>
               <div className="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -234,7 +234,7 @@ export default function InteropMatrix() {
               </div>
             </div>
             <div className="text-2xl font-bold text-emerald-300 mt-1 tracking-tight font-mono">{totalLiveSteps}</div>
-            <p className="text-[11px] text-slate-400 mt-1">
+            <p className="text-[11px] text-app-text-muted mt-1">
               100% Live Wire Execution ({totalMockSteps} Mock)
             </p>
           </div>
@@ -242,15 +242,15 @@ export default function InteropMatrix() {
       </div>
 
       {/* 3. Toolbar with View Mode Switcher and Filters */}
-      <div className="p-4 sm:p-5 border-b border-slate-800/80 bg-slate-950/60 flex flex-wrap items-center justify-between gap-4">
+      <div className="p-4 sm:p-5 border-b border-app-border bg-app-base/60 flex flex-wrap items-center justify-between gap-4">
         {/* View Switcher: 2D Grid vs Table */}
-        <div className="flex items-center gap-1.5 p-1 bg-slate-900 border border-slate-700/80 rounded-xl">
+        <div className="flex items-center gap-1.5 p-1 bg-app-base border border-app-border rounded-xl">
           <button
             onClick={() => setViewMode('grid')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
               viewMode === 'grid'
-                ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                ? 'bg-app-accent text-white shadow-sm shadow-app-accent/30'
+                : 'text-app-text-muted hover:text-app-text hover:bg-app-card-hover'
             }`}
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -263,8 +263,8 @@ export default function InteropMatrix() {
             onClick={() => setViewMode('table')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
               viewMode === 'table'
-                ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                ? 'bg-app-accent text-white shadow-sm shadow-app-accent/30'
+                : 'text-app-text-muted hover:text-app-text hover:bg-app-card-hover'
             }`}
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -277,32 +277,32 @@ export default function InteropMatrix() {
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-3">
           {/* Format Filter */}
-          <div className="flex items-center gap-2 bg-slate-900 border border-slate-700/80 hover:border-slate-600 rounded-xl px-3.5 py-1.5 transition-colors">
-            <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Format:</span>
+          <div className="flex items-center gap-2 bg-app-card border border-app-border hover:border-app-border-subtle rounded-xl px-3.5 py-1.5 transition-colors">
+            <span className="text-xs text-app-text-muted font-semibold uppercase tracking-wider">Format:</span>
             <select
               value={selectedFormat}
               onChange={(e) => setSelectedFormat(e.target.value)}
-              className="bg-transparent text-xs sm:text-sm font-medium text-white focus:outline-none cursor-pointer pr-1"
+              className="bg-transparent text-xs sm:text-sm font-medium text-app-text focus:outline-none cursor-pointer pr-1"
             >
-              <option value="all" className="bg-slate-900 text-slate-200">All Formats</option>
-              <option value="ldp_vc" className="bg-slate-900 text-emerald-300">W3C VC (JSON-LD)</option>
-              <option value="vc+sd-jwt" className="bg-slate-900 text-purple-300">SD-JWT VC</option>
-              <option value="mso_mdoc" className="bg-slate-900 text-amber-300">ISO 18013-5 mDoc</option>
+              <option value="all" className="bg-app-card text-app-text">All Formats</option>
+              <option value="ldp_vc" className="bg-app-card text-app-text">W3C VC (JSON-LD)</option>
+              <option value="vc+sd-jwt" className="bg-app-card text-app-text">SD-JWT VC</option>
+              <option value="mso_mdoc" className="bg-app-card text-app-text">ISO 18013-5 mDoc</option>
             </select>
           </div>
 
           {/* Ecosystem Implementation Filter */}
-          <div className="flex items-center gap-2 bg-slate-900 border border-slate-700/80 hover:border-slate-600 rounded-xl px-3.5 py-1.5 transition-colors">
-            <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Ecosystem:</span>
+          <div className="flex items-center gap-2 bg-app-card border border-app-border hover:border-app-border-subtle rounded-xl px-3.5 py-1.5 transition-colors">
+            <span className="text-xs text-app-text-muted font-semibold uppercase tracking-wider">Ecosystem:</span>
             <select
               value={selectedEnv}
               onChange={(e) => setSelectedEnv(e.target.value)}
-              className="bg-transparent text-xs sm:text-sm font-medium text-white focus:outline-none cursor-pointer pr-1"
+              className="bg-transparent text-xs sm:text-sm font-medium text-app-text focus:outline-none cursor-pointer pr-1"
             >
-              <option value="all" className="bg-slate-900 text-slate-200">All Stacks</option>
-              <option value="local" className="bg-slate-900 text-emerald-400">MOSIP Local Docker</option>
-              <option value="collab" className="bg-slate-900 text-purple-300">MOSIP Collab Cloud</option>
-              <option value="external" className="bg-slate-900 text-indigo-300">walt.id External</option>
+              <option value="all" className="bg-app-card text-app-text">All Stacks</option>
+              <option value="local" className="bg-app-card text-app-text">MOSIP Local Docker</option>
+              <option value="collab" className="bg-app-card text-app-text">MOSIP Collab Cloud</option>
+              <option value="external" className="bg-app-card text-app-text">walt.id External</option>
             </select>
           </div>
         </div>
@@ -318,11 +318,11 @@ export default function InteropMatrix() {
                 <thead>
                   <tr>
                     {/* Corner Cell */}
-                    <th className="p-4 text-left bg-slate-950/80 border border-slate-800 rounded-tl-xl w-64 min-w-[240px]">
-                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                    <th className="p-4 text-left bg-app-base/80 border border-app-border rounded-tl-xl w-64 min-w-[240px]">
+                      <span className="text-xs font-semibold text-app-text-muted uppercase tracking-wider block">
                         Issuer \ Verifier
                       </span>
-                      <span className="text-[11px] text-slate-500 font-normal mt-0.5 block">
+                      <span className="text-[11px] text-app-text-muted font-normal mt-0.5 block">
                         Cross-ecosystem pairing
                       </span>
                     </th>
@@ -333,42 +333,42 @@ export default function InteropMatrix() {
                       return (
                         <th
                           key={ver.id}
-                          className={`p-4 text-left bg-slate-950/80 border border-slate-800 min-w-[280px] ${
+                          className={`p-4 text-left bg-app-base/80 border border-app-border min-w-[280px] ${
                             idx === verifiers.length - 1 ? 'rounded-tr-xl' : ''
                           }`}
                         >
                           <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-semibold text-white tracking-tight">{ver.name}</h4>
+                            <h4 className="text-sm font-semibold text-app-text tracking-tight">{ver.name}</h4>
                             {envBadge && (
                               <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${envBadge.class}`}>
                                 {envBadge.label}
                               </span>
                             )}
                           </div>
-                          <p className="text-[11px] text-slate-400 mt-0.5 font-normal">{ver.description}</p>
+                          <p className="text-[11px] text-app-text-muted mt-0.5 font-normal">{ver.description}</p>
                         </th>
                       )
                     })}
                   </tr>
                 </thead>
 
-                <tbody className="divide-y divide-slate-800/80">
+                <tbody className="divide-y divide-app-border/80">
                   {issuers.map((iss) => {
                     const issBadge = ENV_BADGES[iss.env || 'local']
 
                     return (
                       <tr key={iss.id} className="transition-colors">
                         {/* Row Header (Issuer) */}
-                        <th className="p-4 text-left bg-slate-950/60 border border-slate-800 align-top">
+                        <th className="p-4 text-left bg-app-base/60 border border-app-border align-top">
                           <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-semibold text-white tracking-tight">{iss.name}</h4>
+                            <h4 className="text-sm font-semibold text-app-text tracking-tight">{iss.name}</h4>
                             {issBadge && (
                               <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${issBadge.class}`}>
                                 {issBadge.label}
                               </span>
                             )}
                           </div>
-                          <p className="text-[11px] text-slate-400 mt-0.5 font-normal">{iss.description}</p>
+                          <p className="text-[11px] text-app-text-muted mt-0.5 font-normal">{iss.description}</p>
                         </th>
 
                         {/* Cells: Pairing (iss, ver) */}
@@ -387,16 +387,16 @@ export default function InteropMatrix() {
                             <td
                               key={ver.id}
                               onClick={() => hasData && setActiveCellKey(isSelected ? null : cellKey)}
-                              className={`p-3.5 border border-slate-800 align-top transition-all ${
+                              className={`p-3.5 border border-app-border align-top transition-all ${
                                 isSelected
-                                  ? 'bg-blue-600/10 ring-2 ring-blue-500/50'
+                                  ? 'bg-app-accent-subtle ring-2 ring-app-accent/50'
                                   : hasData
-                                  ? 'bg-slate-900/40 hover:bg-slate-900/80 cursor-pointer'
-                                  : 'bg-slate-950/20'
+                                  ? 'bg-app-card/40 hover:bg-app-card/80 cursor-pointer'
+                                  : 'bg-app-base/20'
                               }`}
                             >
                               {!hasData || activeFormatKeys.length === 0 ? (
-                                <div className="py-6 text-center text-slate-600 text-xs font-mono">
+                                <div className="py-6 text-center text-app-text-muted text-xs font-mono">
                                   Not tested yet
                                 </div>
                               ) : (
@@ -414,10 +414,10 @@ export default function InteropMatrix() {
                                     return (
                                       <div
                                         key={fmt}
-                                        className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/90 text-xs space-y-1.5"
+                                        className="p-2.5 rounded-lg bg-app-base/70 border border-app-border text-xs space-y-1.5"
                                       >
                                         <div className="flex items-center justify-between gap-1">
-                                          <span className="font-semibold text-slate-200 text-[11px] truncate">
+                                          <span className="font-semibold text-app-text text-[11px] truncate">
                                             {FORMAT_LABELS[fmt] || fmt}
                                           </span>
                                           <span
@@ -425,8 +425,8 @@ export default function InteropMatrix() {
                                               rate >= 80
                                                 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                                                 : rate >= 50
-                                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                                : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                                                ? 'bg-app-accent-subtle text-app-accent border border-app-border-focus'
+                                                : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                                             }`}
                                           >
                                             {rate}% ({fmtStats.total})
@@ -434,10 +434,10 @@ export default function InteropMatrix() {
                                         </div>
 
                                         {/* Progress bar */}
-                                        <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+                                        <div className="h-1 w-full bg-app-card rounded-full overflow-hidden">
                                           <div
                                             className={`h-full ${
-                                              rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                                              rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-app-accent' : 'bg-rose-500'
                                             }`}
                                             style={{ width: `${rate}%` }}
                                           />
@@ -445,13 +445,13 @@ export default function InteropMatrix() {
 
                                         {/* Discovered Friction Point Badges */}
                                         {isSdJwtX5cGap && (
-                                          <div className="text-[10px] font-medium text-amber-400 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                          <div className="text-[10px] font-medium text-app-accent bg-app-accent-subtle/50 border border-app-border-focus px-1.5 py-0.5 rounded flex items-center gap-1">
                                             <span>▲</span>
                                             <span>x5c Certificate Chain Enforced</span>
                                           </div>
                                         )}
                                         {isMdocDcqlGap && (
-                                          <div className="text-[10px] font-medium text-amber-400 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                          <div className="text-[10px] font-medium text-app-accent bg-app-accent-subtle/50 border border-app-border-focus px-1.5 py-0.5 rounded flex items-center gap-1">
                                             <span>▲</span>
                                             <span>DCQL doctype_values Gap</span>
                                           </div>
@@ -473,17 +473,17 @@ export default function InteropMatrix() {
 
             {/* Cell Selection Drill-Down Drawer / Modal */}
             {activeCellData && (
-              <div className="p-4 sm:p-5 rounded-xl bg-slate-900 border border-blue-500/40 shadow-xl space-y-3 animate-fade-in">
+              <div className="p-4 sm:p-5 rounded-xl bg-app-card border border-app-accent/40 shadow-xl space-y-3 animate-fade-in">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-bold text-white">Pairing Details</h4>
-                    <span className="text-xs text-slate-300">
+                    <h4 className="text-sm font-bold text-app-text">Pairing Details</h4>
+                    <span className="text-xs text-app-text-secondary">
                       {activeCellData.issuer?.name} → {activeCellData.verifier?.name}
                     </span>
                   </div>
                   <button
                     onClick={() => setActiveCellKey(null)}
-                    className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+                    className="text-xs text-app-text-muted hover:text-app-text px-2 py-1 rounded bg-app-base hover:bg-app-card border border-app-border transition-colors cursor-pointer"
                   >
                     Close
                   </button>
@@ -491,11 +491,11 @@ export default function InteropMatrix() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {Object.entries(activeCellData.formats || {}).map(([fmt, stats]) => (
-                    <div key={fmt} className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-xs">
-                      <div className="font-semibold text-slate-200">{FORMAT_LABELS[fmt] || fmt}</div>
-                      <div className="text-slate-400 mt-1 flex items-center justify-between">
+                    <div key={fmt} className="p-3 rounded-lg bg-app-base border border-app-border text-xs">
+                      <div className="font-semibold text-app-text">{FORMAT_LABELS[fmt] || fmt}</div>
+                      <div className="text-app-text-muted mt-1 flex items-center justify-between">
                         <span>Pass Rate:</span>
-                        <strong className="text-white">
+                        <strong className="text-app-text">
                           {Math.round((stats.pass / stats.total) * 100)}% ({stats.pass}/{stats.total})
                         </strong>
                       </div>
@@ -509,7 +509,7 @@ export default function InteropMatrix() {
           /* ═══════════════ VIEW B: DETAILED DATA TABLE ═══════════════ */
           <div className="w-full flex-1 overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-950/80 border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider sticky top-0 backdrop-blur-md">
+              <thead className="bg-app-base/80 border-b border-app-border text-[11px] font-semibold text-app-text-muted uppercase tracking-wider sticky top-0 backdrop-blur-md">
                 <tr>
                   <th className="py-3 px-4">Issuer</th>
                   <th className="py-3 px-3">Wallet</th>
@@ -522,7 +522,7 @@ export default function InteropMatrix() {
                   <th className="py-3 px-4 text-center w-28">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 font-sans">
+              <tbody className="divide-y divide-app-border/60 font-sans">
                 {filteredEntries.map(([key, data]) => {
                   const [,,, format] = key.split('|')
                   const run = data.runs[0]
@@ -531,9 +531,9 @@ export default function InteropMatrix() {
                   const verBadge = ENV_BADGES[run.config.verifier.env || 'local']
 
                   return (
-                    <tr key={key} className="hover:bg-slate-900/60 transition-colors">
+                    <tr key={key} className="hover:bg-app-card-hover/50 transition-colors">
                       {/* Issuer */}
-                      <td className="py-3 px-4 text-white font-medium">
+                      <td className="py-3 px-4 text-app-text font-medium">
                         <div className="flex items-center gap-1.5">
                           <span>{run.config.issuer.name}</span>
                           {issBadge && (
@@ -545,12 +545,12 @@ export default function InteropMatrix() {
                       </td>
 
                       {/* Wallet */}
-                      <td className="py-3 px-3 text-slate-300 font-medium">
+                      <td className="py-3 px-3 text-app-text-secondary font-medium">
                         {run.config.wallet.name}
                       </td>
 
                       {/* Verifier */}
-                      <td className="py-3 px-3 text-white font-medium">
+                      <td className="py-3 px-3 text-app-text font-medium">
                         <div className="flex items-center gap-1.5">
                           <span>{run.config.verifier.name}</span>
                           {verBadge && (
@@ -563,27 +563,27 @@ export default function InteropMatrix() {
 
                       {/* Format */}
                       <td className="py-3 px-3 whitespace-nowrap">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-app-base text-app-text border border-app-border">
                           {FORMAT_LABELS[format] || format}
                         </span>
                       </td>
 
                       {/* Counts */}
-                      <td className="py-3 px-3 text-center text-slate-400 font-mono">{data.total}</td>
+                      <td className="py-3 px-3 text-center text-app-text-muted font-mono">{data.total}</td>
                       <td className="py-3 px-3 text-center text-emerald-400 font-mono font-semibold">{data.pass}</td>
-                      <td className="py-3 px-3 text-center text-red-400 font-mono font-semibold">{data.fail || '—'}</td>
+                      <td className="py-3 px-3 text-center text-rose-400 font-mono font-semibold">{data.fail || '—'}</td>
 
                       {/* Compatibility Rate */}
                       <td className="py-3 px-3 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <span className={`font-mono font-bold text-xs ${
-                            rate >= 80 ? 'text-emerald-400' : rate >= 50 ? 'text-amber-400' : 'text-red-400'
+                            rate >= 80 ? 'text-emerald-400' : rate >= 50 ? 'text-app-accent' : 'text-rose-400'
                           }`}>
                             {rate}%
                           </span>
-                          <div className="w-14 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div className="w-14 h-1.5 bg-app-base rounded-full overflow-hidden">
                             <div
-                              className={`h-full ${rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                              className={`h-full ${rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-app-accent' : 'bg-rose-500'}`}
                               style={{ width: `${rate}%` }}
                             />
                           </div>
@@ -597,7 +597,7 @@ export default function InteropMatrix() {
                             Verified
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-app-accent-subtle text-app-accent border border-app-border-focus">
                             Friction Gap
                           </span>
                         )}

@@ -111,14 +111,14 @@ ${JSON.stringify(s.payload || {}, null, 2)}
   }
 
   return (
-    <div className="border border-slate-800 rounded-lg">
-      <div className="px-4 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+    <div className="border border-app-border rounded-lg bg-app-card/40">
+      <div className="px-4 py-3 border-b border-app-border flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h3 className="text-sm font-medium text-slate-300">Test Report</h3>
+          <h3 className="text-sm font-medium text-app-text">Test Report</h3>
           <span className={`text-xs font-medium px-2 py-0.5 rounded ${
             allPassed
-              ? 'bg-green-500/10 text-green-400'
-              : 'bg-red-500/10 text-red-400'
+              ? 'bg-emerald-500/10 text-emerald-400'
+              : 'bg-rose-500/10 text-rose-400'
           }`}>
             {allPassed ? 'PASS' : 'FAIL'}
           </span>
@@ -127,20 +127,20 @@ ${JSON.stringify(s.payload || {}, null, 2)}
         <div className="flex items-center gap-2">
           <button
             onClick={() => downloadReport('md')}
-            className="px-2.5 py-1 text-xs font-medium rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors flex items-center gap-1.5"
+            className="px-2.5 py-1 text-xs font-medium rounded bg-app-card hover:bg-app-card-hover text-app-text-secondary hover:text-app-text border border-app-border transition-colors flex items-center gap-1.5 cursor-pointer"
             title="Download report in Markdown format"
           >
-            <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-3.5 h-3.5 text-app-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             <span>Export .MD</span>
           </button>
           <button
             onClick={() => downloadReport('json')}
-            className="px-2.5 py-1 text-xs font-medium rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors flex items-center gap-1.5"
+            className="px-2.5 py-1 text-xs font-medium rounded bg-app-card hover:bg-app-card-hover text-app-text-secondary hover:text-app-text border border-app-border transition-colors flex items-center gap-1.5 cursor-pointer"
             title="Download report in JSON format"
           >
-            <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-3.5 h-3.5 text-app-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             <span>Export JSON</span>
@@ -151,36 +151,36 @@ ${JSON.stringify(s.payload || {}, null, 2)}
       <div className="p-4 space-y-4">
         {/* Configuration used */}
         <div>
-          <p className="text-xs text-slate-500 mb-2">Configuration</p>
+          <p className="text-xs text-app-text-muted mb-2">Configuration</p>
           <table className="w-full text-sm">
-            <tbody className="divide-y divide-slate-800/50">
+            <tbody className="divide-y divide-app-border/50">
               <tr>
-                <td className="py-1.5 text-slate-500 w-32">Issuer</td>
-                <td className="py-1.5 text-slate-300">{issuer.name}</td>
+                <td className="py-1.5 text-app-text-muted w-32">Issuer</td>
+                <td className="py-1.5 text-app-text">{issuer.name}</td>
               </tr>
               <tr>
-                <td className="py-1.5 text-slate-500">Wallet</td>
-                <td className="py-1.5 text-slate-300">{wallet.name}</td>
+                <td className="py-1.5 text-app-text-muted">Wallet</td>
+                <td className="py-1.5 text-app-text">{wallet.name}</td>
               </tr>
               <tr>
-                <td className="py-1.5 text-slate-500">Verifier</td>
-                <td className="py-1.5 text-slate-300">{verifier.name}</td>
+                <td className="py-1.5 text-app-text-muted">Verifier</td>
+                <td className="py-1.5 text-app-text">{verifier.name}</td>
               </tr>
               <tr>
-                <td className="py-1.5 text-slate-500">Format</td>
+                <td className="py-1.5 text-app-text-muted">Format</td>
                 <td className="py-1.5">
                   <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
                     credentialType.format === 'vc+sd-jwt'
                       ? 'bg-purple-500/10 text-purple-400'
-                      : 'bg-green-500/10 text-green-400'
+                      : 'bg-emerald-500/10 text-emerald-400'
                   }`}>
                     {credentialType.name}
                   </span>
                 </td>
               </tr>
               <tr>
-                <td className="py-1.5 text-slate-500">Proof Type</td>
-                <td className="py-1.5 text-slate-300 font-mono text-xs">{credentialType.proofTypes.join(', ')}</td>
+                <td className="py-1.5 text-app-text-muted">Proof Type</td>
+                <td className="py-1.5 text-app-text font-mono text-xs">{credentialType.proofTypes.join(', ')}</td>
               </tr>
             </tbody>
           </table>
@@ -188,18 +188,18 @@ ${JSON.stringify(s.payload || {}, null, 2)}
 
         {/* Step results */}
         <div>
-          <p className="text-xs text-slate-500 mb-2">Step Results</p>
+          <p className="text-xs text-app-text-muted mb-2">Step Results</p>
           <div className="space-y-1">
             {steps.map((step, i) => (
-              <div key={step.id} className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-900/50 text-sm">
+              <div key={step.id} className="flex items-center justify-between px-3 py-2 rounded-md bg-app-base/50 border border-app-border/50 text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-600 text-xs w-4">{i + 1}.</span>
-                  <span className="text-slate-300">{step.label}</span>
+                  <span className="text-app-text-muted text-xs w-4">{i + 1}.</span>
+                  <span className="text-app-text">{step.label}</span>
                 </div>
                 <span className={`text-xs font-medium ${
-                  step.status === 'done' ? 'text-green-400' :
-                  step.status === 'error' ? 'text-red-400' :
-                  'text-slate-500'
+                  step.status === 'done' ? 'text-emerald-400' :
+                  step.status === 'error' ? 'text-rose-400' :
+                  'text-app-text-muted'
                 }`}>
                   {step.status === 'done' ? 'pass' : step.status}
                 </span>
@@ -210,19 +210,21 @@ ${JSON.stringify(s.payload || {}, null, 2)}
 
         {/* Failure details */}
         {failedSteps.length > 0 && (
-          <div className="border border-amber-500/20 rounded-md p-3 bg-amber-500/5">
-            <p className="text-xs text-amber-400 font-medium mb-1">Failed Steps (Interoperability Gaps)</p>
-            {failedSteps.map(s => (
-              <div key={s.id} className="flex items-center gap-1.5 text-xs text-amber-300">
-                <svg className="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                <span>{s.label}</span>
-              </div>
-            ))}
-            <p className="text-xs text-slate-500 mt-2">
+          <div className="border border-app-border-focus rounded-xl p-3.5 bg-app-accent-subtle/30">
+            <p className="text-xs text-app-accent font-semibold mb-1.5">Failed Steps (Interoperability Gaps)</p>
+            <div className="space-y-1">
+              {failedSteps.map(s => (
+                <div key={s.id} className="flex items-center gap-1.5 text-xs text-app-text">
+                  <svg className="w-3.5 h-3.5 text-rose-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span>{s.label}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-app-text-muted mt-2 leading-relaxed">
               These failures represent real interoperability gaps discovered during testing against the
-              MOSIP Collab sandbox. See <span className="font-mono">INTEROPERABILITY_REPORT.md</span> for details.
+              MOSIP Collab sandbox. See <span className="font-mono text-app-accent">INTEROPERABILITY_REPORT.md</span> for details.
             </p>
           </div>
         )}

@@ -28,14 +28,14 @@ function getVersionBadge(version?: string) {
     return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
   }
   if (ver.includes('16')) {
-    return 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+    return 'bg-sky-500/15 text-sky-300 border-sky-500/30'
   }
   return 'bg-purple-500/15 text-purple-300 border-purple-500/30'
 }
 
 function getFormatBadge(format: CredentialFormat | string) {
   if (format === 'vc+sd-jwt') return 'bg-purple-500/15 text-purple-300 border-purple-500/30'
-  if (format === 'mso_mdoc') return 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+  if (format === 'mso_mdoc') return 'bg-sky-500/15 text-sky-300 border-sky-500/30'
   return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
 }
 
@@ -135,12 +135,12 @@ export default function RunHistory() {
   }, [history, selectedRunId])
 
   return (
-    <div className="w-full flex-1 flex flex-col min-h-[640px] border border-slate-800/80 rounded-2xl bg-slate-900/40 backdrop-blur-md overflow-hidden shadow-sm">
+    <div className="w-full flex-1 flex flex-col min-h-[640px] border border-app-border rounded-2xl bg-app-card/40 backdrop-blur-md overflow-hidden shadow-sm">
       {/* 1. Header Bar */}
-      <div className="p-4 sm:p-5 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
+      <div className="p-4 sm:p-5 border-b border-app-border flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
         <div>
-          <h3 className="text-base font-semibold text-white tracking-tight">Historical Regression Dashboard</h3>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <h3 className="text-base font-semibold text-app-text tracking-tight">Historical Regression Dashboard</h3>
+          <p className="text-xs text-app-text-muted mt-0.5">
             Cross-release benchmarks and verifiable credential protocol telemetry
           </p>
         </div>
@@ -148,14 +148,14 @@ export default function RunHistory() {
         <div className="flex items-center gap-2 text-xs">
           <button
             onClick={resetToBaseline}
-            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors cursor-pointer"
+            className="px-3 py-1.5 rounded-lg bg-app-card hover:bg-app-card-hover text-app-text-secondary hover:text-app-text border border-app-border transition-colors cursor-pointer"
             title="Restore multi-release baseline regression test history"
           >
             Reset Baseline Runs
           </button>
           <button
             onClick={clearHistory}
-            className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors cursor-pointer"
+            className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors cursor-pointer"
           >
             Clear All
           </button>
@@ -200,16 +200,16 @@ export default function RunHistory() {
           }`}
         >
           {filteredRuns.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 text-sm flex-1 flex flex-col items-center justify-center">
+            <div className="p-12 text-center text-app-text-muted text-sm flex-1 flex flex-col items-center justify-center">
               <p>No historical runs match the selected filters.</p>
-              <button onClick={handleResetFilters} className="mt-2 text-xs text-blue-400 hover:underline cursor-pointer">
+              <button onClick={handleResetFilters} className="mt-2 text-xs text-app-accent hover:underline cursor-pointer">
                 Clear all filters
               </button>
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto">
               <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-slate-950/70 border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider sticky top-0 z-10 backdrop-blur-md">
+                <thead className="bg-app-base/80 border-b border-app-border text-[11px] font-semibold text-app-text-muted uppercase tracking-wider sticky top-0 z-10 backdrop-blur-md">
                   <tr>
                     <th className="py-2.5 px-4 w-20">Status</th>
                     <th className="py-2.5 px-3 w-28">Timestamp</th>
@@ -220,7 +220,7 @@ export default function RunHistory() {
                     <th className="py-2.5 px-3 w-10"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60 font-sans">
+                <tbody className="divide-y divide-app-border/60 font-sans">
                   {filteredRuns.map((run) => {
                     const isSelected = selectedRunId === run.id
                     const format = run.config.credentialType.format
@@ -232,8 +232,8 @@ export default function RunHistory() {
                         onClick={() => setSelectedRunId(isSelected ? null : run.id)}
                         className={`transition-colors cursor-pointer select-none group ${
                           isSelected
-                            ? 'bg-blue-600/15 border-l-2 border-l-blue-500'
-                            : 'hover:bg-slate-900/60'
+                            ? 'bg-app-accent-subtle border-l-2 border-l-app-accent'
+                            : 'hover:bg-app-card-hover/50'
                         }`}
                       >
                         {/* Status */}
@@ -242,7 +242,7 @@ export default function RunHistory() {
                             className={`font-bold px-2 py-0.5 rounded text-[10px] tracking-wider border inline-block text-center w-14 ${
                               run.result === 'pass'
                                 ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                                : 'bg-red-500/15 text-red-400 border-red-500/30'
+                                : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
                             }`}
                           >
                             {run.result.toUpperCase()}
@@ -250,7 +250,7 @@ export default function RunHistory() {
                         </td>
 
                         {/* Timestamp */}
-                        <td className="py-3 px-3 text-slate-400 whitespace-nowrap">
+                        <td className="py-3 px-3 text-app-text-muted whitespace-nowrap">
                           {formatRelativeTime(run.timestamp)}
                         </td>
 
@@ -262,13 +262,13 @@ export default function RunHistory() {
                         </td>
 
                         {/* Route */}
-                        <td className="py-3 px-3 text-slate-200 font-medium">
+                        <td className="py-3 px-3 text-app-text font-medium">
                           <div className="flex items-center gap-1.5 truncate max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg">
-                            <span className="text-white truncate">{run.config.issuer.name}</span>
-                            <span className="text-slate-600 text-[10px]">→</span>
-                            <span className="text-white truncate">{run.config.wallet.name}</span>
-                            <span className="text-slate-600 text-[10px]">→</span>
-                            <span className="text-white truncate">{run.config.verifier.name}</span>
+                            <span className="text-app-text truncate">{run.config.issuer.name}</span>
+                            <span className="text-app-text-muted text-[10px]">→</span>
+                            <span className="text-app-text truncate">{run.config.wallet.name}</span>
+                            <span className="text-app-text-muted text-[10px]">→</span>
+                            <span className="text-app-text truncate">{run.config.verifier.name}</span>
                           </div>
                         </td>
 
@@ -280,13 +280,13 @@ export default function RunHistory() {
                         </td>
 
                         {/* Duration */}
-                        <td className="py-3 px-3 text-right font-mono text-slate-400 whitespace-nowrap">
+                        <td className="py-3 px-3 text-right font-mono text-app-text-muted whitespace-nowrap">
                           {run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : '—'}
                         </td>
 
                         {/* Inspector indicator arrow */}
-                        <td className="py-3 px-3 text-center text-slate-600 group-hover:text-slate-300">
-                          <svg className={`w-4 h-4 transition-transform ${isSelected ? 'text-blue-400 rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <td className="py-3 px-3 text-center text-app-text-muted group-hover:text-app-text">
+                          <svg className={`w-4 h-4 transition-transform ${isSelected ? 'text-app-accent rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
                         </td>

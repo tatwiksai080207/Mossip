@@ -27,16 +27,16 @@ export const ManualIssuanceSection: React.FC<ManualIssuanceSectionProps> = ({
   if (!offerUri || vpRequestDeepLink) return null
 
   return (
-    <div className="mt-8 flex flex-col items-center justify-center p-8 border border-slate-800 rounded-2xl bg-slate-900/50">
+    <div className="mt-8 flex flex-col items-center justify-center p-8 border border-app-border rounded-2xl bg-app-card/50 backdrop-blur-sm">
       {/* Channel Segmented Switcher */}
-      <div className="mb-6 bg-slate-950/80 p-1 rounded-xl border border-slate-800 flex items-center gap-1 w-full max-w-xs">
+      <div className="mb-6 bg-app-base/80 p-1 rounded-xl border border-app-border flex items-center gap-1 w-full max-w-xs">
         <button
           type="button"
           onClick={() => setChannel('mobile')}
           className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             channel === 'mobile'
-              ? 'bg-blue-600 text-white shadow-md'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+              ? 'bg-app-accent text-white shadow-md'
+              : 'text-app-text-muted hover:text-app-text hover:bg-app-card'
           }`}
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -49,8 +49,8 @@ export const ManualIssuanceSection: React.FC<ManualIssuanceSectionProps> = ({
           onClick={() => setChannel('web')}
           className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             channel === 'web'
-              ? 'bg-blue-600 text-white shadow-md'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+              ? 'bg-app-accent text-white shadow-md'
+              : 'text-app-text-muted hover:text-app-text hover:bg-app-card'
           }`}
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -62,30 +62,30 @@ export const ManualIssuanceSection: React.FC<ManualIssuanceSectionProps> = ({
 
       {channel === 'mobile' ? (
         <>
-          <h3 className="text-lg font-medium text-slate-200 mb-2">Manual Issuance QR Code</h3>
-          <p className="text-sm text-slate-400 mb-6 text-center max-w-md">
+          <h3 className="text-lg font-medium text-app-text mb-2">Manual Issuance QR Code</h3>
+          <p className="text-sm text-app-text-muted mb-6 text-center max-w-md">
             Scan this QR code using the official Inji Mobile App.
           </p>
-          <div className="bg-white p-4 rounded-xl mb-6">
+          <div className="bg-white p-4 rounded-xl mb-6 shadow-md">
             <QRCode value={offerUri} size={256} />
           </div>
 
-          <div className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-lg p-4 mb-4">
-            <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wider">Raw Deep Link (For Copy/Pasting)</p>
-            <code className="text-xs text-green-400 break-all">{offerUri}</code>
+          <div className="w-full max-w-2xl bg-app-base border border-app-border rounded-lg p-4 mb-4">
+            <p className="text-xs text-app-text-muted mb-2 font-medium uppercase tracking-wider">Raw Deep Link (For Copy/Pasting)</p>
+            <code className="text-xs text-emerald-400 break-all">{offerUri}</code>
           </div>
 
-          <p className="text-sm text-slate-400 mb-4 text-center max-w-lg">
-            <strong className="text-slate-200">Where is the mobile app?</strong> Search for "Inji Wallet" on the Play Store/App Store, or download the APK directly from the{' '}
-            <a href="https://drive.google.com/drive/folders/1gBjFSdpjxU4bsZi7-xS59W1-EIFKrkS8" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">
+          <p className="text-sm text-app-text-muted mb-4 text-center max-w-lg">
+            <strong className="text-app-text">Where is the mobile app?</strong> Search for "Inji Wallet" on the Play Store/App Store, or download the APK directly from the{' '}
+            <a href="https://drive.google.com/drive/folders/1gBjFSdpjxU4bsZi7-xS59W1-EIFKrkS8" target="_blank" rel="noreferrer" className="text-app-accent hover:underline">
               Inji Wallet APK Drive
             </a>.
           </p>
         </>
       ) : (
         <>
-          <h3 className="text-lg font-medium text-slate-200 mb-2">Web Wallet Issuance</h3>
-          <p className="text-sm text-slate-400 mb-6 text-center max-w-md">
+          <h3 className="text-lg font-medium text-app-text mb-2">Web Wallet Issuance</h3>
+          <p className="text-sm text-app-text-muted mb-6 text-center max-w-md">
             Directly download the credential offer into your local web wallet.
           </p>
           {(() => {
@@ -104,7 +104,7 @@ export const ManualIssuanceSection: React.FC<ManualIssuanceSectionProps> = ({
                     href={directWalletIssuanceUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-app-accent hover:bg-app-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
                   >
                     Open & Directly Download in Web Wallet
                   </a>
@@ -112,20 +112,20 @@ export const ManualIssuanceSection: React.FC<ManualIssuanceSectionProps> = ({
                     href="http://localhost:3004"
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors border border-slate-700"
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-app-card hover:bg-app-card-hover text-app-text text-xs font-medium rounded-lg transition-colors border border-app-border"
                   >
                     Login / Unlock Wallet First
                   </a>
                 </div>
-                <p className="text-xs text-blue-400/90 mb-4 text-center max-w-lg bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-md">
+                <p className="text-xs text-app-accent mb-4 text-center max-w-lg bg-app-accent-subtle border border-app-border-focus px-3 py-1.5 rounded-md">
                   <strong>Direct Flow:</strong> Routes directly to <strong>{selectedIssuer?.name || 'Playground Issuer'}</strong> and auto-selects <strong>{selectedCredType?.name || targetCredId}</strong> for download.
                 </p>
               </>
             )
           })()}
-          <div className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-lg p-4 mb-4">
-            <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wider">Raw Deep Link (For Copy/Pasting)</p>
-            <code className="text-xs text-green-400 break-all">{offerUri}</code>
+          <div className="w-full max-w-2xl bg-app-base border border-app-border rounded-lg p-4 mb-4">
+            <p className="text-xs text-app-text-muted mb-2 font-medium uppercase tracking-wider">Raw Deep Link (For Copy/Pasting)</p>
+            <code className="text-xs text-emerald-400 break-all">{offerUri}</code>
           </div>
         </>
       )}
@@ -134,7 +134,7 @@ export const ManualIssuanceSection: React.FC<ManualIssuanceSectionProps> = ({
         <button
           onClick={onContinueVerification}
           disabled={isRunning}
-          className="mt-6 px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+          className="mt-6 px-6 py-2 bg-app-accent hover:bg-app-accent-hover text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 cursor-pointer shadow-md"
         >
           {isRunning ? 'Running...' : 'Proceed to Verification'}
         </button>

@@ -4,6 +4,24 @@ export function sanitizeName(name: string): string {
   return name.replace(/[^\w\s-]/g, '').trim() || 'Entity'
 }
 
+export function hexToRgb(hex?: string, fallback = '15, 23, 42'): string {
+  if (!hex || !hex.startsWith('#')) return fallback
+  const clean = hex.replace('#', '')
+  if (clean.length === 3) {
+    const r = parseInt(clean[0] + clean[0], 16)
+    const g = parseInt(clean[1] + clean[1], 16)
+    const b = parseInt(clean[2] + clean[2], 16)
+    return `${r}, ${g}, ${b}`
+  }
+  if (clean.length >= 6) {
+    const r = parseInt(clean.substring(0, 2), 16)
+    const g = parseInt(clean.substring(2, 4), 16)
+    const b = parseInt(clean.substring(4, 6), 16)
+    return `${r}, ${g}, ${b}`
+  }
+  return fallback
+}
+
 export function mapTextToStep(text: string): FlowStep | null {
   const lower = text.toLowerCase()
   if (lower.includes('metadata')) return 'issuer-metadata'
@@ -24,8 +42,9 @@ export function generateFullFlowDSL(params: {
   steps: FlowStepInfo[]
   tamperMode: string
   networkEvents: NetworkEvent[]
+  phaseBgRgb?: string
 }): string {
-  const { issuerName, walletName, verifierName, credFormat, steps, tamperMode, networkEvents } = params
+  const { issuerName, walletName, verifierName, credFormat, steps, tamperMode, networkEvents, phaseBgRgb = '15, 23, 42' } = params
 
   const getStep = (id: FlowStep) => steps.find(s => s.id === id)
   const getStepStatus = (id: FlowStep) => getStep(id)?.status || 'pending'
@@ -58,7 +77,7 @@ export function generateFullFlowDSL(params: {
   participant W as ${cleanWallet}
   participant V as ${cleanVerifier}
 
-  rect rgb(15, 23, 42)
+  rect rgb(${phaseBgRgb})
   Note over I,W: Phase 1: OpenID4VCI (Credential Issuance)
   W->>I: 1. Fetch Metadata (.well-known)${getIcon(s1, 'issuer-metadata')}
   I-->>W: 2. Credential Offer (${credFormat})${getIcon(s2, 'credential-offer')}
@@ -71,7 +90,7 @@ export function generateFullFlowDSL(params: {
   }
 
   dsl += `
-  rect rgb(15, 23, 42)
+  rect rgb(${phaseBgRgb})
   Note over W,V: Phase 2: OpenID4VP (Presentation & Verification)
   V->>W: 5. VP Authorization Request (DCQL)${getIcon(s5, 'vp-request')}
 `
@@ -125,8 +144,9 @@ export function generateVpFocusedDSL(params: {
   credFormat: string
   steps: FlowStepInfo[]
   tamperMode: string
+  phaseBgRgb?: string
 }): string {
-  const { walletName, verifierName, credFormat, steps, tamperMode } = params
+  const { walletName, verifierName, credFormat, steps, tamperMode, phaseBgRgb = '15, 23, 42' } = params
   const s5 = steps.find(s => s.id === 'vp-request')?.status || 'pending'
   const s6 = steps.find(s => s.id === 'vp-response')?.status || 'pending'
   const s7 = steps.find(s => s.id === 'verification')?.status || 'pending'
@@ -152,7 +172,7 @@ export function generateVpFocusedDSL(params: {
   participant W as ${cleanWallet}
   participant C as Crypto & VP Engine
 
-  rect rgb(15, 23, 42)
+  rect rgb(${phaseBgRgb})
   Note over V,C: OpenID4VP Protocol Exchange (Task #3)
   V->>W: 1. Authorization Request (request_uri & DCQL)${getIcon(s5, 'vp-request')}
   Note over W: Parse DCQL query & match format (${credFormat})

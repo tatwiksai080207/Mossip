@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import mermaid from 'mermaid'
 import { useStore } from '../../store/index'
+import { useTheme } from '../../context/ThemeContext'
 import { initMermaid } from './mermaid-config'
-import { mapTextToStep, generateFullFlowDSL, generateVpFocusedDSL } from './sequence-dsl'
+import { mapTextToStep, generateFullFlowDSL, generateVpFocusedDSL, hexToRgb } from './sequence-dsl'
 
 interface SequenceDiagramProps {
   isExpanded?: boolean
@@ -23,6 +24,7 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
     selectStep,
     networkEvents,
   } = useStore()
+  const { currentTheme } = useTheme()
 
   const [viewMode, setViewMode] = useState<'full' | 'openid4vp' | 'code'>('full')
   const [copied, setCopied] = useState(false)
@@ -34,8 +36,10 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
   const verifierName = selectedVerifier?.name || 'Verifier'
   const credFormat = selectedCredType?.format || 'vc+sd-jwt'
 
+  const phaseBgRgb = hexToRgb(currentTheme.tokens.bgCard)
+
   const mermaidDSL = viewMode === 'openid4vp'
-    ? generateVpFocusedDSL({ walletName, verifierName, credFormat, steps, tamperMode })
+    ? generateVpFocusedDSL({ walletName, verifierName, credFormat, steps, tamperMode, phaseBgRgb })
     : generateFullFlowDSL({
         issuerName,
         walletName,
@@ -44,11 +48,12 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
         steps,
         tamperMode,
         networkEvents,
+        phaseBgRgb,
       })
 
   useEffect(() => {
     initMermaid(isExpanded)
-  }, [isExpanded])
+  }, [isExpanded, currentTheme.id])
 
   // Render Mermaid diagram whenever state or view mode changes
   useEffect(() => {
@@ -79,7 +84,18 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
         svgEl.style.width = '100%'
         svgEl.style.maxWidth = '100%'
         svgEl.style.height = 'auto'
-        svgEl.style.display = 'block'
+        // Round corners and theme the phase background rectangles
+        const rectElements = Array.from(svgEl.querySelectorAll('rect'))
+        rectElements.forEach((r) => {
+          // Do not override participant actor boxes
+          if (r.classList.contains('actor') || r.parentElement?.classList.contains('actor')) return
+          r.setAttribute('rx', '12')
+          r.setAttribute('ry', '12')
+          r.style.fill = currentTheme.tokens.bgCard
+          r.style.fillOpacity = '0.7'
+          r.style.stroke = currentTheme.tokens.borderBase
+          r.style.strokeWidth = '1px'
+        })
 
         // Map messages and attach interactions
         const textElements = Array.from(svgEl.querySelectorAll('text.messageText'))
@@ -178,7 +194,7 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
     return () => {
       isMounted = false
     }
-  }, [mermaidDSL, steps, selectedStepId, selectStep, isExpanded])
+  }, [mermaidDSL, steps, selectedStepId, selectStep, isExpanded, currentTheme.id])
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(mermaidDSL)
@@ -189,7 +205,7 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
   if (steps.length === 0) return null
 
   return (
-    <div className="border border-slate-800 rounded-lg p-4 bg-slate-900/40 flex flex-col w-full">
+    <div className="border border-app-border rounded-lg p-4 bg-app-card/40 flex flex-col w-full">
       {/* Dynamic Keyframe Style */}
       <style>{`
         @keyframes mermaidFlowDash {
@@ -200,29 +216,29 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
           transition: all 0.2s ease-in-out;
         }
         .mermaid-interactive:hover {
-          filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.9));
+          filter: drop-shadow(0 0 6px var(--app-accent, rgba(99, 102, 241, 0.9)));
         }
       `}</style>
 
       {/* Top Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-app-border">
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
-            <h3 className="text-sm font-semibold text-slate-200">Protocol Sequence Diagram</h3>
+            <span className="w-2 h-2 rounded-full bg-app-accent animate-pulse" />
+            <h3 className="text-sm font-semibold text-app-text">Protocol Sequence Diagram</h3>
           </div>
           {selectedCredType && (
-            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-800 text-sky-400 border border-slate-700">
+            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-app-base text-app-accent border border-app-border">
               {selectedCredType.format}
             </span>
           )}
           {isRunning && (
-            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 animate-pulse">
+            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-app-accent-subtle text-app-accent border border-app-accent/30 animate-pulse">
               Live Exchange
             </span>
           )}
           {tamperMode !== 'none' && (
-            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-app-tamper-bg text-app-tamper border border-app-tamper-border">
               Negative: {tamperMode}
             </span>
           )}
@@ -231,33 +247,33 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
         {/* Toolbar Actions */}
         <div className="flex items-center gap-2">
           {/* View Mode Switcher */}
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+          <div className="flex items-center gap-1 bg-app-base p-1 rounded-lg border border-app-border">
             <button
               onClick={() => setViewMode('full')}
-              className={`text-xs px-2.5 py-1 rounded transition-colors ${
+              className={`text-xs px-2.5 py-1 rounded transition-colors cursor-pointer ${
                 viewMode === 'full'
-                  ? 'bg-blue-600 text-white font-medium shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-app-accent text-white font-medium shadow-sm'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-app-card-hover'
               }`}
             >
               Full Lifecycle
             </button>
             <button
               onClick={() => setViewMode('openid4vp')}
-              className={`text-xs px-2.5 py-1 rounded transition-colors ${
+              className={`text-xs px-2.5 py-1 rounded transition-colors cursor-pointer ${
                 viewMode === 'openid4vp'
-                  ? 'bg-blue-600 text-white font-medium shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-app-accent text-white font-medium shadow-sm'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-app-card-hover'
               }`}
             >
               OpenID4VP Focus
             </button>
             <button
               onClick={() => setViewMode('code')}
-              className={`text-xs px-2.5 py-1 rounded transition-colors ${
+              className={`text-xs px-2.5 py-1 rounded transition-colors cursor-pointer ${
                 viewMode === 'code'
-                  ? 'bg-blue-600 text-white font-medium shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-app-accent text-white font-medium shadow-sm'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-app-card-hover'
               }`}
             >
               Mermaid Code
@@ -269,9 +285,9 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
             <button
               onClick={onToggleExpand}
               title={isExpanded ? 'Switch to side-by-side view' : 'Expand diagram across full screen width'}
-              className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 shadow-sm"
+              className="text-xs px-2.5 py-1.5 rounded-lg bg-app-card hover:bg-app-card-hover border border-app-border text-app-text-secondary hover:text-app-text transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
-              <svg className="w-3.5 h-3.5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3.5 h-3.5 text-app-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 {isExpanded ? (
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9L4 4m0 0l5 0m-5 0l0 5M15 9l5-5m0 0l-5 0m5 0l0 5M9 15l-5 5m0 0l5 0m-5 0l0-5M15 15l5 5m0 0l-5 0m5 0l0-5" />
                 ) : (
@@ -284,25 +300,25 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
         </div>
       </div>
 
-      {/* Main Diagram and Code View (Both preserved without DOM unmount flickering) */}
+      {/* Main Diagram and Code View */}
       <div className={viewMode === 'code' ? 'block' : 'hidden'}>
         <div className="flex justify-between items-center mb-2">
-          <span className="text-xs text-slate-400">Mermaid Sequence DSL (Markdown compatible)</span>
+          <span className="text-xs text-app-text-muted">Mermaid Sequence DSL (Markdown compatible)</span>
           <button
             onClick={handleCopyCode}
-            className="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition-colors flex items-center gap-1.5"
+            className="text-xs px-2.5 py-1 rounded bg-app-card hover:bg-app-card-hover border border-app-border text-app-text-secondary hover:text-app-text transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             {copied ? 'Copied' : 'Copy DSL'}
           </button>
         </div>
-        <pre className="bg-slate-950 border border-slate-800 rounded-lg p-4 text-xs font-mono text-slate-300 overflow-x-auto leading-relaxed max-h-[420px]">
+        <pre className="bg-app-base border border-app-border rounded-lg p-4 text-xs font-mono text-app-text-secondary overflow-x-auto leading-relaxed max-h-[420px]">
           {mermaidDSL}
         </pre>
       </div>
 
       <div className={viewMode === 'code' ? 'hidden' : 'block'}>
         {renderError ? (
-          <div className="p-6 text-center text-red-400 bg-red-950/20 border border-red-800/40 rounded-lg text-xs font-mono">
+          <div className="p-6 text-center text-rose-400 bg-rose-950/20 border border-rose-800/40 rounded-lg text-xs font-mono">
             Failed to render Mermaid SVG: {renderError}
           </div>
         ) : (
@@ -314,23 +330,23 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
       </div>
 
       {/* Bottom Status & Interactivity Hint */}
-      <div className="mt-4 pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-400">
+      <div className="mt-4 pt-3 border-t border-app-border flex flex-wrap items-center justify-between gap-3 text-[11px] text-app-text-muted">
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-emerald-500" /> Done
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" /> Active
+            <span className="w-2 h-2 rounded-full bg-app-accent animate-pulse" /> Active
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-red-400" /> Error/Tamper
+            <span className="w-2 h-2 rounded-full bg-rose-400" /> Error/Tamper
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-slate-600" /> Pending
+            <span className="w-2 h-2 rounded-full bg-app-text-muted" /> Pending
           </span>
         </div>
 
-        <div className="text-slate-500">
+        <div className="text-app-text-muted">
           Click any arrow or step in the diagram to inspect its payload in Flow Progress
         </div>
       </div>

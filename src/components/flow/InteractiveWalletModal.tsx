@@ -81,16 +81,16 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="flex items-center gap-3 px-4 py-3 bg-slate-900/95 hover:bg-slate-800 text-white font-medium text-sm rounded-full shadow-[0_10px_35px_rgba(0,0,0,0.6)] border border-blue-500/40 cursor-pointer transition-all hover:scale-105 active:scale-95 group"
+          className="flex items-center gap-3 px-4 py-3 bg-app-card/95 hover:bg-app-card-hover text-app-text font-medium text-sm rounded-full shadow-[0_10px_35px_rgba(0,0,0,0.6)] border border-app-border-focus cursor-pointer transition-all hover:scale-105 active:scale-95 group"
         >
           <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-app-accent opacity-75" />
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-app-accent" />
           </span>
-          <span className="text-slate-100 font-medium">
+          <span className="text-app-text font-medium">
             {isIssuancePhase ? 'Action Required: Scan Issuance QR' : 'Action Required: Scan Presentation QR'}
           </span>
-          <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-slate-300 group-hover:text-white group-hover:bg-blue-600 transition-colors">
+          <div className="w-6 h-6 rounded-full bg-app-base flex items-center justify-center text-app-text-muted group-hover:text-white group-hover:bg-app-accent transition-colors">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
             </svg>
@@ -105,18 +105,18 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="interactive-wallet-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/80 backdrop-blur-md animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in"
     >
-      <div className="bg-slate-900/95 border border-slate-700/60 rounded-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] max-w-lg w-full flex flex-col overflow-hidden animate-scale-up">
+      <div className="bg-app-card border border-app-border rounded-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] max-w-lg w-full flex flex-col overflow-hidden animate-scale-up">
         
-        {/* Header - exactly identical to eSignet Modal header styling */}
+        {/* Header */}
         <div className={`px-6 py-5 flex items-center justify-between border-b ${
-          isIssuancePhase ? 'border-blue-500/20 bg-blue-950/20' : 'border-emerald-500/20 bg-emerald-950/20'
+          isIssuancePhase ? 'border-app-border bg-app-accent-subtle/30' : 'border-emerald-500/20 bg-emerald-950/20'
         }`}>
           <div className="flex items-center gap-3.5">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
               isIssuancePhase
-                ? 'bg-blue-500/15 border-blue-500/30 text-blue-400'
+                ? 'bg-app-accent/15 border-app-accent/30 text-app-accent'
                 : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
             }`}>
               {isIssuancePhase ? (
@@ -133,16 +133,16 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
               <div className="flex items-center gap-2">
                 <span className={`text-[11px] font-semibold tracking-wide px-2.5 py-0.5 rounded-full border ${
                   isIssuancePhase
-                    ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                    ? 'bg-app-accent/15 text-app-accent border-app-accent/30'
                     : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
                 }`}>
                   {isIssuancePhase ? 'Step 1 of 2 · Credential Issuance' : 'Step 2 of 2 · Verification & Presentation'}
                 </span>
-                <span className="text-xs text-slate-400 font-medium">
+                <span className="text-xs text-app-text-muted font-medium">
                   {selectedWallet?.name || 'Inji Wallet'}
                 </span>
               </div>
-              <h3 id="interactive-wallet-title" className="text-lg font-semibold text-white tracking-tight mt-1">
+              <h3 id="interactive-wallet-title" className="text-lg font-semibold text-app-text tracking-tight mt-1">
                 {isIssuancePhase ? 'Scan or Claim Your Credential' : 'Present Credential for Verification'}
               </h3>
             </div>
@@ -153,7 +153,7 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
             onClick={() => setIsOpen(false)}
             aria-label="Minimize dialog"
             title="Minimize modal (Escape)"
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-app-text-muted hover:text-app-text hover:bg-app-card-hover transition-colors cursor-pointer"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -164,14 +164,14 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
         {/* Modal Body */}
         <div className="p-6 space-y-4 overflow-y-auto">
           {/* Segmented Channel Switcher */}
-          <div className="p-1 bg-slate-950/80 rounded-xl border border-slate-800/90 flex items-center gap-1 shadow-inner">
+          <div className="p-1 bg-app-base rounded-xl border border-app-border flex items-center gap-1 shadow-inner">
             <button
               type="button"
               onClick={() => setWalletChannel('mobile')}
               className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                 walletChannel === 'mobile'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  ? 'bg-app-accent text-white shadow-sm'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-app-card'
               }`}
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -184,8 +184,8 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
               onClick={() => setWalletChannel('web')}
               className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                 walletChannel === 'web'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  ? 'bg-app-accent text-white shadow-sm'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-app-card'
               }`}
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -195,7 +195,7 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
             </button>
           </div>
 
-          <p className="text-xs text-slate-300 leading-relaxed text-center max-w-md mx-auto">
+          <p className="text-xs text-app-text-secondary leading-relaxed text-center max-w-md mx-auto">
             {walletChannel === 'mobile'
               ? (isIssuancePhase
                   ? 'Open your Inji Mobile App and scan this QR code to download and store the Verifiable Credential.'
@@ -210,35 +210,35 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
             <div className="space-y-4">
               {activeUri && (
                 <div className="flex justify-center">
-                  <div className="bg-white p-3.5 rounded-2xl shadow-xl ring-1 ring-slate-800/10 transition-transform hover:scale-[1.01]">
+                  <div className="bg-white p-3.5 rounded-2xl shadow-xl ring-1 ring-black/10 transition-transform hover:scale-[1.01]">
                     <QRCode value={activeUri} size={190} />
                   </div>
                 </div>
               )}
 
-              {/* Protocol Deep Link Card - identical styling to Resident Credentials card */}
-              <div className="rounded-xl bg-slate-950/70 border border-slate-800/90 p-3.5 space-y-2.5 shadow-sm">
+              {/* Protocol Deep Link Card */}
+              <div className="rounded-xl bg-app-base/70 border border-app-border p-3.5 space-y-2.5 shadow-sm">
                 <div className="flex items-center justify-between text-[11px]">
-                  <div className="flex items-center gap-1.5 text-slate-400 font-medium">
-                    <svg className="w-3.5 h-3.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <div className="flex items-center gap-1.5 text-app-text-muted font-medium">
+                    <svg className="w-3.5 h-3.5 text-app-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                     </svg>
-                    <span className="font-semibold uppercase tracking-wider text-slate-400">Protocol Deep Link</span>
+                    <span className="font-semibold uppercase tracking-wider text-app-text-muted">Protocol Deep Link</span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setShowFullUri(!showFullUri)}
-                      className="text-[11px] text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                      className="text-[11px] text-app-text-muted hover:text-app-text transition-colors cursor-pointer"
                     >
                       {showFullUri ? 'Collapse' : 'Show Full'}
                     </button>
-                    <span className="text-slate-700">·</span>
+                    <span className="text-app-border">·</span>
                     <button
                       type="button"
                       onClick={handleCopy}
-                      className="flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 font-medium cursor-pointer transition-colors"
+                      className="flex items-center gap-1 text-[11px] text-app-accent hover:underline font-medium cursor-pointer transition-colors"
                     >
                       {copied ? (
                         <>
@@ -260,12 +260,12 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
                 </div>
 
                 {showFullUri ? (
-                  <code className="text-[11px] font-mono text-emerald-400/90 break-all bg-slate-900/90 border border-slate-800 p-2.5 rounded-lg select-all max-h-24 overflow-y-auto block">
+                  <code className="text-[11px] font-mono text-emerald-400 break-all bg-app-base border border-app-border p-2.5 rounded-lg select-all max-h-24 overflow-y-auto block">
                     {activeUri}
                   </code>
                 ) : (
-                  <div className="bg-slate-900/80 border border-slate-800 px-3 py-2 rounded-lg flex items-center justify-between">
-                    <span className="text-[11px] font-mono text-slate-300 truncate max-w-[380px]">
+                  <div className="bg-app-card border border-app-border px-3 py-2 rounded-lg flex items-center justify-between">
+                    <span className="text-[11px] font-mono text-app-text-secondary truncate max-w-[380px]">
                       {activeUri}
                     </span>
                   </div>
@@ -273,13 +273,13 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
               </div>
 
               {/* Helper download link */}
-              <p className="text-[11px] text-slate-400 text-center">
+              <p className="text-[11px] text-app-text-muted text-center">
                 Need the official app? Download APK from{' '}
                 <a
                   href={appLinks.injiMobileApkDrive}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-blue-400 hover:text-blue-300 hover:underline font-medium inline-flex items-center gap-1"
+                  className="text-app-accent hover:underline font-medium inline-flex items-center gap-1"
                 >
                   <span>Inji Wallet APK Drive</span>
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -292,29 +292,29 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
             /* Inji Web Wallet View */
             <div className="space-y-3.5">
               {/* Step 1: Web Wallet Session Card */}
-              <div className="rounded-xl bg-slate-950/70 border border-slate-800/90 p-3.5 space-y-2 shadow-sm">
+              <div className="rounded-xl bg-app-base/70 border border-app-border p-3.5 space-y-2 shadow-sm">
                 <div className="flex items-center justify-between text-[11px]">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-300 px-2 py-0.5 rounded bg-slate-850 border border-slate-750">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-app-text px-2 py-0.5 rounded bg-app-card border border-app-border">
                       Step 1
                     </span>
-                    <span className="font-semibold text-slate-200">Unlock Inji Web Wallet</span>
+                    <span className="font-semibold text-app-text">Unlock Inji Web Wallet</span>
                   </div>
-                  <span className="text-[10px] font-medium text-slate-400">Pre-requisite</span>
+                  <span className="text-[10px] font-medium text-app-text-muted">Pre-requisite</span>
                 </div>
 
-                <div className="flex items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-2.5 rounded-lg">
-                  <p className="text-[11px] text-slate-300 leading-normal">
+                <div className="flex items-center justify-between gap-3 bg-app-card border border-app-border p-2.5 rounded-lg">
+                  <p className="text-[11px] text-app-text-secondary leading-normal">
                     Ensure your local Inji Web container is running and logged in with your PIN.
                   </p>
                   <a
                     href={appLinks.injiWebLocalUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="shrink-0 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-750 text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+                    className="shrink-0 px-3 py-1.5 rounded-lg bg-app-base hover:bg-app-card text-app-text border border-app-border text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
                   >
                     <span>Open Web Wallet</span>
-                    <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="w-3.5 h-3.5 text-app-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                   </a>
@@ -334,21 +334,21 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
                   const directWalletIssuanceUrl = `http://localhost:3004/user/issuers/${mimotoIssuerId}?credential_id=${encodeURIComponent(targetCredId)}&auto_download=true&credential_offer=${encodeURIComponent(rawOffer)}`
 
                   return (
-                    <div className="rounded-xl bg-slate-950/70 border border-blue-500/25 p-3.5 space-y-3 shadow-sm">
+                    <div className="rounded-xl bg-app-base/70 border border-app-border-focus p-3.5 space-y-3 shadow-sm">
                       <div className="flex items-center justify-between text-[11px]">
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-300 px-2 py-0.5 rounded bg-blue-500/15 border border-blue-500/30">
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-app-accent px-2 py-0.5 rounded bg-app-accent-subtle border border-app-border-focus">
                             Step 2
                           </span>
-                          <span className="font-semibold text-white">Direct Credential Claim</span>
+                          <span className="font-semibold text-app-text">Direct Credential Claim</span>
                         </div>
-                        <span className="text-[11px] text-slate-400 font-mono">
+                        <span className="text-[11px] text-app-text-muted font-mono">
                           {selectedIssuer?.name || 'Local Inji Certify'}
                         </span>
                       </div>
 
-                      <div className="bg-slate-900/80 border border-slate-800 p-2.5 rounded-lg">
-                        <p className="text-[11px] text-slate-300 leading-relaxed">
+                      <div className="bg-app-card border border-app-border p-2.5 rounded-lg">
+                        <p className="text-[11px] text-app-text-secondary leading-relaxed">
                           Routes directly to <strong>{selectedIssuer?.name || 'Local Inji Certify'}</strong> and auto-selects <strong>{selectedCredType?.name || targetCredId}</strong>.
                         </p>
                       </div>
@@ -357,10 +357,10 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
                         href={directWalletIssuanceUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs sm:text-sm rounded-xl transition-all shadow-md shadow-blue-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                        className="w-full py-2.5 px-4 bg-app-accent hover:bg-app-accent-hover text-white font-medium text-xs sm:text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <span>Open &amp; Directly Download in Web Wallet</span>
-                        <svg className="w-4 h-4 text-blue-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg className="w-4 h-4 text-white/80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                         </svg>
                       </a>
@@ -368,19 +368,19 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
                   )
                 })()
               ) : (
-                <div className="rounded-xl bg-slate-950/70 border border-emerald-500/25 p-3.5 space-y-3 shadow-sm">
+                <div className="rounded-xl bg-app-base/70 border border-emerald-500/25 p-3.5 space-y-3 shadow-sm">
                   <div className="flex items-center justify-between text-[11px]">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-300 px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30">
                         Step 2
                       </span>
-                      <span className="font-semibold text-white">Authorize Presentation</span>
+                      <span className="font-semibold text-app-text">Authorize Presentation</span>
                     </div>
-                    <span className="text-[11px] text-slate-400 font-mono">Inji Verify</span>
+                    <span className="text-[11px] text-app-text-muted font-mono">Inji Verify</span>
                   </div>
 
-                  <div className="bg-slate-900/80 border border-slate-800 p-2.5 rounded-lg">
-                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                  <div className="bg-app-card border border-app-border p-2.5 rounded-lg">
+                    <p className="text-[11px] text-app-text-secondary leading-relaxed">
                       Select your credential in Inji Web and authorize presentation to Inji Verify.
                     </p>
                   </div>
@@ -401,15 +401,15 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
             </div>
           )}
 
-          {/* Action Footer - exactly matching eSignet Modal footer */}
+          {/* Action Footer */}
           <div className="flex items-center justify-between gap-3 pt-2">
             <button
               type="button"
               onClick={onAbortTest}
-              className="text-xs font-medium text-slate-400 hover:text-red-300 hover:bg-red-500/10 px-3.5 py-2 rounded-xl border border-slate-800 hover:border-red-500/30 transition-all cursor-pointer flex items-center gap-2"
+              className="text-xs font-medium text-app-text-muted hover:text-rose-400 hover:bg-rose-500/10 px-3.5 py-2 rounded-xl border border-app-border hover:border-rose-500/30 transition-all cursor-pointer flex items-center gap-2"
               title="Abort this test run"
             >
-              <svg className="w-3.5 h-3.5 text-red-400" viewBox="0 0 24 24" fill="currentColor">
+              <svg className="w-3.5 h-3.5 text-rose-400" viewBox="0 0 24 24" fill="currentColor">
                 <rect x="5" y="5" width="14" height="14" rx="2" />
               </svg>
               <span>Abort Test</span>
@@ -420,7 +420,7 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
                 type="button"
                 onClick={onContinueVerification}
                 disabled={isRunning || Boolean(vpRequestStep && vpRequestStep.status !== 'pending')}
-                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-semibold shadow-md shadow-blue-600/20 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                className="px-5 py-2.5 rounded-xl bg-app-accent hover:bg-app-accent-hover text-white text-xs sm:text-sm font-semibold shadow-md transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
               >
                 <span>{isRunning ? 'Processing...' : 'Proceed to Verification'}</span>
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -446,3 +446,5 @@ export const InteractiveWalletModal: React.FC<InteractiveWalletModalProps> = ({
     </div>
   )
 }
+
+export default InteractiveWalletModal

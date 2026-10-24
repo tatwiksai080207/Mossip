@@ -1,5 +1,6 @@
 export { default as Header } from './layout/Header'
 export { Sidebar, type NavTabId } from './layout/Sidebar'
+export { ThemeSelector } from './layout/ThemeSelector'
 export { default as RoleSelector } from './config/RoleSelector'
 export { default as SequenceDiagram } from './flow/SequenceDiagram'
 export { default as FlowProgress } from './flow/FlowProgress'
