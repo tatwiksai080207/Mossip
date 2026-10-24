@@ -22,3 +22,4 @@ patched_classes/
 staging/
 mosip-stack/test-download.cjs
 .tunnel.json
+server/config/identities.local.json

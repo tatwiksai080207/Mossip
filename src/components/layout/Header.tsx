@@ -7,7 +7,7 @@ interface HeaderProps {
 }
 
 const TAB_META: Record<NavTabId, { title: string }> = {
-  runner: { title: 'Test Runner' },
+  runner: { title: 'Interop Studio' },
   history: { title: 'Run History' },
   matrix: { title: 'Interop Matrix' },
 }
@@ -16,8 +16,8 @@ export const Header: React.FC<HeaderProps> = ({ activeTab }) => {
   const currentMeta = TAB_META[activeTab] || TAB_META.runner
 
   return (
-    <header className="border-b border-app-border px-6 sm:px-8 py-3.5 bg-app-header backdrop-blur-md sticky top-0 z-30 transition-colors">
-      <div className="flex items-center justify-between gap-4">
+    <header className="h-16 border-b border-app-border px-6 sm:px-8 bg-app-header backdrop-blur-md sticky top-0 z-30 transition-colors flex items-center shrink-0">
+      <div className="flex items-center justify-between gap-4 w-full">
         {/* Dynamic Context Title based on selected Tab */}
         <div>
           <h2 className="text-base sm:text-lg font-semibold text-app-text tracking-tight leading-tight">

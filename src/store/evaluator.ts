@@ -6,14 +6,16 @@ export interface EvaluationResult {
 }
 
 export function evaluateTestRun(steps: FlowStepInfo[], tamperMode: string): EvaluationResult {
-  const allDone = steps.every(s => s.status === 'done' || (s.status === 'pending' && s.payload && (s.payload as any)._note))
+  const allDone = steps.length > 0 && steps.every(s => s.status === 'done')
+  const doneCount = steps.filter(s => s.status === 'done').length
+  const errorCount = steps.filter(s => s.status === 'error').length
   
   if (tamperMode === 'none') {
     return {
-      passed: allDone,
-      message: allDone 
+      passed: allDone && errorCount === 0,
+      message: allDone && errorCount === 0
         ? 'All steps completed successfully.' 
-        : `${steps.filter(s => s.status === 'done').length}/${steps.length} steps passed, ${steps.filter(s => s.status === 'error').length} failed.`
+        : `${doneCount}/${steps.length} steps passed, ${errorCount} failed.`
     }
   }
 

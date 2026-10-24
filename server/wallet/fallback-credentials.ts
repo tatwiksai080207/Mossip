@@ -6,7 +6,7 @@ import { generateP256Key, generateEd25519Key, type PlaygroundKey } from '../keys
 import { signCredential, issueLdpCredential } from '../formats/ldp'
 import { issueSdJwtCredential } from '../formats/sd-jwt'
 import { issueMdocCredential } from '../formats/mdoc'
-import identities from '../config/identities.json'
+import identities from '../config/identities'
 import keysConfig from '../config/keys.json'
 
 export interface FallbackCredentialOptions {
@@ -135,14 +135,14 @@ export async function createFallbackResidentCredential(opts: FallbackCredentialO
       dataModel: '2.0',
       credentialType: 'MOSIPVerifiableCredential',
       subject: {
-        UIN: '6207495860',
-        fullName: [{ value: 'Molleti Tatwik Sai', language: 'eng' }],
-        dateOfBirth: '2007/02/08',
-        gender: [{ value: 'MLE', language: 'eng' }],
-        phone: '8639930924',
+        UIN: identities.resident.uin,
+        fullName: [{ value: identities.resident.fullName, language: 'eng' }],
+        dateOfBirth: identities.resident.dateOfBirth,
+        gender: [{ value: identities.resident.gender, language: 'eng' }],
+        phone: identities.resident.phone,
       },
       holderDid: presentationKey.did,
-      id: `https://mosip.io/credential/collab-molleti-${Date.now()}`,
+      id: `https://mosip.io/credential/collab-resident-${Date.now()}`,
     })
   }
 
@@ -152,18 +152,18 @@ export async function createFallbackResidentCredential(opts: FallbackCredentialO
       'https://inji.github.io/inji-config/contexts/mosip-identity-context.json',
       'https://w3id.org/security/suites/ed25519-2020/v1',
     ],
-    id: `https://mosip.io/credential/collab-molleti-${Date.now()}`,
+    id: `https://mosip.io/credential/collab-resident-${Date.now()}`,
     type: ['VerifiableCredential', 'MOSIPVerifiableCredential'],
     issuer: issuerKey.did,
     issuanceDate: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
     expirationDate: new Date(Date.now() + 2 * 365 * 24 * 3600 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
     credentialSubject: {
       id: presentationKey.did,
-      UIN: '6207495860',
-      fullName: [{ value: 'Molleti Tatwik Sai', language: 'eng' }],
-      dateOfBirth: '2007/02/08',
-      gender: [{ value: 'MLE', language: 'eng' }],
-      phone: '8639930924',
+      UIN: identities.resident.uin,
+      fullName: [{ value: identities.resident.fullName, language: 'eng' }],
+      dateOfBirth: identities.resident.dateOfBirth,
+      gender: [{ value: identities.resident.gender, language: 'eng' }],
+      phone: identities.resident.phone,
     },
   }, issuerKey)
 }

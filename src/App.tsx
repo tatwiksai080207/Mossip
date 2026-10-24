@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
   Header,
   Sidebar,
@@ -30,6 +30,7 @@ function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false)
   const [tunnelUrl, setTunnelUrl] = useState<string>('http://host.docker.internal:3001')
   const [diagramExpanded, setDiagramExpanded] = useState<boolean>(false)
+  const executionSectionRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -131,6 +132,9 @@ function App() {
   const handleRunTest = () => {
     setActiveTab('runner')
     runFlow()
+    setTimeout(() => {
+      executionSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 80)
   }
 
   return (
@@ -151,7 +155,7 @@ function App() {
         <Header activeTab={activeTab} />
 
         <main className={`w-full px-4 sm:px-6 lg:px-8 py-6 flex-1 flex flex-col min-h-0 ${activeTab === 'runner' ? 'max-w-[1760px] mx-auto' : ''}`}>
-          {/* TAB 1: Test Runner Studio */}
+          {/* TAB 1: Interop Studio */}
           {activeTab === 'runner' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
@@ -265,36 +269,38 @@ function App() {
               )}
 
               {/* Dynamic Step Progression and Sequence Diagram */}
-              {steps.length > 0 ? (
-                diagramExpanded ? (
-                  <div className="space-y-6">
-                    <SequenceDiagram isExpanded={diagramExpanded} onToggleExpand={() => setDiagramExpanded(false)} />
-                    <FlowProgress />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-                    <div className="xl:col-span-4 order-2 xl:order-1">
+              <div ref={executionSectionRef} className="scroll-mt-6">
+                {steps.length > 0 ? (
+                  diagramExpanded ? (
+                    <div className="space-y-6">
+                      <SequenceDiagram isExpanded={diagramExpanded} onToggleExpand={() => setDiagramExpanded(false)} />
                       <FlowProgress />
                     </div>
-                    <div className="xl:col-span-8 order-1 xl:order-2">
-                      <SequenceDiagram isExpanded={diagramExpanded} onToggleExpand={() => setDiagramExpanded(true)} />
+                  ) : (
+                    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+                      <div className="xl:col-span-4 order-2 xl:order-1">
+                        <FlowProgress />
+                      </div>
+                      <div className="xl:col-span-8 order-1 xl:order-2">
+                        <SequenceDiagram isExpanded={diagramExpanded} onToggleExpand={() => setDiagramExpanded(true)} />
+                      </div>
                     </div>
+                  )
+                ) : (
+                  <div className="border border-app-border rounded-2xl bg-app-card/40 p-8 text-center flex flex-col items-center justify-center">
+                    <div className="w-10 h-10 rounded-xl bg-app-base border border-app-border text-app-text-muted flex items-center justify-center mb-3">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-sm font-medium text-app-text">Ready to Run</h3>
+                    <p className="text-xs text-app-text-muted mt-1">
+                      Select roles above and click <strong>Run Test</strong> to start
+                    </p>
                   </div>
-                )
-              ) : (
-                <div className="border border-app-border rounded-2xl bg-app-card/40 p-8 text-center flex flex-col items-center justify-center">
-                  <div className="w-10 h-10 rounded-xl bg-app-base border border-app-border text-app-text-muted flex items-center justify-center mb-3">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-sm font-medium text-app-text">Ready to Run</h3>
-                  <p className="text-xs text-app-text-muted mt-1">
-                    Select roles above and click <strong>Run Test</strong> to start
-                  </p>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Interactive Manual Sections (Inline on page) */}
               {isManualMode && isTestActive && (

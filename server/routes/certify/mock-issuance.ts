@@ -8,7 +8,7 @@ import { issueMdocCredential } from '../../formats/mdoc'
 import { issueLdpCredential } from '../../formats/ldp'
 import { issueSdJwtCredential } from '../../formats/sd-jwt'
 import { notifyFlowStep } from '../../events/flow-events'
-import identities from '../../config/identities.json'
+import identities from '../../config/identities'
 
 export interface CertifyMockIssuanceParams {
   req: Request

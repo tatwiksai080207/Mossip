@@ -89,7 +89,6 @@ export async function createCertifyRouter(): Promise<CertifyRouterResult> {
     [
       '/.well-known/openid-credential-issuer',
       '/.well-known/openid-credential-issuer/api/local-certify',
-      '/.well-known/openid-credential-issuer/*splat',
       '/.well-known/oauth-authorization-server/api/local-certify',
       '/.well-known/openid-configuration/api/local-certify',
       '/api/local-certify/.well-known/openid-credential-issuer',

@@ -13,7 +13,7 @@ interface ThemeContextType {
   availableThemes: ThemeDefinition[]
 }
 
-const STORAGE_KEY = 'inji_playground_color_theme'
+const STORAGE_KEY = 'inji_playground_color_theme_v2'
 
 const ThemeContext = createContext<ThemeContextType>({
   currentTheme: getThemeById(DEFAULT_THEME_ID),

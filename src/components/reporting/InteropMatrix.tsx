@@ -1,19 +1,11 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../../store/index'
 import { issuers, verifiers } from '../../config'
+import { FORMAT_LABELS } from './matrix/types'
+import { MatrixGridView } from './matrix/MatrixGridView'
+import { MatrixTableView } from './matrix/MatrixTableView'
 
-const FORMAT_LABELS: Record<string, string> = {
-  ldp_vc: 'W3C VC (JSON-LD)',
-  'vc+sd-jwt': 'SD-JWT VC',
-  mso_mdoc: 'ISO 18013-5 mDoc',
-}
-
-const ENV_BADGES: Record<string, { label: string; class: string }> = {
-  local: { label: 'LOCAL', class: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
-  collab: { label: 'COLLAB', class: 'bg-purple-500/15 text-purple-300 border-purple-500/30' },
-  mock: { label: 'MOCK', class: 'bg-app-card text-app-text-muted border-app-border' },
-  external: { label: 'EXTERNAL', class: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' },
-}
+export { FORMAT_LABELS, ENV_BADGES } from './matrix/types'
 
 export default function InteropMatrix() {
   const { history: runs } = useStore()
@@ -34,7 +26,7 @@ export default function InteropMatrix() {
         </div>
         <h3 className="text-base font-semibold text-app-text">No Interoperability Matrix Data Yet</h3>
         <p className="text-xs text-app-text-muted mt-1 max-w-md">
-          Execute test runs in the Test Runner across different issuers, wallets, and verifiers to automatically populate the cross-ecosystem compatibility matrix.
+          Execute test runs in the Interop Studio across different issuers, wallets, and verifiers to automatically populate the cross-ecosystem compatibility matrix.
         </p>
       </div>
     )
@@ -311,303 +303,17 @@ export default function InteropMatrix() {
       {/* 4. Main Body: View A (2D Heatmap Grid) or View B (Data Table) */}
       <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
         {viewMode === 'grid' ? (
-          /* ═══════════════ VIEW A: 2D CROSS-ECOSYSTEM MATRIX GRID ═══════════════ */
-          <div className="p-4 sm:p-6 space-y-6">
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr>
-                    {/* Corner Cell */}
-                    <th className="p-4 text-left bg-app-base/80 border border-app-border rounded-tl-xl w-64 min-w-[240px]">
-                      <span className="text-xs font-semibold text-app-text-muted uppercase tracking-wider block">
-                        Issuer \ Verifier
-                      </span>
-                      <span className="text-[11px] text-app-text-muted font-normal mt-0.5 block">
-                        Cross-ecosystem pairing
-                      </span>
-                    </th>
-
-                    {/* Column Headers (Verifiers) */}
-                    {verifiers.map((ver, idx) => {
-                      const envBadge = ENV_BADGES[ver.env || 'local']
-                      return (
-                        <th
-                          key={ver.id}
-                          className={`p-4 text-left bg-app-base/80 border border-app-border min-w-[280px] ${
-                            idx === verifiers.length - 1 ? 'rounded-tr-xl' : ''
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-semibold text-app-text tracking-tight">{ver.name}</h4>
-                            {envBadge && (
-                              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${envBadge.class}`}>
-                                {envBadge.label}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-app-text-muted mt-0.5 font-normal">{ver.description}</p>
-                        </th>
-                      )
-                    })}
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-app-border/80">
-                  {issuers.map((iss) => {
-                    const issBadge = ENV_BADGES[iss.env || 'local']
-
-                    return (
-                      <tr key={iss.id} className="transition-colors">
-                        {/* Row Header (Issuer) */}
-                        <th className="p-4 text-left bg-app-base/60 border border-app-border align-top">
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-semibold text-app-text tracking-tight">{iss.name}</h4>
-                            {issBadge && (
-                              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${issBadge.class}`}>
-                                {issBadge.label}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-app-text-muted mt-0.5 font-normal">{iss.description}</p>
-                        </th>
-
-                        {/* Cells: Pairing (iss, ver) */}
-                        {verifiers.map((ver) => {
-                          const cellKey = `${iss.id}__${ver.id}`
-                          const formatsData = cellMap[cellKey]
-                          const hasData = formatsData && Object.keys(formatsData).length > 0
-                          const isSelected = activeCellKey === cellKey
-
-                          // Filter by selected format if active
-                          const activeFormatKeys = hasData
-                            ? Object.keys(formatsData).filter((f) => selectedFormat === 'all' || f === selectedFormat)
-                            : []
-
-                          return (
-                            <td
-                              key={ver.id}
-                              onClick={() => hasData && setActiveCellKey(isSelected ? null : cellKey)}
-                              className={`p-3.5 border border-app-border align-top transition-all ${
-                                isSelected
-                                  ? 'bg-app-accent-subtle ring-2 ring-app-accent/50'
-                                  : hasData
-                                  ? 'bg-app-card/40 hover:bg-app-card/80 cursor-pointer'
-                                  : 'bg-app-base/20'
-                              }`}
-                            >
-                              {!hasData || activeFormatKeys.length === 0 ? (
-                                <div className="py-6 text-center text-app-text-muted text-xs font-mono">
-                                  Not tested yet
-                                </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  {activeFormatKeys.map((fmt) => {
-                                    const fmtStats = formatsData[fmt]
-                                    const rate = Math.round((fmtStats.pass / fmtStats.total) * 100)
-
-                                    // Known upstream friction points
-                                    const isSdJwtX5cGap =
-                                      ver.id === 'inji-verify-collab-live' && fmt === 'vc+sd-jwt' && fmtStats.pass === 0
-                                    const isMdocDcqlGap =
-                                      ver.id === 'inji-verify-collab-live' && fmt === 'mso_mdoc' && fmtStats.pass === 0
-
-                                    return (
-                                      <div
-                                        key={fmt}
-                                        className="p-2.5 rounded-lg bg-app-base/70 border border-app-border text-xs space-y-1.5"
-                                      >
-                                        <div className="flex items-center justify-between gap-1">
-                                          <span className="font-semibold text-app-text text-[11px] truncate">
-                                            {FORMAT_LABELS[fmt] || fmt}
-                                          </span>
-                                          <span
-                                            className={`font-bold px-1.5 py-0.2 rounded text-[10px] shrink-0 ${
-                                              rate >= 80
-                                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                                : rate >= 50
-                                                ? 'bg-app-accent-subtle text-app-accent border border-app-border-focus'
-                                                : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                                            }`}
-                                          >
-                                            {rate}% ({fmtStats.total})
-                                          </span>
-                                        </div>
-
-                                        {/* Progress bar */}
-                                        <div className="h-1 w-full bg-app-card rounded-full overflow-hidden">
-                                          <div
-                                            className={`h-full ${
-                                              rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-app-accent' : 'bg-rose-500'
-                                            }`}
-                                            style={{ width: `${rate}%` }}
-                                          />
-                                        </div>
-
-                                        {/* Discovered Friction Point Badges */}
-                                        {isSdJwtX5cGap && (
-                                          <div className="text-[10px] font-medium text-app-accent bg-app-accent-subtle/50 border border-app-border-focus px-1.5 py-0.5 rounded flex items-center gap-1">
-                                            <span>▲</span>
-                                            <span>x5c Certificate Chain Enforced</span>
-                                          </div>
-                                        )}
-                                        {isMdocDcqlGap && (
-                                          <div className="text-[10px] font-medium text-app-accent bg-app-accent-subtle/50 border border-app-border-focus px-1.5 py-0.5 rounded flex items-center gap-1">
-                                            <span>▲</span>
-                                            <span>DCQL doctype_values Gap</span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              )}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Cell Selection Drill-Down Drawer / Modal */}
-            {activeCellData && (
-              <div className="p-4 sm:p-5 rounded-xl bg-app-card border border-app-accent/40 shadow-xl space-y-3 animate-fade-in">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-bold text-app-text">Pairing Details</h4>
-                    <span className="text-xs text-app-text-secondary">
-                      {activeCellData.issuer?.name} → {activeCellData.verifier?.name}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => setActiveCellKey(null)}
-                    className="text-xs text-app-text-muted hover:text-app-text px-2 py-1 rounded bg-app-base hover:bg-app-card border border-app-border transition-colors cursor-pointer"
-                  >
-                    Close
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {Object.entries(activeCellData.formats || {}).map(([fmt, stats]) => (
-                    <div key={fmt} className="p-3 rounded-lg bg-app-base border border-app-border text-xs">
-                      <div className="font-semibold text-app-text">{FORMAT_LABELS[fmt] || fmt}</div>
-                      <div className="text-app-text-muted mt-1 flex items-center justify-between">
-                        <span>Pass Rate:</span>
-                        <strong className="text-app-text">
-                          {Math.round((stats.pass / stats.total) * 100)}% ({stats.pass}/{stats.total})
-                        </strong>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <MatrixGridView
+            issuers={issuers}
+            verifiers={verifiers}
+            cellMap={cellMap}
+            selectedFormat={selectedFormat}
+            activeCellKey={activeCellKey}
+            onSelectCell={setActiveCellKey}
+            activeCellData={activeCellData}
+          />
         ) : (
-          /* ═══════════════ VIEW B: DETAILED DATA TABLE ═══════════════ */
-          <div className="w-full flex-1 overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-app-base/80 border-b border-app-border text-[11px] font-semibold text-app-text-muted uppercase tracking-wider sticky top-0 backdrop-blur-md">
-                <tr>
-                  <th className="py-3 px-4">Issuer</th>
-                  <th className="py-3 px-3">Wallet</th>
-                  <th className="py-3 px-3">Verifier</th>
-                  <th className="py-3 px-3">Credential Format</th>
-                  <th className="py-3 px-3 text-center w-16">Runs</th>
-                  <th className="py-3 px-3 text-center w-16">Passed</th>
-                  <th className="py-3 px-3 text-center w-16">Failed</th>
-                  <th className="py-3 px-3 text-center w-36">Compatibility Rate</th>
-                  <th className="py-3 px-4 text-center w-28">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-app-border/60 font-sans">
-                {filteredEntries.map(([key, data]) => {
-                  const [,,, format] = key.split('|')
-                  const run = data.runs[0]
-                  const rate = Math.round((data.pass / data.total) * 100)
-                  const issBadge = ENV_BADGES[run.config.issuer.env || 'local']
-                  const verBadge = ENV_BADGES[run.config.verifier.env || 'local']
-
-                  return (
-                    <tr key={key} className="hover:bg-app-card-hover/50 transition-colors">
-                      {/* Issuer */}
-                      <td className="py-3 px-4 text-app-text font-medium">
-                        <div className="flex items-center gap-1.5">
-                          <span>{run.config.issuer.name}</span>
-                          {issBadge && (
-                            <span className={`text-[9px] font-bold px-1 py-0.2 rounded border ${issBadge.class}`}>
-                              {issBadge.label}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Wallet */}
-                      <td className="py-3 px-3 text-app-text-secondary font-medium">
-                        {run.config.wallet.name}
-                      </td>
-
-                      {/* Verifier */}
-                      <td className="py-3 px-3 text-app-text font-medium">
-                        <div className="flex items-center gap-1.5">
-                          <span>{run.config.verifier.name}</span>
-                          {verBadge && (
-                            <span className={`text-[9px] font-bold px-1 py-0.2 rounded border ${verBadge.class}`}>
-                              {verBadge.label}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Format */}
-                      <td className="py-3 px-3 whitespace-nowrap">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-app-base text-app-text border border-app-border">
-                          {FORMAT_LABELS[format] || format}
-                        </span>
-                      </td>
-
-                      {/* Counts */}
-                      <td className="py-3 px-3 text-center text-app-text-muted font-mono">{data.total}</td>
-                      <td className="py-3 px-3 text-center text-emerald-400 font-mono font-semibold">{data.pass}</td>
-                      <td className="py-3 px-3 text-center text-rose-400 font-mono font-semibold">{data.fail || '—'}</td>
-
-                      {/* Compatibility Rate */}
-                      <td className="py-3 px-3 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <span className={`font-mono font-bold text-xs ${
-                            rate >= 80 ? 'text-emerald-400' : rate >= 50 ? 'text-app-accent' : 'text-rose-400'
-                          }`}>
-                            {rate}%
-                          </span>
-                          <div className="w-14 h-1.5 bg-app-base rounded-full overflow-hidden">
-                            <div
-                              className={`h-full ${rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-app-accent' : 'bg-rose-500'}`}
-                              style={{ width: `${rate}%` }}
-                            />
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Status Badge */}
-                      <td className="py-3 px-4 text-center whitespace-nowrap">
-                        {rate === 100 ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                            Verified
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-app-accent-subtle text-app-accent border border-app-border-focus">
-                            Friction Gap
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <MatrixTableView filteredEntries={filteredEntries} />
         )}
       </div>
     </div>

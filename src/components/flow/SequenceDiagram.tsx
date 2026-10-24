@@ -26,8 +26,7 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
   } = useStore()
   const { currentTheme } = useTheme()
 
-  const [viewMode, setViewMode] = useState<'full' | 'openid4vp' | 'code'>('full')
-  const [copied, setCopied] = useState(false)
+  const [viewMode, setViewMode] = useState<'full' | 'openid4vp'>('full')
   const [renderError, setRenderError] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -57,7 +56,7 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
 
   // Render Mermaid diagram whenever state or view mode changes
   useEffect(() => {
-    if (viewMode === 'code' || !containerRef.current) return
+    if (!containerRef.current) return
 
     let isMounted = true
     const uniqueId = `mermaid-svg-${Date.now()}`
@@ -196,11 +195,6 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
     }
   }, [mermaidDSL, steps, selectedStepId, selectStep, isExpanded, currentTheme.id])
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(mermaidDSL)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
 
   if (steps.length === 0) return null
 
@@ -268,16 +262,6 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
             >
               OpenID4VP Focus
             </button>
-            <button
-              onClick={() => setViewMode('code')}
-              className={`text-xs px-2.5 py-1 rounded transition-colors cursor-pointer ${
-                viewMode === 'code'
-                  ? 'bg-app-accent text-white font-medium shadow-sm'
-                  : 'text-app-text-muted hover:text-app-text hover:bg-app-card-hover'
-              }`}
-            >
-              Mermaid Code
-            </button>
           </div>
 
           {/* Expand / Split View Toggle */}
@@ -300,23 +284,8 @@ export default function SequenceDiagram({ isExpanded = false, onToggleExpand }: 
         </div>
       </div>
 
-      {/* Main Diagram and Code View */}
-      <div className={viewMode === 'code' ? 'block' : 'hidden'}>
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-xs text-app-text-muted">Mermaid Sequence DSL (Markdown compatible)</span>
-          <button
-            onClick={handleCopyCode}
-            className="text-xs px-2.5 py-1 rounded bg-app-card hover:bg-app-card-hover border border-app-border text-app-text-secondary hover:text-app-text transition-colors flex items-center gap-1.5 cursor-pointer"
-          >
-            {copied ? 'Copied' : 'Copy DSL'}
-          </button>
-        </div>
-        <pre className="bg-app-base border border-app-border rounded-lg p-4 text-xs font-mono text-app-text-secondary overflow-x-auto leading-relaxed max-h-[420px]">
-          {mermaidDSL}
-        </pre>
-      </div>
-
-      <div className={viewMode === 'code' ? 'hidden' : 'block'}>
+      {/* Main Diagram View */}
+      <div className="w-full">
         {renderError ? (
           <div className="p-6 text-center text-rose-400 bg-rose-950/20 border border-rose-800/40 rounded-lg text-xs font-mono">
             Failed to render Mermaid SVG: {renderError}

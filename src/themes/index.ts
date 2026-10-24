@@ -7,14 +7,14 @@ export { currentMidnightTheme } from './current-midnight'
 export { linearObsidianTheme } from './linear-obsidian'
 
 export const AVAILABLE_THEMES: ThemeDefinition[] = [
-  currentMidnightTheme,
   linearObsidianTheme,
+  currentMidnightTheme,
 ]
 
-export const DEFAULT_THEME_ID = currentMidnightTheme.id
+export const DEFAULT_THEME_ID = linearObsidianTheme.id
 
 export function getThemeById(id: string): ThemeDefinition {
-  return AVAILABLE_THEMES.find(t => t.id === id) || currentMidnightTheme
+  return AVAILABLE_THEMES.find(t => t.id === id) || linearObsidianTheme
 }
 
 /**

@@ -45,7 +45,19 @@ function StatusBadge({ status, isCancelled }: { status: StepStatus; isCancelled:
 }
 
 export default function FlowProgress() {
-  const { steps, isRunning, isTestActive, pausedStep, oauthUrl, selectedStepId, selectStep, runTamperMode, abortTest } = useStore()
+  const {
+    steps,
+    isRunning,
+    isTestActive,
+    pausedStep,
+    oauthUrl,
+    selectedStepId,
+    selectStep,
+    runTamperMode,
+    abortTest,
+    sessionStatus,
+    selectedWallet,
+  } = useStore()
   const [expandedStep, setExpandedStep] = useState<string | null>(null)
   const [copiedStepId, setCopiedStepId] = useState<string | null>(null)
 
@@ -61,18 +73,74 @@ export default function FlowProgress() {
 
   if (steps.length === 0) return null
 
+  const isManualMode =
+    selectedWallet?.id === 'inji-wallet-interactive' ||
+    selectedWallet?.id === 'inji-web-manual' ||
+    selectedWallet?.id === 'inji-mobile'
+
+  const isFlowActive =
+    isTestActive ||
+    isRunning ||
+    sessionStatus === 'executing' ||
+    sessionStatus === 'waiting_for_wallet'
+
+  const isAborted =
+    sessionStatus === 'aborted' ||
+    steps.some((s) => Boolean((s.payload as any)?._cancelled))
+
+  const isFlowCompleted =
+    !isFlowActive &&
+    steps.length > 0 &&
+    (sessionStatus === 'completed' ||
+      sessionStatus === 'failed' ||
+      isAborted ||
+      (!isManualMode && steps.every((s) => s.status !== 'pending' && s.status !== 'running')))
+
+  let topStatusBadge = null
+  if (isFlowActive) {
+    topStatusBadge = (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider bg-app-accent/15 text-app-accent border border-app-accent/30 shadow-xs">
+        <span className="w-1.5 h-1.5 rounded-full bg-app-accent animate-ping" />
+        <span>{sessionStatus === 'waiting_for_wallet' ? 'Waiting for Wallet' : 'Running'}</span>
+      </span>
+    )
+  } else if (isAborted) {
+    topStatusBadge = (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider bg-app-card text-app-text-muted border border-app-border shadow-xs">
+        <span>Aborted</span>
+      </span>
+    )
+  } else if (isFlowCompleted) {
+    const evaluation = evaluateTestRun(steps, runTamperMode)
+    topStatusBadge = evaluation.passed ? (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-xs">
+        <svg className="w-3 h-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+        <span>PASS</span>
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-xs">
+        <svg className="w-3 h-3 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+        <span>FAIL</span>
+      </span>
+    )
+  }
+
   return (
     <div className="border border-app-border rounded-lg bg-app-card/30">
-      <div className="px-4 py-3 border-b border-app-border flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-medium text-app-text">Flow Progress</h3>
-          <p className="text-xs text-app-text-muted mt-0.5">Click a step or diagram arrow to inspect its payload</p>
+      <div className="px-4 py-3 border-b border-app-border flex items-center justify-between min-h-[50px]">
+        <div className="flex items-center gap-2.5">
+          <h3 className="text-sm font-semibold text-app-text tracking-tight">Flow Progress</h3>
+          {topStatusBadge}
         </div>
         <div className="flex items-center gap-2">
           {isTestActive && (
             <button
               onClick={abortTest}
-              className="text-xs font-medium px-2.5 py-1 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="text-xs font-medium px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
               title="Abort running test"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
@@ -82,7 +150,7 @@ export default function FlowProgress() {
           {selectedStepId && (
             <button
               onClick={() => selectStep(null)}
-              className="text-[11px] text-app-text-muted hover:text-app-text px-2 py-0.5 rounded bg-app-card hover:bg-app-card-hover border border-app-border transition-colors cursor-pointer"
+              className="text-[11px] text-app-text-muted hover:text-app-text px-2.5 py-1 rounded-lg bg-app-card hover:bg-app-card-hover border border-app-border transition-colors cursor-pointer shadow-xs font-medium"
             >
               Clear selection
             </button>
@@ -250,7 +318,7 @@ export default function FlowProgress() {
       })}
     </div>
 
-      {!isRunning && !pausedStep && steps.some(s => s.status === 'done' || s.status === 'error') && (() => {
+      {isFlowCompleted && (() => {
         const evaluation = evaluateTestRun(steps, runTamperMode)
         return (
           <div className="px-4 py-3 border-t border-app-border">
@@ -265,6 +333,23 @@ export default function FlowProgress() {
           </div>
         )
       })()}
+
+      {isFlowActive && (
+        <div className="px-4 py-2.5 border-t border-app-border flex items-center justify-between text-xs text-app-text-muted">
+          <div className="flex items-center gap-1.5 text-app-accent font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-app-accent animate-ping" />
+            <span>
+              {sessionStatus === 'waiting_for_wallet'
+                ? 'Waiting for wallet presentation...'
+                : 'Flow execution in progress...'}
+            </span>
+          </div>
+          <div className="flex gap-3">
+            <span className="text-emerald-400">{steps.filter(s => s.source === 'live').length} live</span>
+            <span>{steps.filter(s => s.source === 'mock').length} mock</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

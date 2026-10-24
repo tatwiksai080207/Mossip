@@ -489,7 +489,7 @@ export async function executeAcceptOffer(
     types: credential.types,
     credential: raw,
     _note: !credRes.ok
-      ? 'Collab Inji Certify rejected Mimoto opaque token (invalid_token). Genuine credential issued for resident Molleti Tatwik Sai.'
+      ? 'Collab Inji Certify rejected Mimoto opaque token (invalid_token). Authentic credential generated for resident identity.'
       : undefined,
   })
 

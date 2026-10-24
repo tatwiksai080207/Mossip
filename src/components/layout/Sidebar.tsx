@@ -38,7 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }> = [
     {
       id: 'runner',
-      label: 'Test Runner',
+      label: 'Interop Studio',
       badge: isTestActive ? 'Running' : undefined,
       icon: (
         <svg className="w-[22px] h-[22px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.85}>
@@ -78,12 +78,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     >
       {/* Top Branding Section */}
       <div className="flex flex-col">
-        <div className={`p-4 border-b border-app-border flex items-center ${isCollapsed ? 'justify-center' : 'justify-start'}`}>
+        <div className={`h-16 px-4 border-b border-app-border flex items-center shrink-0 ${isCollapsed ? 'justify-center' : 'justify-start'}`}>
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-app-accent shadow-md shadow-black/20 flex items-center justify-center shrink-0 border border-app-border-focus p-2">
-              <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 text-white" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="currentColor" fillOpacity={0.15} />
-                <path d="m9 12 2 2 4-4" />
+              <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 text-white">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth={2.4} fill="none" />
+                <circle cx="12" cy="12" r="4.2" fill="currentColor" />
               </svg>
             </div>
             {!isCollapsed && (
@@ -149,7 +149,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className={`w-full p-2.5 rounded-xl bg-app-accent-subtle/40 border border-app-border-focus text-app-accent hover:bg-app-accent-subtle transition-all flex items-center gap-2 cursor-pointer ${
               isCollapsed ? 'justify-center' : ''
             }`}
-            title="A test is currently executing. Click to return to Test Runner."
+            title="A test is currently executing. Click to return to Interop Studio."
           >
             <span className="relative flex h-2.5 w-2.5 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-app-accent opacity-75" />

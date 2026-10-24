@@ -8,6 +8,16 @@ export const InteractiveAuthModal: React.FC = () => {
   const [isOpeningPopup, setIsOpeningPopup] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [copiedUin, setCopiedUin] = useState(false)
+  const [resident, setResident] = useState<{ uin: string; fullName: string } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/identities/resident')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setResident(data)
+      })
+      .catch(() => {})
+  }, [])
 
   // Re-open modal whenever pausedStep becomes active
   useEffect(() => {
@@ -140,10 +150,15 @@ export const InteractiveAuthModal: React.FC = () => {
     resumeOAuthFlow(code)
   }
 
+  const activeUin = resident?.uin && resident.uin !== 'YOUR_MOSIP_UIN_HERE' ? resident.uin : ''
+  const isConfigured = Boolean(activeUin)
+
   const copyUin = () => {
-    navigator.clipboard.writeText('6207495860')
-    setCopiedUin(true)
-    setTimeout(() => setCopiedUin(false), 2000)
+    if (activeUin) {
+      navigator.clipboard.writeText(activeUin)
+      setCopiedUin(true)
+      setTimeout(() => setCopiedUin(false), 2000)
+    }
   }
 
   const isCollab = selectedIssuer?.env === 'collab' || selectedWallet?.id === 'inji-web-collab-interactive'
@@ -206,46 +221,66 @@ export const InteractiveAuthModal: React.FC = () => {
                   </svg>
                   <span className="font-semibold uppercase tracking-wider text-app-text-muted">Resident Test Credentials</span>
                 </div>
-                <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  <span>Verified Profile</span>
+                <span className={`text-[10px] font-semibold ${isConfigured ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-amber-400 bg-amber-500/10 border-amber-500/20'} border px-2 py-0.5 rounded-full flex items-center gap-1`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${isConfigured ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                  <span>{isConfigured ? 'Configured Profile' : 'Setup Required'}</span>
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-3 pt-1">
                 <div className="bg-app-card border border-app-border p-2.5 rounded-lg">
                   <span className="text-app-text-muted block text-[10px] font-medium uppercase tracking-wide">Resident Name</span>
-                  <span className="font-medium text-app-text text-xs mt-0.5 block">Molleti Tatwik Sai</span>
+                  <span className="font-medium text-app-text text-xs mt-0.5 block truncate">
+                    {resident?.fullName || 'Resident Test User'}
+                  </span>
                 </div>
                 <div className="bg-app-card border border-app-border p-2.5 rounded-lg">
                   <span className="text-app-text-muted block text-[10px] font-medium uppercase tracking-wide">Registered UIN</span>
                   <div className="flex items-center justify-between mt-0.5">
-                    <span className="font-mono font-semibold text-app-text text-xs">6207495860</span>
-                    <button
-                      type="button"
-                      onClick={copyUin}
-                      title="Copy UIN to clipboard"
-                      className="flex items-center gap-1 text-[11px] text-app-accent hover:underline font-medium cursor-pointer transition-colors"
-                    >
-                      {copiedUin ? (
-                        <>
-                          <svg className="w-3 h-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span className="text-emerald-400 text-[10px] font-semibold">Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                          </svg>
-                          <span className="text-[10px]">Copy</span>
-                        </>
-                      )}
-                    </button>
+                    <span className="font-mono font-semibold text-app-text text-xs truncate">
+                      {activeUin || 'Not Configured'}
+                    </span>
+                    {isConfigured && (
+                      <button
+                        type="button"
+                        onClick={copyUin}
+                        title="Copy UIN to clipboard"
+                        className="flex items-center gap-1 text-[11px] text-app-accent hover:underline font-medium cursor-pointer transition-colors shrink-0 ml-1"
+                      >
+                        {copiedUin ? (
+                          <>
+                            <svg className="w-3 h-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span className="text-emerald-400 text-[10px] font-semibold">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                            </svg>
+                            <span className="text-[10px]">Copy</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
+
+              {!isConfigured && (
+                <div className="mt-2 text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 flex items-center justify-between">
+                  <span>Configure your UIN in <code className="font-mono text-[10px] bg-black/40 px-1 py-0.5 rounded text-amber-300">server/config/identities.json</code></span>
+                  <a
+                    href="https://self-register.collab.mosip.net/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-app-accent underline font-semibold ml-2 shrink-0 hover:text-app-accent-hover"
+                  >
+                    Self-Register UIN
+                  </a>
+                </div>
+              )}
             </div>
           )}
 

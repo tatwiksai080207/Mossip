@@ -23,6 +23,7 @@ import { diagnosticsRouter } from './routes/diagnostics-routes'
 import { createFlowEventsRouter } from './events/flow-events'
 import { errorHandlerMiddleware } from './errors'
 import { env } from './config/env'
+import { getResidentIdentity } from './config/identities'
 
 export { getPublicBaseUrl, getActiveTamperMode, applyTamperingToVpToken, VERIFY }
 
@@ -203,6 +204,10 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/tunnel', (_req, res) => {
   res.json({ tunnelUrl: getActiveTunnelUrl() })
+})
+
+app.get('/api/identities/resident', (_req, res) => {
+  res.json(getResidentIdentity())
 })
 
 app.post('/api/tunnel', (req, res) => {

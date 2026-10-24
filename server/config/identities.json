@@ -1,10 +1,10 @@
 {
   "resident": {
-    "uin": "6207495860",
-    "fullName": "Molleti Tatwik Sai",
-    "dateOfBirth": "2007/02/08",
+    "uin": "YOUR_MOSIP_UIN_HERE",
+    "fullName": "Resident Test User",
+    "dateOfBirth": "1995/08/15",
     "gender": "MLE",
-    "phone": "8639930924"
+    "phone": "9876543210"
   },
   "farmer": {
     "farmerId": "2154189532",
