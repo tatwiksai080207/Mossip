@@ -56,6 +56,12 @@ function parsePort(val: string | undefined, fallback: number): number {
   return isNaN(parsed) ? fallback : parsed
 }
 
+const isDocker = Boolean(
+  process.env.SERVE_STATIC === 'true' ||
+  process.env.DATABASE_HOST === 'database' ||
+  process.env.DOCKER_CONTAINER === 'true'
+)
+
 export const env: AppConfig = {
   port: parsePort(process.env.PORT, 3001),
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -68,14 +74,14 @@ export const env: AppConfig = {
     esignetMock: process.env.COLLAB_ESIGNET_MOCK_URL || 'https://esignet-mock.collab.mosip.net',
     verifier: process.env.COLLAB_VERIFY_URL || 'https://injiverify.collab.mosip.net',
     mimoto: process.env.COLLAB_MIMOTO_URL || 'https://api.collab.mosip.net/v1/mimoto',
-    localCertify: process.env.LOCAL_CERTIFY_URL || 'http://127.0.0.1:8090/v1/certify',
-    localVerifier: process.env.LOCAL_VERIFIER_URL || 'http://127.0.0.1:8095',
-    localMimoto: process.env.LOCAL_MIMOTO_URL || 'http://127.0.0.1:8099/v1/mimoto',
+    localCertify: process.env.LOCAL_CERTIFY_URL || (isDocker ? 'http://certify:8090/v1/certify' : 'http://127.0.0.1:8090/v1/certify'),
+    localVerifier: process.env.LOCAL_VERIFIER_URL || (isDocker ? 'http://verify-service:8080' : 'http://127.0.0.1:8095'),
+    localMimoto: process.env.LOCAL_MIMOTO_URL || (isDocker ? 'http://mimoto-service:8099/v1/mimoto' : 'http://127.0.0.1:8099/v1/mimoto'),
   },
 
   database: {
-    host: process.env.DATABASE_HOST || 'localhost',
-    port: parsePort(process.env.DATABASE_PORT, 5433),
+    host: isDocker ? 'database' : (process.env.DATABASE_HOST || 'localhost'),
+    port: isDocker ? 5432 : parsePort(process.env.DATABASE_PORT, 5433),
     user: process.env.POSTGRES_USER || 'postgres',
     password: process.env.POSTGRES_PASSWORD || 'postgres',
     database: process.env.POSTGRES_DB || 'inji_mimoto',

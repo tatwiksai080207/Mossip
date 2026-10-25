@@ -8,11 +8,12 @@ import { issueSdJwtCredential } from '../../formats/sd-jwt'
 
 export async function getMimotoDbClient(): Promise<pg.Client> {
   const candidates = [
+    { host: 'database', port: 5432 },
     { host: env.database.host, port: env.database.port },
-    { host: process.env.DATABASE_HOST || 'database', port: Number(process.env.DATABASE_PORT || 5432) },
     { host: 'localhost', port: 5433 },
     { host: '127.0.0.1', port: 5433 },
     { host: 'localhost', port: 5432 },
+    { host: '127.0.0.1', port: 5432 },
   ]
   for (const c of candidates) {
     try {

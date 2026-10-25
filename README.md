@@ -304,12 +304,17 @@ docker compose up --build
 
 > **Developer Hot-Reload Alternative (No Container Rebuild)**:  
 > If you are actively developing code and want instant Vite hot-module-reloading without waiting for Docker to compile:
+> 
 > ```bash
-> # 1. Start backend containers in background:
-> cd mosip-stack && docker compose up -d && cd ..
-> # 2. Start live dev servers:
-> npm install && npm run dev:all
+> # 1. Start backend containers from root (passes your .env automatically):
+> docker compose --env-file .env -f mosip-stack/docker-compose.yaml up -d
+> 
+> # 2. Start live dev servers (Vite UI on :3000 + Express BFF on :3001):
+> npm install
+> npm run dev:all
 > ```
+> 
+> *(Or via npm shortcut: `npm run docker:stack` followed by `npm run dev:all`).*  
 > *(Access UI at `http://localhost:3000`, BFF at `http://localhost:3001`).*
 
 ---

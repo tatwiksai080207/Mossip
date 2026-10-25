@@ -1,3 +1,4 @@
+import './config/load-env'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -11,6 +12,11 @@ const legacyRootTunnelFile = path.join(__dirname, '../.tunnel.json')
 let activeTunnelUrl = (process.env.PUBLIC_BASE_URL || '').trim()
 
 export function getActiveTunnelUrl(): string {
+  const envUrl = (process.env.PUBLIC_BASE_URL || '').trim()
+  if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+    activeTunnelUrl = envUrl
+    return activeTunnelUrl
+  }
   if (activeTunnelUrl && !activeTunnelUrl.includes('localhost') && !activeTunnelUrl.includes('127.0.0.1')) {
     return activeTunnelUrl
   }

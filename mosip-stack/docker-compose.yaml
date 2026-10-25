@@ -1,4 +1,4 @@
-version: '3.8'
+name: mosip-stack
 
 services:
   database:
@@ -88,6 +88,11 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://database:5432/inji_mimoto
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
+    env_file:
+      - path: .env
+        required: false
+      - path: ../.env
+        required: false
     networks:
       - network
     volumes:

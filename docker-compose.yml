@@ -1,3 +1,5 @@
+name: mosip-stack
+
 include:
   - mosip-stack/docker-compose.yaml
 
@@ -14,12 +16,15 @@ services:
       - NODE_ENV=production
       - SERVE_STATIC=true
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:3001}
+      - LOCAL_CERTIFY_URL=http://certify:8090/v1/certify
+      - LOCAL_VERIFIER_URL=http://verify-service:8080
+      - LOCAL_MIMOTO_URL=http://mimoto-service:8099/v1/mimoto
       - COLLAB_CERTIFY_URL=${COLLAB_CERTIFY_URL:-https://injicertify-mock.collab.mosip.net}
       - COLLAB_VERIFY_URL=${COLLAB_VERIFY_URL:-https://injiverify.collab.mosip.net}
       - COLLAB_ESIGNET_URL=${COLLAB_ESIGNET_URL:-https://esignet.collab.mosip.net}
       - COLLAB_MIMOTO_URL=${COLLAB_MIMOTO_URL:-https://api.collab.mosip.net/v1/mimoto}
-      - DATABASE_HOST=${DATABASE_HOST:-database}
-      - DATABASE_PORT=${DATABASE_PORT:-5432}
+      - DATABASE_HOST=database
+      - DATABASE_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-inji_mimoto}

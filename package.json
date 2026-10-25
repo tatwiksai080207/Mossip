@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "server": "tsx watch server/index.ts",
+    "docker:stack": "docker compose --env-file .env -f mosip-stack/docker-compose.yaml up -d",
     "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",

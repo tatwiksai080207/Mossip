@@ -16,7 +16,16 @@ const AUTH_CODE_GRANT = 'authorization_code'
 const PORT = env.ports.server
 
 export function resolveCandidateUrls(targetUrl: string): string[] {
-  const list = [targetUrl]
+  const seen = new Set<string>()
+  const list: string[] = []
+  const add = (u: string) => {
+    if (!seen.has(u)) {
+      seen.add(u)
+      list.push(u)
+    }
+  }
+
+  add(targetUrl)
   try {
     const parsed = new URL(targetUrl)
     if (
@@ -26,8 +35,8 @@ export function resolveCandidateUrls(targetUrl: string): string[] {
       parsed.pathname.includes('/api/external/waltid') ||
       parsed.pathname.includes('/api/external/sphereon')
     ) {
-      list.push(`http://127.0.0.1:${PORT}${parsed.pathname}${parsed.search}`)
-      list.push(`http://localhost:${PORT}${parsed.pathname}${parsed.search}`)
+      add(`http://127.0.0.1:${PORT}${parsed.pathname}${parsed.search}`)
+      add(`http://localhost:${PORT}${parsed.pathname}${parsed.search}`)
     }
   } catch {}
   return list

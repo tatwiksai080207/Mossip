@@ -9,36 +9,30 @@
  */
 
 import { base58Decode } from './keys'
+import { STATIC_CONTEXTS } from './static-contexts'
 
-const cache = new Map<string, unknown>()
-
-// Pre-seeded so a signing run never depends on a network round trip for the
-// contexts that every credential we issue references.
-const WELL_KNOWN = [
-  'https://www.w3.org/2018/credentials/v1',
-  'https://www.w3.org/ns/credentials/v2',
-  'https://w3id.org/security/suites/ed25519-2020/v1',
-  'https://inji.github.io/inji-config/contexts/mosip-identity-context.json',
-  'https://inji.github.io/inji-config/contexts/farmer.json',
-]
+const cache = new Map<string, unknown>(Object.entries(STATIC_CONTEXTS))
 
 async function fetchContext(url: string): Promise<unknown> {
-  const res = await fetch(url, {
-    headers: { accept: 'application/ld+json, application/json' },
-    redirect: 'follow',
-  })
-  if (!res.ok) throw new Error(`Context fetch failed for ${url}: HTTP ${res.status}`)
-  return res.json()
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 4000)
+  try {
+    const res = await fetch(url, {
+      headers: { accept: 'application/ld+json, application/json' },
+      redirect: 'follow',
+      signal: controller.signal,
+    })
+    if (!res.ok) throw new Error(`Context fetch failed for ${url}: HTTP ${res.status}`)
+    return await res.json()
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 export async function warmContextCache(): Promise<void> {
-  await Promise.all(WELL_KNOWN.map(async (url) => {
-    try {
-      if (!cache.has(url)) cache.set(url, await fetchContext(url))
-    } catch (err) {
-      console.warn(`[jsonld] could not preload ${url}: ${String(err)}`)
-    }
-  }))
+  for (const [url, doc] of Object.entries(STATIC_CONTEXTS)) {
+    if (!cache.has(url)) cache.set(url, doc)
+  }
 }
 
 export interface RemoteDocument {
