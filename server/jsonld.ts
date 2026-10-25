@@ -124,18 +124,29 @@ function resolveDidKey(url: string): RemoteDocument {
 async function resolveDidWeb(url: string): Promise<RemoteDocument> {
   const [did, fragment] = url.split('#')
   const parts = did.slice('did:web:'.length).split(':')
-  const host = decodeURIComponent(parts[0])
+  const rawHost = decodeURIComponent(parts[0])
   const path = parts.slice(1).map(decodeURIComponent).join('/')
-  const httpsUrl = path.length > 0
-    ? `https://${host}/${path}/did.json`
-    : `https://${host}/.well-known/did.json`
+
+  const isLocal =
+    rawHost.includes('host.docker.internal') ||
+    rawHost.includes('localhost') ||
+    rawHost.includes('127.0.0.1')
+
+  const proto = isLocal ? 'http' : 'https'
+  const targetHost = rawHost.includes('host.docker.internal')
+    ? '127.0.0.1:3001'
+    : rawHost
+
+  const fetchUrl = path.length > 0
+    ? `${proto}://${targetHost}/${path}/did.json`
+    : `${proto}://${targetHost}/.well-known/did.json`
 
   let didDoc: any = cache.get(did)
   if (!didDoc) {
-    const res = await fetch(httpsUrl, {
+    const res = await fetch(fetchUrl, {
       headers: { accept: 'application/ld+json, application/json' },
     })
-    if (!res.ok) throw new Error(`did:web fetch failed for ${httpsUrl}: HTTP ${res.status}`)
+    if (!res.ok) throw new Error(`did:web fetch failed for ${fetchUrl}: HTTP ${res.status}`)
     didDoc = await res.json()
     cache.set(did, didDoc)
   }

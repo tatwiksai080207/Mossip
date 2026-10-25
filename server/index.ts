@@ -38,10 +38,23 @@ const ISSUER_MOUNT = '/api/playground-issuer'
 const WALTID_ISSUER_MOUNT = '/api/external/waltid/issuer'
 const SPHEREON_ISSUER_MOUNT = '/api/external/sphereon/issuer'
 
+const recentRequests: Array<{ time: string; method: string; url: string; body?: unknown }> = []
+
 app.use((req, res, next) => {
   res.setHeader('ngrok-skip-browser-warning', 'true')
   console.log('[HTTP]', req.method, req.url)
+  recentRequests.push({
+    time: new Date().toISOString(),
+    method: req.method,
+    url: req.url,
+    body: req.body,
+  })
+  if (recentRequests.length > 50) recentRequests.shift()
   next()
+})
+
+app.get('/api/debug/recent-requests', (_req, res) => {
+  res.json(recentRequests)
 })
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json({ limit: '5mb' }))

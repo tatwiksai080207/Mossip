@@ -97,7 +97,14 @@ export async function issueSdJwtCredential(opts: IssueSdJwtOptions): Promise<Iss
 
   // Key binding: bind to holder's JWK or DID in the cnf claim
   if (opts.holderKey?.publicJwk) {
-    payload.cnf = { jwk: opts.holderKey.publicJwk }
+    const raw = opts.holderKey.publicJwk as any
+    if (raw.kty === 'EC') {
+      payload.cnf = { jwk: { kty: 'EC', crv: raw.crv, x: raw.x, y: raw.y } }
+    } else if (raw.kty === 'OKP') {
+      payload.cnf = { jwk: { kty: 'OKP', crv: raw.crv, x: raw.x } }
+    } else {
+      payload.cnf = { jwk: raw }
+    }
   } else if (opts.holderDid) {
     payload.cnf = { did: opts.holderDid }
   }
@@ -296,9 +303,9 @@ export async function verifySdJwtLocally(
         holderKey = await jose.importJWK(cnf.jwk, alg)
       } else {
         const targetDid = cnf.kid || cnf.did || ''
-        if (targetDid.startsWith('did:key:')) {
+        if (targetDid.startsWith('did:key:') || targetDid.startsWith('did:jwk:')) {
           const resolved = resolveDid(targetDid)
-          const alg = resolved.publicJwk.alg || (resolved.publicJwk.crv === 'Ed25519' ? 'EdDSA' : 'ES256')
+          const alg = (resolved.publicJwk.alg as string) || (resolved.publicJwk.crv === 'Ed25519' ? 'EdDSA' : 'ES256')
           holderKey = await jose.importJWK(resolved.publicJwk, alg)
         } else {
           return { verified: false, error: `Unsupported cnf identifier in credential: ${targetDid}`, claims: {} }

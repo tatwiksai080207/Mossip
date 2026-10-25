@@ -36,6 +36,11 @@ export function maybeRewriteAndSignVpRequestJwt(jwtStr: string): string {
       }
     }
 
+    if (!payload.client_id_scheme) {
+      payload.client_id_scheme = 'pre-registered'
+      changed = true
+    }
+
     if (changed) {
       const privKey = crypto.createPrivateKey({
         key: {

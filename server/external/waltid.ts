@@ -19,6 +19,31 @@ import { verifySdJwtLocally } from '../formats/sd-jwt'
 import { verifyMdocLocally } from '../formats/mdoc'
 import { getActiveTamperMode, applyTamperingToVpToken } from '../tamper'
 import { getActiveTunnelUrl } from '../tunnel'
+import { notifyFlowStep } from '../events/flow-events'
+import keysConfig from '../config/keys.json'
+
+export function signWaltIdAuthRequestJwt(payload: Record<string, unknown>, kid = keysConfig.verifierSigningKey.kid): string {
+  const privKey = crypto.createPrivateKey({
+    key: {
+      kty: 'OKP',
+      crv: keysConfig.verifierSigningKey.crv,
+      d: keysConfig.verifierSigningKey.d,
+      x: keysConfig.verifierSigningKey.x,
+    },
+    format: 'jwk',
+  })
+  const header = {
+    alg: 'EdDSA',
+    typ: 'oauth-authz-req+jwt',
+    kid,
+  }
+  const headerB64 = Buffer.from(JSON.stringify(header)).toString('base64url')
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const signingInput = Buffer.from(`${headerB64}.${payloadB64}`)
+  const sig = crypto.sign(null, signingInput, privKey)
+  const sigB64 = sig.toString('base64url')
+  return `${headerB64}.${payloadB64}.${sigB64}`
+}
 
 export const waltidVerifierRouter = Router()
 
@@ -64,7 +89,9 @@ const PEX_PATTERN_ALIASES: Record<string, string[]> = {
   'waltid-identity-ldp-vcdm20': ['PlaygroundIdentityCredential', 'VerifiableId'],
   'waltid-identity-sdjwt': ['PlaygroundIdentityCredential', 'https://walt.id/credentials/identity'],
   'https://walt.id/credentials/identity': ['waltid-identity-sdjwt', 'PlaygroundIdentityCredential'],
-  'FarmerCredential': ['farmer-ldp-vcdm11', 'farmer-ldp-vcdm20'],
+  'FarmerCredential': ['farmer-ldp-vcdm11', 'farmer-ldp-vcdm20', 'farmer-sdjwt', 'FarmerCredential_SD_JWT', 'https://inji.mosip.io/credentials/farmer-identity'],
+  'FarmerCredential_SD_JWT': ['farmer-sdjwt', 'FarmerCredential', 'https://inji.mosip.io/credentials/farmer-identity'],
+  'https://inji.mosip.io/credentials/farmer-identity': ['farmer-sdjwt', 'FarmerCredential_SD_JWT', 'FarmerCredential'],
   'MOSIPVerifiableCredential': ['mosip-vcdm11', 'mosip-vcdm20'],
   'DrivingLicenseCredential': ['org.iso.18013.5.1.mDL', 'mock-mdl-drivinglicense', 'waltid-drivinglicense-mdoc'],
   'org.iso.18013.5.1.mDL': ['DrivingLicenseCredential'],
@@ -146,13 +173,40 @@ waltidVerifierRouter.get('/v1/verify/vp-request/:requestId', (req: Request, res:
 
   // Standard OpenID4VP request payload
   const authRequest: Record<string, unknown> = {
+    iss: 'waltid-verifier',
     client_id: 'waltid-verifier',
-    client_id_scheme: 'redirect_uri',
+    client_id_scheme: 'pre-registered',
     response_type: 'vp_token',
     response_mode: 'direct_post',
     response_uri: session.responseUri,
     nonce: session.nonce,
     state: session.transactionId,
+    iat: Math.floor(Date.now() / 1000),
+    jti: `req-waltid-${session.requestId}-${Date.now()}`,
+    client_metadata: {
+      client_name: 'waltid-verifier',
+      vp_formats: {
+        ldp_vc: {
+          proof_type: ['Ed25519Signature2018', 'Ed25519Signature2020', 'RsaSignature2018'],
+          alg_values_supported: ['Ed25519Signature2018', 'Ed25519Signature2020', 'RsaSignature2018'],
+        },
+        ldp_vp: {
+          proof_type: ['Ed25519Signature2018', 'Ed25519Signature2020', 'RsaSignature2018'],
+          alg_values_supported: ['Ed25519Signature2018', 'Ed25519Signature2020', 'RsaSignature2018'],
+        },
+        'vc+sd-jwt': {
+          'sd-jwt_alg_values': ['RS256', 'ES256', 'ES256K', 'EdDSA'],
+          'kb-jwt_alg_values': ['RS256', 'ES256', 'ES256K', 'EdDSA'],
+          sd_jwt_alg_values: ['RS256', 'ES256', 'ES256K', 'EdDSA'],
+          kb_jwt_alg_values: ['RS256', 'ES256', 'ES256K', 'EdDSA'],
+          alg_values_supported: ['RS256', 'ES256', 'ES256K', 'EdDSA'],
+        },
+        mso_mdoc: {
+          alg: ['ES256', 'ES384', 'EdDSA'],
+          alg_values_supported: ['ES256', 'ES384', 'EdDSA'],
+        },
+      },
+    },
   }
 
   if (session.presentationDefinition) {
@@ -162,7 +216,17 @@ waltidVerifierRouter.get('/v1/verify/vp-request/:requestId', (req: Request, res:
     authRequest.dcql_query = session.dcqlQuery
   }
 
-  res.json(authRequest)
+  notifyFlowStep('vp-request', 'done', { source: 'live_mobile', requestId: session.requestId })
+
+  const signedJwt = signWaltIdAuthRequestJwt(authRequest)
+
+  const accept = req.headers.accept || ''
+  if (accept.includes('application/json') && !accept.includes('jwt') && !accept.includes('*/*') && req.query.format !== 'jwt') {
+    res.json(authRequest)
+    return
+  }
+
+  res.type('application/oauth-authz-req+jwt').send(signedJwt)
 })
 
 /**
@@ -463,7 +527,11 @@ waltidVerifierRouter.post('/v1/verify/vp-submission/direct-post', async (req: Re
     }
 
     console.log(`[waltid-verifier] Verification complete: vpResultStatus=${session.result?.vpResultStatus}`)
-    res.status(200).json({ status: 'OK', transactionId: session.transactionId })
+    notifyFlowStep('vp-response', 'done', { source: 'live_mobile' })
+    if (session.result?.vpResultStatus === 'SUCCESS') {
+      notifyFlowStep('verification', 'done', { source: 'live_mobile', details: session.result })
+    }
+    res.status(200).json({ status: 'OK', redirect_uri: 'http://localhost:3000', transactionId: session.transactionId })
   } catch (err) {
     console.error('[waltid-verifier] direct-post error:', err)
     res.status(500).json({ error: 'Verification failed', detail: String(err) })

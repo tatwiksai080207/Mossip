@@ -126,7 +126,7 @@ function App() {
   }
 
   const vpRequestDeepLink = (requestUri && vpClientId)
-    ? `openid4vp://authorize?client_id=${encodeURIComponent(vpClientId)}&response_type=vp_token&response_mode=direct_post&request_uri=${encodeURIComponent(requestUri)}`
+    ? `openid4vp://authorize?client_id=${encodeURIComponent(vpClientId)}&client_id_scheme=pre-registered&response_type=vp_token&response_mode=direct_post&request_uri=${encodeURIComponent(requestUri)}`
     : null
 
   const handleRunTest = () => {

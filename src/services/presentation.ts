@@ -25,19 +25,28 @@ export async function createVPRequest(credType: CredentialType, verifier: Verifi
             format: credType.format === 'mso_mdoc'
               ? {
                   mso_mdoc: {
-                    alg: ["ES256", "ES384", "EdDSA"]
+                    alg: ["ES256", "ES384", "EdDSA"],
+                    alg_values_supported: ["ES256", "ES384", "EdDSA"]
                   }
                 }
               : credType.format === 'vc+sd-jwt'
               ? {
                   "vc+sd-jwt": {
                     "sd-jwt_alg_values": ["RS256", "ES256", "ES256K", "EdDSA"],
-                    "kb-jwt_alg_values": ["RS256", "ES256", "ES256K", "EdDSA"]
+                    "kb-jwt_alg_values": ["RS256", "ES256", "ES256K", "EdDSA"],
+                    "sd_jwt_alg_values": ["RS256", "ES256", "ES256K", "EdDSA"],
+                    "kb_jwt_alg_values": ["RS256", "ES256", "ES256K", "EdDSA"],
+                    "alg_values_supported": ["RS256", "ES256", "ES256K", "EdDSA"]
                   }
                 }
               : {
                   ldp_vc: {
-                    proof_type: ["Ed25519Signature2018", "Ed25519Signature2020", "RsaSignature2018"]
+                    proof_type: ["Ed25519Signature2018", "Ed25519Signature2020", "RsaSignature2018"],
+                    alg_values_supported: ["Ed25519Signature2018", "Ed25519Signature2020", "RsaSignature2018"]
+                  },
+                  ldp_vp: {
+                    proof_type: ["Ed25519Signature2018", "Ed25519Signature2020", "RsaSignature2018"],
+                    alg_values_supported: ["Ed25519Signature2018", "Ed25519Signature2020", "RsaSignature2018"]
                   }
                 },
             constraints: {

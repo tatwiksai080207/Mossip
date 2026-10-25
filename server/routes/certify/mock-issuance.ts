@@ -3,7 +3,7 @@ import type { Request, Response } from 'express'
 import * as jose from 'jose'
 import { ENDPOINTS } from '../../endpoints'
 import { proxyRequest } from '../../proxy/http-proxy'
-import { type PlaygroundKey } from '../../keys'
+import { resolveDid, type PlaygroundKey } from '../../keys'
 import { issueMdocCredential } from '../../formats/mdoc'
 import { issueLdpCredential } from '../../formats/ldp'
 import { issueSdJwtCredential } from '../../formats/sd-jwt'
@@ -90,7 +90,22 @@ export async function handleCertifyMockIssuance(params: CertifyMockIssuanceParam
       ) {
         holderDid = decodedPayload.iss
       }
+
+      // If holderKey was not in decodedHeader.jwk, resolve it from did:jwk or did:key in kid or iss
+      if (!holderKey && holderDid && (holderDid.startsWith('did:key:') || holderDid.startsWith('did:jwk:'))) {
+        try {
+          const resolved = resolveDid(holderDid)
+          holderKey = { publicJwk: resolved.publicJwk, did: resolved.did }
+          console.log(`[local-certify] Bound mobile wallet key from ${holderDid.slice(0, 20)}... to credential cnf`)
+        } catch (resolveErr) {
+          console.warn('[local-certify] Failed to resolve holderDid to publicJwk:', resolveErr)
+        }
+      }
     } catch {}
+  }
+
+  if (!holderKey && (body.proof?.jwk || body.proof?.publicJwk)) {
+    holderKey = { publicJwk: body.proof.jwk || body.proof.publicJwk }
   }
 
   // 1. Build authentic Draft 11 / Draft 13 request payload for Docker Inji Certify (port 8090)
