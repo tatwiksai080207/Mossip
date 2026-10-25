@@ -25,14 +25,14 @@ Built for MOSIP Decode 2026 Problem Statement 02 (High Complexity).
   - [Starting the Local MOSIP Stack](#starting-the-local-mosip-stack)
   - [Single Command Docker Setup](#single-command-docker-setup)
   - [Testing with Inji Mobile App](#testing-with-inji-mobile-app)
+  - [Custom Resident UIN Configuration](#custom-resident-uin-configuration)
+  - [Google OAuth Authentication (Optional)](#google-oauth-authentication-optional)
   - [Common Commands](#common-commands)
 - [Component Overview](#component-overview)
   - [Project Structure](#project-structure)
   - [Core Modules](#core-modules)
 - [Configuration and Environment Guide](#configuration-and-environment-guide)
   - [Configuration Files Reference](#configuration-files-reference)
-  - [Custom Resident UIN Configuration](#custom-resident-uin-configuration)
-  - [Google OAuth Authentication (Optional)](#google-oauth-authentication-optional)
 - [Interoperability Issues and Solutions](#interoperability-issues-and-solutions)
 - [Testing and Verification](#testing-and-verification)
   - [Automated Test Results (53 Tests across 10 Suites)](#automated-test-results-53-tests-across-10-suites)
@@ -170,8 +170,8 @@ All bonus objectives outlined in the hackathon brief have been addressed:
 Clone the repository and launch both the frontend UI and backend orchestrator concurrently:
 
 ```bash
-git clone https://github.com/your-username/inji-playground.git
-cd inji-playground
+git clone https://github.com/tatwiksai080207/Mossip.git
+cd Mossip
 npm install
 npm run dev:all
 ```
@@ -213,21 +213,75 @@ docker compose up --build
 
 To issue credentials directly to or verify credentials from an actual smartphone running Inji Mobile:
 
-1. **Start an Ngrok Reverse Tunnel** exposing port 3001:
+> **Download Inji Mobile Wallet APK**:
+> Download and install the Inji Mobile Wallet Android APK directly from Google Drive:
+> **[Download Inji Mobile Wallet APK (Google Drive)](https://drive.google.com/file/d/1_902op9HNbrobXLm-BTtKoVGiX0d3rx4/view?usp=sharing)**
+> *(Alternatively, install "Inji Wallet" from Google Play Store or Apple App Store).*
+
+1. **Install and Configure Inji Mobile**:
+   - Open Inji Mobile on your phone and navigate to Settings -> Advanced / Developer Options.
+   - Set **eSignet Host**: `https://esignet-mosipid.collab.mosip.net`
+   - Set **Credential Registry**: Your Ngrok public URL (from Step 3 below).
+2. **Start an Ngrok Reverse Tunnel** exposing port 3001:
    ```bash
    ngrok http 3001
    ```
-2. **Synchronize the Tunnel URL** in the studio header or via curl:
+3. **Synchronize the Tunnel URL** in the studio header or via curl:
    ```bash
    curl -X POST http://localhost:3001/api/tunnel \
      -H "Content-Type: application/json" \
      -d '{"tunnelUrl":"https://<your-subdomain>.ngrok-free.dev"}'
    ```
-3. **Configure the Inji Mobile App**:
-   - Open Inji Mobile on your phone and navigate to Settings -> Advanced / Developer Options.
-   - Set **eSignet Host**: `https://esignet-mosipid.collab.mosip.net`
-   - Set **Credential Registry**: Your Ngrok public URL.
 4. **Scan and Test**: Select Inji Mobile as the wallet in the studio, click "Run Test", and scan the displayed QR code with your phone camera.
+
+---
+
+### Custom Resident UIN Configuration
+
+To test live end-to-end credential issuance and authentication against the public MOSIP Collab Cloud Sandbox (`collab.mosip.net`), any tester, evaluator, or developer can register their own identity and receive real-time OTP emails directly in their inbox:
+
+1. **Self-Register on MOSIP Collab**: Visit the public registration portal at [https://self-register.collab.mosip.net/](https://self-register.collab.mosip.net/).
+2. **Submit Your Details**: Provide your name, date of birth, gender, and personal email. Complete email verification.
+3. **Receive Your Unique UIN**: The portal assigns you a fresh 10-digit MOSIP UIN (e.g. `1111222233`) bound to your email address.
+4. **Set Your UIN in the Playground**:
+   - Option A (Recommended): Create `server/config/identities.local.json` (git-ignored to protect your private credentials):
+     ```json
+     {
+       "resident": {
+         "uin": "YOUR_NEW_10_DIGIT_UIN",
+         "fullName": "Your Name",
+         "dateOfBirth": "YYYY/MM/DD",
+         "gender": "MLE",
+         "phone": "Your Mobile Number"
+       }
+     }
+     ```
+   - Option B: Set environment variables `RESIDENT_UIN=1111222233`, `RESIDENT_FULL_NAME="Your Name"`, and `RESIDENT_PHONE="Your Phone"`.
+   - Option C: Update `server/config/identities.json` directly.
+5. **Test Live OTP Authentication**: In Interop Studio, select `Inji Certify (Collab)` or `eSignet OIDC`. When the authentication prompt opens, submit your UIN. MOSIP eSignet will dispatch the real-time OTP directly to your registered email address.
+
+*(Note: For immediate zero-setup evaluation without creating a MOSIP Collab account, select the built-in **Playground Mock Issuer** and mock mode where test OTP `111111` is accepted instantly without external network or email dependencies).*
+
+---
+
+### Google OAuth Authentication (Optional)
+
+A common question when testing Inji Web is whether Google OAuth credentials are required:
+
+- **Is Google OAuth Required to Use the Playground?**
+  **No.** The built-in **In-Browser Wallet** (Playground Wallet) requires **zero Google OAuth** and **zero external accounts**.
+- **Is Google OAuth Required for Local Inji Web?**
+  **No.** The local Inji Web container (`http://localhost:3004`) supports **eSignet / MOSIP ID** and mock Keycloak authentication without Google OAuth. Furthermore, the playground's Mimoto DB Bridge (`server/routes/mimoto/db-bridge.ts`) can inject credentials directly into Inji Web's PostgreSQL database without any login step.
+- **Enabling Google Sign-In for Inji Web (Optional)**:
+  If you specifically wish to test Inji Web's optional "Sign in with Google" button:
+  1. Create an OAuth 2.0 Web Client ID in the Google Cloud Console.
+  2. Set the authorized redirect URI to `http://localhost:8099/v1/mimoto/oauth2/callback/google`.
+  3. Set the authorized JavaScript origin to `http://localhost:3004`.
+  4. Provide the credentials in `mosip-stack/docker-compose.yaml` (or via environment variables):
+     ```yaml
+     - GOOGLE_OAUTH_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+     - GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
+     ```
 
 ---
 
@@ -348,51 +402,6 @@ The repository provides modular, centralized configuration files organized by su
 | `mosip-stack/config/mimoto-trusted-verifiers.json` | Mimoto / Inji Web | Registry of trusted relying parties and verifiers for OpenID4VP presentations. |
 | `mosip-stack/config/certify-default.properties` | Containerized Inji Certify | Spring Boot configuration for local Inji Certify (database, signing key seeds, and plugin registrations). |
 | `mosip-stack/config/farmer_identity_data.csv` | Inji Certify Plugin | Mock CSV dataprovider records for Inji Certify farmer issuance plugin. |
-
-### Custom Resident UIN Configuration
-
-To test live end-to-end credential issuance and authentication against the public MOSIP Collab Cloud Sandbox (`collab.mosip.net`), any tester, evaluator, or developer can register their own identity and receive real-time OTP emails directly in their inbox:
-
-1. **Self-Register on MOSIP Collab**: Visit the public registration portal at [https://self-register.collab.mosip.net/](https://self-register.collab.mosip.net/).
-2. **Submit Your Details**: Provide your name, date of birth, gender, and personal email. Complete email verification.
-3. **Receive Your Unique UIN**: The portal assigns you a fresh 10-digit MOSIP UIN (e.g. `1111222233`) bound to your email address.
-4. **Set Your UIN in the Playground**:
-   - Option A (Recommended): Create `server/config/identities.local.json` (git-ignored to protect your private credentials):
-     ```json
-     {
-       "resident": {
-         "uin": "YOUR_NEW_10_DIGIT_UIN",
-         "fullName": "Your Name",
-         "dateOfBirth": "YYYY/MM/DD",
-         "gender": "MLE",
-         "phone": "Your Mobile Number"
-       }
-     }
-     ```
-   - Option B: Set environment variables `RESIDENT_UIN=1111222233`, `RESIDENT_FULL_NAME="Your Name"`, and `RESIDENT_PHONE="Your Phone"`.
-   - Option C: Update `server/config/identities.json` directly.
-5. **Test Live OTP Authentication**: In Interop Studio, select `Inji Certify (Collab)` or `eSignet OIDC`. When the authentication prompt opens, submit your UIN. MOSIP eSignet will dispatch the real-time OTP directly to your registered email address.
-
-*(Note: For immediate zero-setup evaluation without creating a MOSIP Collab account, select the built-in **Playground Mock Issuer** and mock mode where test OTP `111111` is accepted instantly without external network or email dependencies).*
-
-### Google OAuth Authentication (Optional)
-
-A common question when testing Inji Web is whether Google OAuth credentials are required:
-
-- **Is Google OAuth Required to Use the Playground?**
-  **No.** The built-in **In-Browser Wallet** (Playground Wallet) requires **zero Google OAuth** and **zero external accounts**.
-- **Is Google OAuth Required for Local Inji Web?**
-  **No.** The local Inji Web container (`http://localhost:3004`) supports **eSignet / MOSIP ID** and mock Keycloak authentication without Google OAuth. Furthermore, the playground's Mimoto DB Bridge (`server/routes/mimoto/db-bridge.ts`) can inject credentials directly into Inji Web's PostgreSQL database without any login step.
-- **Enabling Google Sign-In for Inji Web (Optional)**:
-  If you specifically wish to test Inji Web's optional "Sign in with Google" button:
-  1. Create an OAuth 2.0 Web Client ID in the Google Cloud Console.
-  2. Set the authorized redirect URI to `http://localhost:8099/v1/mimoto/oauth2/callback/google`.
-  3. Set the authorized JavaScript origin to `http://localhost:3004`.
-  4. Provide the credentials in `mosip-stack/docker-compose.yaml` (or via environment variables):
-     ```yaml
-     - GOOGLE_OAUTH_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
-     - GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
-     ```
 
 ---
 

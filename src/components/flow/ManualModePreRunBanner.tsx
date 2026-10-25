@@ -1,5 +1,6 @@
 import React from 'react'
 import type { WalletConfig } from '../../types'
+import appLinks from '../../config/app-links.json'
 
 interface ManualModePreRunBannerProps {
   selectedWallet: WalletConfig | null
@@ -60,7 +61,7 @@ export const ManualModePreRunBanner: React.FC<ManualModePreRunBannerProps> = ({
           Open Inji Web
         </a>
         <a
-          href="https://drive.google.com/drive/folders/1gBjFSdpjxU4bsZi7-xS59W1-EIFKrkS8"
+          href={appLinks.injiMobileApkDrive}
           target="_blank"
           rel="noreferrer"
           className="px-3 py-1.5 bg-app-accent hover:bg-app-accent-hover text-white rounded-lg text-xs font-medium transition-colors shadow-sm"

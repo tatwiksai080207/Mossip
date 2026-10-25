@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import QRCode from 'react-qr-code'
 import type { IssuerConfig, WalletConfig, CredentialType, FlowStepInfo } from '../../types'
+import appLinks from '../../config/app-links.json'
 
 interface ManualIssuanceSectionProps {
   selectedWallet: WalletConfig | null
@@ -77,7 +78,7 @@ export const ManualIssuanceSection: React.FC<ManualIssuanceSectionProps> = ({
 
           <p className="text-sm text-app-text-muted mb-4 text-center max-w-lg">
             <strong className="text-app-text">Where is the mobile app?</strong> Search for "Inji Wallet" on the Play Store/App Store, or download the APK directly from the{' '}
-            <a href="https://drive.google.com/drive/folders/1gBjFSdpjxU4bsZi7-xS59W1-EIFKrkS8" target="_blank" rel="noreferrer" className="text-app-accent hover:underline">
+            <a href={appLinks.injiMobileApkDrive} target="_blank" rel="noreferrer" className="text-app-accent hover:underline">
               Inji Wallet APK Drive
             </a>.
           </p>
