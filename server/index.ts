@@ -10,7 +10,7 @@ import { createWaltIdIssuer } from './external/waltid-issuer'
 import { sphereonVerifierRouter } from './external/sphereon-verifier'
 import { createSphereonIssuer } from './external/sphereon-issuer'
 import { createSphereonWallet } from './external/sphereon-wallet'
-import { getPublicBaseUrl, getActiveTunnelUrl, setTunnelUrl } from './tunnel'
+import { getPublicBaseUrl, getActiveTunnelUrl, setTunnelUrl, syncInjiWebConfig } from './tunnel'
 import { ENDPOINTS, PROXIES, VERIFY } from './endpoints'
 import { tamperRouter, getActiveTamperMode, applyTamperingToVpToken } from './tamper'
 import { verifierRouter } from './routes/verifier-routes'
@@ -258,6 +258,7 @@ if (process.env.SERVE_STATIC === 'true' || env.serveStatic) {
 app.use(errorHandlerMiddleware)
 
 app.listen(PORT, () => {
+  syncInjiWebConfig()
   console.log(`[bff] Playground BFF running on http://localhost:${PORT}`)
   for (const { prefix, target } of PROXIES) console.log(`  ${prefix} → ${target}`)
   console.log(`[issuer] ${playgroundIssuer.identifier}`)

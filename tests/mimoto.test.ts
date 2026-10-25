@@ -7,6 +7,12 @@ import {
   parseCredentialClaims,
 } from '../server/routes/mimoto/pdf-generator'
 import { enrichMimotoProperties } from '../server/routes/mimoto/properties'
+import { syncMimotoTrustedVerifiers, syncInjiWebConfig } from '../server/tunnel'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __testDirname = path.dirname(fileURLToPath(import.meta.url))
 
 describe('Mimoto Properties Enrichment (Issue #10)', () => {
   it('should enrich raw container properties with dynamic tunnel and mobile safety flags', () => {
@@ -16,12 +22,12 @@ describe('Mimoto Properties Enrichment (Issue #10)', () => {
       webUrl: 'http://localhost:3004',
     }
 
-    const tunnelUrl = 'https://populace-viscosity-suitable.ngrok-free.dev/'
+    const tunnelUrl = 'https://test-subdomain.ngrok-free.dev/'
     const enriched = enrichMimotoProperties(rawProperties, tunnelUrl)
 
     assert.strictEqual(
       enriched.warningDomainName,
-      'https://populace-viscosity-suitable.ngrok-free.dev',
+      'https://test-subdomain.ngrok-free.dev',
       'Should strip trailing slash and inject dynamic public tunnel URL'
     )
     assert.strictEqual(enriched.cacheTTLInMilliSeconds, '1', 'Should enforce instant cache invalidation')
@@ -119,5 +125,47 @@ describe('Dynamic Credential PDF Generation & Claim Extraction (Issue #9)', () =
     assert.ok(pdfString.includes('NATIONAL DIGITAL IDENTITY CREDENTIAL'), 'Must contain identity title')
     assert.ok(pdfString.includes('Gorge Cooper'), 'Must contain holder name')
     assert.ok(pdfString.includes('IETF SD-JWT VC'), 'Must contain SD-JWT format badge')
+  })
+})
+
+describe('Mimoto & Inji Web Configuration Synchronization', () => {
+  const verifiersFile = path.join(__testDirname, '../mosip-stack/config/mimoto-trusted-verifiers.json')
+  const envConfigFile = path.join(__testDirname, '../mosip-stack/config/env-config.js')
+
+  it('should dynamically inject external tunnel URL into verifiers and clean up on reset', () => {
+    const testTunnel = 'https://unit-test-tunnel-xyz.ngrok-free.dev'
+    syncMimotoTrustedVerifiers(testTunnel)
+
+    const raw = fs.readFileSync(verifiersFile, 'utf-8')
+    const data = JSON.parse(raw)
+    const localhostVerifier = data.verifiers.find((v: any) => v.client_id === 'localhost-verifier')
+    const waltidVerifier = data.verifiers.find((v: any) => v.client_id === 'waltid-verifier')
+
+    assert.ok(localhostVerifier.response_uris.includes(`${testTunnel}/v1/verify/v2/vp-submission/direct-post`))
+    assert.strictEqual(localhostVerifier.jwks_uri, `${testTunnel}/api/verifier/jwks.json`)
+    assert.ok(waltidVerifier.response_uris.includes(`${testTunnel}/api/external/waltid/verifier/v1/verify/vp-submission/direct-post`))
+    assert.strictEqual(waltidVerifier.jwks_uri, `${testTunnel}/api/verifier/jwks.json`)
+
+    // Now reset to local defaults
+    syncMimotoTrustedVerifiers('')
+    const resetRaw = fs.readFileSync(verifiersFile, 'utf-8')
+    const resetData = JSON.parse(resetRaw)
+    const resetLocalhost = resetData.verifiers.find((v: any) => v.client_id === 'localhost-verifier')
+
+    assert.ok(!resetLocalhost.response_uris.some((u: string) => u.includes('unit-test-tunnel-xyz')))
+    assert.strictEqual(resetLocalhost.jwks_uri, 'http://host.docker.internal:3001/api/verifier/jwks.json')
+  })
+
+  it('should synchronize GOOGLE_OAUTH_CLIENT_ID to env-config.js', () => {
+    const sampleClientId = '999999-test-client.apps.googleusercontent.com'
+    syncInjiWebConfig(sampleClientId)
+
+    let content = fs.readFileSync(envConfigFile, 'utf-8')
+    assert.ok(content.includes(`GOOGLE_CLIENT_ID: "${sampleClientId}"`))
+
+    // Restore clean default
+    syncInjiWebConfig('')
+    content = fs.readFileSync(envConfigFile, 'utf-8')
+    assert.ok(content.includes('GOOGLE_CLIENT_ID: ""'))
   })
 })

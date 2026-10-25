@@ -4,6 +4,8 @@ A Unified Cross-Ecosystem Conformance Testbed, Wire Protocol Inspector, and Inte
 
 Built for MOSIP Decode 2026 Problem Statement 02 (High Complexity).
 
+Demo Video: [Watch on YouTube](https://youtu.be/EqTRkb9MXYY)
+
 ---
 
 ## Table of Contents
@@ -244,30 +246,13 @@ Google OAuth credentials are required for resident authentication and wallet unl
      ```
    - Click **CREATE**. Copy your **Client ID** and **Client Secret**.
 
-4. **Inject Credentials into Environment (`.env`)**:
-   - Add your credentials to your root `.env` file:
+4. **Set Credentials in `.env` (Single Source of Truth)**:
+   - Add your credentials to `.env`:
      ```env
      GOOGLE_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
      GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret
      ```
-   - Also verify `mosip-stack/docker-compose.yaml` receives them under the `mimoto-service` environment block:
-     ```yaml
-     - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-your-client-id.apps.googleusercontent.com}
-     - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-your-client-secret}
-     ```
-
-5. **Update Frontend Client ID**:
-   - Open `mosip-stack/config/env-config.js` and set `GOOGLE_CLIENT_ID`:
-     ```javascript
-     window._env_ = {
-       DEFAULT_LANG: "en",
-       DEFAULT_TITLE: "Inji Web",
-       DEFAULT_FAVICON: "favicon.ico",
-       DEFAULT_THEME: "light",
-       MIMOTO_URL: "http://localhost:3004/v1/mimoto",
-       GOOGLE_CLIENT_ID: "your-client-id.apps.googleusercontent.com"
-     };
-     ```
+   - *No manual editing of configuration files required! Interop Studio automatically synchronizes `GOOGLE_OAUTH_CLIENT_ID` from `.env` directly into `mosip-stack/config/env-config.js` and injects it into the Mimoto backend on startup.*
 
 ---
 
@@ -518,6 +503,7 @@ Time:        10.70s
 
 | Document | Purpose | Target Audience |
 |---|---|---|
+| **[Demo Video Walkthrough](https://youtu.be/EqTRkb9MXYY)** | Complete video demonstration walking through issuance, wallet holding, presentation, and protocol inspection. | Evaluators, Judges, General Audience |
 | **[API Documentation](docs/API_DOCUMENTATION.md)** | Complete reference for all 25+ BFF endpoints with schemas and cURL examples. | Developers, API Integrators |
 | **[Interoperability Report](docs/INTEROPERABILITY_REPORT.md)** | Format compliance matrix, cross-ecosystem results, and 6 upstream friction points. | Evaluators, MOSIP Maintainers |
 | **[Test Cases and Results](docs/TEST_CASES_AND_RESULTS.md)** | Formal 53-test execution matrix, preconditions, inputs, and actual results. | QA Engineers, Security Auditors |

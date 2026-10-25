@@ -4,7 +4,7 @@ window._env_ = {
   DEFAULT_FAVICON: "favicon.ico",
   DEFAULT_THEME: "light",
   MIMOTO_URL: "http://localhost:3004/v1/mimoto",
-  GOOGLE_CLIENT_ID: "297624953605-pdbaemggubg5jkp7nabefddp4kcftu9r.apps.googleusercontent.com"
+  GOOGLE_CLIENT_ID: ""
 };
 
 // OpenID4VP & OpenID4VCI Smart Guard & Direct Deep-Linking
