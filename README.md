@@ -19,15 +19,15 @@ Built for MOSIP Decode 2026 Problem Statement 02 (High Complexity).
   - [Cryptographic Suites and Algorithms](#cryptographic-suites-and-algorithms)
   - [Protocols and Query Formats](#protocols-and-query-formats)
   - [Integrated Ecosystem Platforms](#integrated-ecosystem-platforms)
-- [Quick Start](#quick-start)
+- [Quick Start and Setup](#quick-start-and-setup)
   - [Prerequisites](#prerequisites)
-  - [Quick Start (No Docker Required)](#quick-start-no-docker-required)
-  - [Starting the Local MOSIP Stack](#starting-the-local-mosip-stack)
-  - [Single Command Docker Setup](#single-command-docker-setup)
-  - [Testing with Inji Mobile App](#testing-with-inji-mobile-app)
-  - [Custom Resident UIN Configuration](#custom-resident-uin-configuration)
-  - [Google OAuth Authentication (Optional)](#google-oauth-authentication-optional)
-  - [Common Commands](#common-commands)
+  - [Step 1: Clone Repository and Environment Setup](#step-1-clone-repository-and-environment-setup)
+  - [Step 2: Custom Resident UIN Configuration](#step-2-custom-resident-uin-configuration)
+  - [Step 3: Google OAuth Configuration (Inji Web)](#step-3-google-oauth-configuration-inji-web)
+  - [Step 4: Ngrok Reverse Tunnel Configuration](#step-4-ngrok-reverse-tunnel-configuration)
+  - [Step 5: Launch Everything (One-Command Docker Bundle)](#step-5-launch-everything-one-command-docker-bundle)
+  - [Step 6: Testing with Inji Mobile App](#step-6-testing-with-inji-mobile-app)
+  - [Step 7: Conformance and Verification Commands](#step-7-conformance-and-verification-commands)
 - [Component Overview](#component-overview)
   - [Project Structure](#project-structure)
   - [Core Modules](#core-modules)
@@ -156,89 +156,33 @@ All bonus objectives outlined in the hackathon brief have been addressed:
 
 ---
 
-## Quick Start
+## Quick Start and Setup
 
 ### Prerequisites
 - **Node.js**: Version 18.0.0 or higher (tested on Node 20 LTS and Node 24 LTS)
 - **npm**: Version 9.0.0 or higher
-- **Docker and Docker Compose**: *(Optional)* Required only if executing against the local containerized MOSIP stack.
+- **Docker and Docker Compose**: Required for running the local containerized MOSIP stack (Certify, Mimoto, Inji Web, Verify, Postgres)
+- **Ngrok**: Required for reverse-tunneling the local orchestrator to physical smartphones running Inji Mobile
 
 ---
 
-### Quick Start (No Docker Required)
+### Step 1: Clone Repository and Environment Setup
 
-Clone the repository and launch both the frontend UI and backend orchestrator concurrently:
+Clone the repository and copy the environment template to create your local `.env`:
 
 ```bash
 git clone https://github.com/tatwiksai080207/Mossip.git
 cd Mossip
-npm install
-npm run dev:all
+cp .env.example .env
 ```
 
-- **Frontend Interop Studio**: Access at `http://localhost:3000`
-- **Backend BFF Orchestrator**: Running on `http://localhost:3001`
-
-*The playground starts immediately with all mock issuers, simulated eSignet IdP, interactive browser wallet, and external walt.id/Sphereon engines ready to test.*
+Your `.env` file centralizes configuration for the public tunnel URL, Google OAuth credentials, database settings, and port bindings.
 
 ---
 
-### Starting the Local MOSIP Stack
+### Step 2: Custom Resident UIN Configuration
 
-To test against local containerized MOSIP backend services rather than mock engines or the cloud sandbox:
-
-```bash
-cd mosip-stack
-docker compose up -d
-cd ..
-```
-
-*Spins up PostgreSQL (port 5433), Inji Certify (port 8090/8091), Mimoto (port 8099), Inji Verify (port 8095), and Inji Web (port 3004).*
-
----
-
-### Single Command Docker Setup
-
-To build and run the entire playground (BFF orchestrator serving the production-built Vite SPA) in a single container:
-
-```bash
-docker compose up --build
-```
-
-- Access the studio at `http://localhost:3001`
-
----
-
-### Testing with Inji Mobile App
-
-To issue credentials directly to or verify credentials from an actual smartphone running Inji Mobile:
-
-> **Download Inji Mobile Wallet APK**:
-> Download and install the Inji Mobile Wallet Android APK directly from Google Drive:
-> **[Download Inji Mobile Wallet APK (Google Drive)](https://drive.google.com/file/d/1_902op9HNbrobXLm-BTtKoVGiX0d3rx4/view?usp=sharing)**
-> *(Alternatively, install "Inji Wallet" from Google Play Store or Apple App Store).*
-
-1. **Install and Configure Inji Mobile**:
-   - Open Inji Mobile on your phone and navigate to Settings -> Advanced / Developer Options.
-   - Set **eSignet Host**: `https://esignet-mosipid.collab.mosip.net`
-   - Set **Credential Registry**: Your Ngrok public URL (from Step 3 below).
-2. **Start an Ngrok Reverse Tunnel** exposing port 3001:
-   ```bash
-   ngrok http 3001
-   ```
-3. **Synchronize the Tunnel URL** in the studio header or via curl:
-   ```bash
-   curl -X POST http://localhost:3001/api/tunnel \
-     -H "Content-Type: application/json" \
-     -d '{"tunnelUrl":"https://<your-subdomain>.ngrok-free.dev"}'
-   ```
-4. **Scan and Test**: Select Inji Mobile as the wallet in the studio, click "Run Test", and scan the displayed QR code with your phone camera.
-
----
-
-### Custom Resident UIN Configuration
-
-To test live end-to-end credential issuance and authentication against the public MOSIP Collab Cloud Sandbox (`collab.mosip.net`), any tester, evaluator, or developer can register their own identity and receive real-time OTP emails directly in their inbox:
+To test live end-to-end credential issuance and authentication against the public MOSIP Collab Cloud Sandbox (`collab.mosip.net`), register your identity to receive real-time OTP emails directly in your inbox:
 
 1. **Self-Register on MOSIP Collab**: Visit the public registration portal at [https://self-register.collab.mosip.net/](https://self-register.collab.mosip.net/).
 2. **Submit Your Details**: Provide your name, date of birth, gender, and personal email. Complete email verification.
@@ -256,36 +200,158 @@ To test live end-to-end credential issuance and authentication against the publi
        }
      }
      ```
-   - Option B: Set environment variables `RESIDENT_UIN=1111222233`, `RESIDENT_FULL_NAME="Your Name"`, and `RESIDENT_PHONE="Your Phone"`.
+   - Option B: Set environment variables in `.env`:
+     ```env
+     RESIDENT_UIN=1111222233
+     RESIDENT_FULL_NAME="Your Name"
+     RESIDENT_PHONE="Your Phone"
+     ```
    - Option C: Update `server/config/identities.json` directly.
 5. **Test Live OTP Authentication**: In Interop Studio, select `Inji Certify (Collab)` or `eSignet OIDC`. When the authentication prompt opens, submit your UIN. MOSIP eSignet will dispatch the real-time OTP directly to your registered email address.
 
-*(Note: For immediate zero-setup evaluation without creating a MOSIP Collab account, select the built-in **Playground Mock Issuer** and mock mode where test OTP `111111` is accepted instantly without external network or email dependencies).*
-
 ---
 
-### Google OAuth Authentication (Optional)
+### Step 3: Google OAuth Configuration (Inji Web)
 
-A common question when testing Inji Web is whether Google OAuth credentials are required:
+Google OAuth credentials are required for resident authentication and wallet unlocking in the local containerized Inji Web wallet (`http://localhost:3004`).
 
-- **Is Google OAuth Required to Use the Playground?**
-  **No.** The built-in **In-Browser Wallet** (Playground Wallet) requires **zero Google OAuth** and **zero external accounts**.
-- **Is Google OAuth Required for Local Inji Web?**
-  **No.** The local Inji Web container (`http://localhost:3004`) supports **eSignet / MOSIP ID** and mock Keycloak authentication without Google OAuth. Furthermore, the playground's Mimoto DB Bridge (`server/routes/mimoto/db-bridge.ts`) can inject credentials directly into Inji Web's PostgreSQL database without any login step.
-- **Enabling Google Sign-In for Inji Web (Optional)**:
-  If you specifically wish to test Inji Web's optional "Sign in with Google" button:
-  1. Create an OAuth 2.0 Web Client ID in the Google Cloud Console.
-  2. Set the authorized redirect URI to `http://localhost:8099/v1/mimoto/oauth2/callback/google`.
-  3. Set the authorized JavaScript origin to `http://localhost:3004`.
-  4. Provide the credentials in `mosip-stack/docker-compose.yaml` (or via environment variables):
+#### 5-Step Setup Guide:
+
+1. **Open Google Cloud Console**:
+   - Go to the [Google Cloud Console Credentials Dashboard](https://console.cloud.google.com/apis/credentials).
+   - Select an existing project or create a new project from the top dropdown.
+
+2. **Configure the OAuth Consent Screen** *(if not previously configured)*:
+   - Go to [OAuth Consent Screen](https://console.cloud.google.com/apis/credentials/consent).
+   - Select **External** and click **Create**.
+   - Fill in **App Name** (e.g. `Inji Web Local`), **User support email**, and **Developer contact information**.
+   - Click **Save and Continue** through Scopes.
+   - On the **Test Users** screen, click **+ ADD USERS** and add your personal Google account email address (required while in Testing mode).
+   - Click **Save and Continue** to finish.
+
+3. **Create OAuth 2.0 Web Client ID**:
+   - Return to the [Credentials Page](https://console.cloud.google.com/apis/credentials).
+   - Click **+ CREATE CREDENTIALS** at the top and select **OAuth client ID**.
+   - Set **Application type**: `Web application`.
+   - Set **Name**: `Inji Web Local`.
+   - Under **Authorized JavaScript origins**, click **+ ADD URI** and enter:
+     ```text
+     http://localhost:3004
+     ```
+   - Under **Authorized redirect URIs**, click **+ ADD URI** and enter:
+     ```text
+     http://localhost:8099/v1/mimoto/oauth2/callback/google
+     ```
+   - Click **CREATE**. Copy your **Client ID** and **Client Secret**.
+
+4. **Inject Credentials into Environment (`.env`)**:
+   - Add your credentials to your root `.env` file:
+     ```env
+     GOOGLE_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
+     GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret
+     ```
+   - Also verify `mosip-stack/docker-compose.yaml` receives them under the `mimoto-service` environment block:
      ```yaml
-     - GOOGLE_OAUTH_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
-     - GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
+     - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-your-client-id.apps.googleusercontent.com}
+     - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-your-client-secret}
+     ```
+
+5. **Update Frontend Client ID**:
+   - Open `mosip-stack/config/env-config.js` and set `GOOGLE_CLIENT_ID`:
+     ```javascript
+     window._env_ = {
+       DEFAULT_LANG: "en",
+       DEFAULT_TITLE: "Inji Web",
+       DEFAULT_FAVICON: "favicon.ico",
+       DEFAULT_THEME: "light",
+       MIMOTO_URL: "http://localhost:3004/v1/mimoto",
+       GOOGLE_CLIENT_ID: "your-client-id.apps.googleusercontent.com"
+     };
      ```
 
 ---
 
-### Common Commands
+### Step 4: Ngrok Reverse Tunnel Configuration
+
+An HTTPS reverse tunnel is required so physical mobile devices running Inji Mobile can communicate directly with your local orchestrator:
+
+1. **Start an Ngrok Tunnel** exposing port 3001:
+   ```bash
+   ngrok http 3001
+   ```
+2. **Set in `.env` (Recommended)**:
+   - Copy your forwarding URL (e.g. `https://a1b2-123-45.ngrok-free.app`) and set it in your `.env`:
+     ```env
+     PUBLIC_BASE_URL=https://<your-subdomain>.ngrok-free.app
+     ```
+   - *When set in `.env`, the backend automatically boots with the tunnel synchronized.*
+3. **Alternative: Synchronize Live via API** *(if server is already running)*:
+   - **Windows (PowerShell)**:
+     ```powershell
+     Invoke-RestMethod -Uri http://localhost:3001/api/tunnel -Method Post -ContentType "application/json" -Body '{"tunnelUrl":"https://<your-subdomain>.ngrok-free.app"}'
+     ```
+   - **macOS / Linux / Git Bash**:
+     ```bash
+     curl -X POST http://localhost:3001/api/tunnel \
+       -H "Content-Type: application/json" \
+       -d '{"tunnelUrl":"https://<your-subdomain>.ngrok-free.app"}'
+     ```
+
+---
+
+### Step 5: Launch Everything (One-Command Docker Bundle)
+
+As required by the MOSIP Decode Problem Statement (Bonus Requirement: *"Package the whole playground as a one-command Docker Compose bundle so any developer can spin it up locally in minutes"*), the entire interoperability studio, mock bridges, and all containerized Inji microservices are unified into a single root Docker Compose bundle:
+
+```bash
+docker compose up --build
+```
+
+**That's it! A single command compiles the frontend and launches all 7 ecosystem services together:**
+- **Interop Studio UI & BFF Orchestrator**: Access at `http://localhost:3001`
+- **Inji Web Wallet Portal**: Access at `http://localhost:3004`
+- **Inji Certify (Issuance Service)**: Port `8090` / `8091`
+- **Inji Mimoto (Wallet Backend BFF)**: Port `8099`
+- **Inji Verify (Verification Service)**: Port `8095`
+- **PostgreSQL Database**: Port `5433`
+
+---
+
+> **Developer Hot-Reload Alternative (No Container Rebuild)**:  
+> If you are actively developing code and want instant Vite hot-module-reloading without waiting for Docker to compile:
+> ```bash
+> # 1. Start backend containers in background:
+> cd mosip-stack && docker compose up -d && cd ..
+> # 2. Start live dev servers:
+> npm install && npm run dev:all
+> ```
+> *(Access UI at `http://localhost:3000`, BFF at `http://localhost:3001`).*
+
+---
+
+### Step 6: Testing with Inji Mobile App
+
+To test live credential issuance and OpenID4VP presentation verification using a real smartphone:
+
+> **Download Inji Mobile Wallet APK**:
+> Download and install the pre-configured Inji Mobile Wallet Android APK directly from Google Drive:
+> **[Download Inji Mobile Wallet APK (Google Drive)](https://drive.google.com/file/d/1_902op9HNbrobXLm-BTtKoVGiX0d3rx4/view?usp=sharing)**
+
+1. **Configure Inji Mobile App**:
+   - Install the APK on your Android device and open Inji Mobile.
+   - Navigate to **Settings** -> **Advanced / Developer Options**.
+   - Set **eSignet Host**: `https://esignet-mosipid.collab.mosip.net`
+   - Set **Credential Registry**: Your Ngrok public URL (`https://<your-subdomain>.ngrok-free.app`).
+2. **Execute Cross-Device Test**:
+   - In Interop Studio (`http://localhost:3000`), select **Inji Mobile** as the Wallet.
+   - Click **Run Test**.
+   - Scan the displayed issuance or OpenID4VP presentation QR code with your phone camera to complete the handshake.
+
+---
+
+### Step 7: Conformance and Verification Commands
+
+Verify the system and run the full cryptographic conformance test suites:
 
 ```bash
 # Run all 53 automated unit and integration tests

@@ -1,4 +1,5 @@
-version: '3.8'
+include:
+  - mosip-stack/docker-compose.yaml
 
 services:
   playground:
@@ -28,4 +29,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - default
+      - network
+    depends_on:
+      - database
     restart: unless-stopped
