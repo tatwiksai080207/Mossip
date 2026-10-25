@@ -7,7 +7,7 @@ interface HeaderProps {
 }
 
 const TAB_META: Record<NavTabId, { title: string }> = {
-  runner: { title: 'Interop Studio' },
+  runner: { title: 'Interop Playground' },
   history: { title: 'Run History' },
   matrix: { title: 'Interop Matrix' },
 }

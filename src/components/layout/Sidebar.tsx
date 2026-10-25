@@ -38,7 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }> = [
     {
       id: 'runner',
-      label: 'Interop Studio',
+      label: 'Interop Playground',
       badge: isTestActive ? 'Running' : undefined,
       icon: (
         <svg className="w-[22px] h-[22px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.85}>
@@ -88,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             {!isCollapsed && (
               <h1 className="text-base font-bold text-app-text tracking-tight truncate">
-                Inji Playground
+                Interop Studio
               </h1>
             )}
           </div>
@@ -149,7 +149,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className={`w-full p-2.5 rounded-xl bg-app-accent-subtle/40 border border-app-border-focus text-app-accent hover:bg-app-accent-subtle transition-all flex items-center gap-2 cursor-pointer ${
               isCollapsed ? 'justify-center' : ''
             }`}
-            title="A test is currently executing. Click to return to Interop Studio."
+            title="A test is currently executing. Click to return to Interop Playground."
           >
             <span className="relative flex h-2.5 w-2.5 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-app-accent opacity-75" />
