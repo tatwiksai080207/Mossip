@@ -1,7 +1,7 @@
 # MOSIP Inji Interoperability Playground: Test Cases & Execution Results
 
 > **Deliverable Reference:** In accordance with the *MOSIP Decode 2026 Submission Guidelines* ("Test Cases and Results: Share a set of test cases and the results of testing the project's functionalities. These demonstrate that the team has considered various edge cases and have tested their solution for reliability and stability.").  
-> **Automated Test Results:** **53 / 53 Passing (100% Pass Rate)** across **10 Test Suites**.
+> **Automated Test Results:** **55 / 55 Passing (100% Pass Rate)** across **11 Test Suites**.
 
 This document details the formal test cases, validation procedures, and empirical results for the **Inji Interoperability Playground** across local containers, upstream MOSIP Collab Cloud sandboxes, and independent reference implementations (walt.id and Sphereon).
 
@@ -10,7 +10,7 @@ This document details the formal test cases, validation procedures, and empirica
 ## Table of Contents
 1. [Test Methodology & Environment Setup](#1-test-methodology--environment-setup)
 2. [Executive Test Summary Metrics](#2-executive-test-summary-metrics)
-3. [Automated Vitest Test Suites (53 Tests across 10 Suites)](#3-automated-vitest-test-suites-53-tests-across-10-suites)
+3. [Automated Vitest Test Suites (55 Tests across 11 Suites)](#3-automated-vitest-test-suites-55-tests-across-11-suites)
 4. [Module 1: OpenID4VCI Credential Issuance](#4-module-1-openid4vci-credential-issuance)
 5. [Module 2: OpenID4VP Presentation & Verification](#5-module-2-openid4vp-presentation--verification)
 6. [Module 3: Negative Paths & Tamper Engine](#6-module-3-negative-paths--tamper-engine)
@@ -49,14 +49,14 @@ Testing is orchestrated across three complementary validation layers:
 | **Provider Registry & Factory** | 4 | 0 | 4 | 4 | 0 | **100%** |
 | **Key Generation & DIDs** | 4 | 0 | 4 | 4 | 0 | **100%** |
 | **Diagnostics & Upstream Health Probes** | 2 | 1 | 3 | 3 | 0 | **100%** |
-| **End-to-End Issuance & Verification Walks** | 3 | 2 | 5 | 5 | 2 (Trapped & Documented) | **100%** |
-| **Total** | **53** | **11** | **64** | **64** | **2** | **100%** |
+| **End-to-End Issuance & Verification Walks** | 5 | 2 | 7 | 7 | 8 (`GAP-01` - `GAP-08`) | **100%** |
+| **Total** | **55** | **11** | **66** | **66** | **8 Gaps Formalized** | **100%** |
 
 ---
 
-## 3. Automated Vitest Test Suites (53 Tests across 10 Suites)
+## 3. Automated Vitest Test Suites (55 Tests across 11 Suites)
 
-Executing `npm test` runs all 53 automated test cases:
+Executing `npm test` runs all 55 automated test cases:
 
 ```text
 PASS: tests/formats.test.ts (6 tests)
@@ -69,10 +69,11 @@ PASS: tests/oidc.test.ts (8 tests)
 PASS: tests/sphereon.test.ts (7 tests)
 PASS: tests/waltid.test.ts (7 tests)
 PASS: tests/issuance.test.ts (3 tests)
+PASS: tests/e2e-interop.test.ts (2 tests)
 
-Test Files  10 passed (10)
-     Tests  53 passed (53)
-  Duration  10.70s
+Test Files  11 passed (11)
+     Tests  55 passed (55)
+  Duration  8.56s
 ```
 
 ---

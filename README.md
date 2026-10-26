@@ -373,8 +373,9 @@ npm run build
 inji-playground/
 ├── docs/                                # Technical specifications and reports
 │   ├── API_DOCUMENTATION.md             # REST API reference (25+ endpoints)
-│   ├── INTEROPERABILITY_REPORT.md       # Compliance matrix & 6 upstream friction points
-│   ├── TEST_CASES_AND_RESULTS.md        # 53 automated test results & test matrices
+│   ├── INTEROPERABILITY_REPORT.md       # Matrix & 8 upstream engineering incident reports
+│   ├── UPSTREAM_GITHUB_ISSUES.md        # Ready-to-file GitHub issues for core Inji teams
+│   ├── TEST_CASES_AND_RESULTS.md        # 55 automated test results & test matrices
 │   ├── TEST_DATA.md                     # Personas, keys, wire payloads & vectors
 │   ├── ARCHITECTURE_AND_FLOWS.md        # Mermaid sequence diagrams & specifications
 │   └── inji_ecosystem_flow.md           # Foundational SSI & Inji stack guide
@@ -510,8 +511,9 @@ Time:        10.70s
 |---|---|---|
 | **[Demo Video Walkthrough](https://youtu.be/EqTRkb9MXYY)** | Complete video demonstration walking through issuance, wallet holding, presentation, and protocol inspection. | Evaluators, Judges, General Audience |
 | **[API Documentation](docs/API_DOCUMENTATION.md)** | Complete reference for all 25+ BFF endpoints with schemas and cURL examples. | Developers, API Integrators |
-| **[Interoperability Report](docs/INTEROPERABILITY_REPORT.md)** | Format compliance matrix, cross-ecosystem results, and 6 upstream friction points. | Evaluators, MOSIP Maintainers |
-| **[Test Cases and Results](docs/TEST_CASES_AND_RESULTS.md)** | Formal 53-test execution matrix, preconditions, inputs, and actual results. | QA Engineers, Security Auditors |
+| **[Interoperability Report](docs/INTEROPERABILITY_REPORT.md)** | Deliverable A (Cross-ecosystem matrix) & Deliverable B (8 upstream engineering incident reports). | Evaluators, MOSIP Maintainers |
+| **[Upstream GitHub Issues](docs/UPSTREAM_GITHUB_ISSUES.md)** | Ready-to-file copy-paste GitHub issue templates for core `mosip/inji-*` repositories. | Core Maintainers, Evaluators |
+| **[Test Cases and Results](docs/TEST_CASES_AND_RESULTS.md)** | Formal 55-test execution matrix across 11 suites (100% passing), preconditions, and inputs. | QA Engineers, Security Auditors |
 | **[Test Data Catalog](docs/TEST_DATA.md)** | Personas, cryptographic keys, sample wire payloads for all 4 formats, and tamper vectors. | Developers, Testers |
 | **[Architecture and Protocol Flows](docs/ARCHITECTURE_AND_FLOWS.md)** | End-to-end Mermaid sequence diagrams for OIDC4VCI, OIDC4VP, and cross-ecosystem flows. | System Architects, Integrators |
 | **[Inji Ecosystem Guide](docs/inji_ecosystem_flow.md)** | Conceptual overview of SSI, asymmetric cryptography, and the MOSIP Inji stack. | New Learners, General Audience |
